@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+import { db } from '../config/firebase';
 import { uploadVideo, uploadThumbnail, createCourse } from '../services/adminService';
 import useAuthStore from '../store/authStore';
-import { useNavigate } from 'react-router-dom';
 
 const AdminDashboard = () => {
-    const { isAdmin } = useAuthStore();
+    const { isAdmin, loading: authLoading } = useAuthStore();
     const navigate = useNavigate();
 
     const [formData, setFormData] = useState({
@@ -19,12 +21,41 @@ const AdminDashboard = () => {
     const [uploading, setUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState({ video: 0, thumbnail: 0 });
     const [message, setMessage] = useState({ type: '', text: '' });
+    const [courses, setCourses] = useState([]);
+    const [loadingCourses, setLoadingCourses] = useState(true);
 
     // Redirect if not admin
-    if (!isAdmin) {
-        navigate('/');
-        return null;
-    }
+    useEffect(() => {
+        if (!isAdmin && !authLoading) {
+            navigate('/');
+        }
+    }, [isAdmin, authLoading, navigate]);
+
+    useEffect(() => {
+        if (isAdmin) {
+            loadCourses();
+        }
+    }, [isAdmin]);
+
+    const loadCourses = async () => {
+        try {
+            setLoadingCourses(true);
+            const coursesRef = collection(db, 'courses');
+            const q = query(coursesRef, orderBy('createdAt', 'desc'));
+            const snapshot = await getDocs(q);
+
+            const coursesData = [];
+            snapshot.forEach(doc => {
+                coursesData.push({ id: doc.id, ...doc.data() });
+            });
+
+            setCourses(coursesData);
+        } catch (error) {
+            console.error('Error loading courses:', error);
+        } finally {
+            setLoadingCourses(false);
+        }
+    };
 
     const handleInputChange = (e) => {
         setFormData({
@@ -99,6 +130,9 @@ const AdminDashboard = () => {
             document.getElementById('video-upload').value = '';
             document.getElementById('thumbnail-upload').value = '';
 
+            // Reload courses
+            loadCourses();
+
         } catch (error) {
             console.error('Error uploading course:', error);
             setMessage({ type: 'error', text: 'Error uploading course. Please try again.' });
@@ -107,10 +141,65 @@ const AdminDashboard = () => {
         }
     };
 
+    // Show loading while checking auth
+    if (authLoading) {
+        return (
+            <div className="flex justify-center items-center h-64">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+            </div>
+        );
+    }
+
+    // Don't render if not admin
+    if (!isAdmin) {
+        return null;
+    }
+
     return (
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-6xl mx-auto">
             <h1 className="text-3xl font-bold text-gray-800 mb-8">Admin Dashboard</h1>
 
+            {/* Existing Courses Section */}
+            <div className="mb-8">
+                <h2 className="text-2xl font-semibold mb-4">Your Courses</h2>
+                {loadingCourses ? (
+                    <div className="flex justify-center py-8">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+                    </div>
+                ) : courses.length === 0 ? (
+                    <div className="bg-gray-50 rounded-lg p-6 text-center">
+                        <p className="text-gray-600">No courses yet. Upload your first course below!</p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {courses.map(course => (
+                            <div key={course.id} className="bg-white rounded-lg shadow-md overflow-hidden">
+                                <img
+                                    src={course.image}
+                                    alt={course.title}
+                                    className="w-full h-48 object-cover"
+                                />
+                                <div className="p-4">
+                                    <h3 className="font-semibold text-lg mb-2 line-clamp-2">{course.title}</h3>
+                                    <p className="text-gray-600 text-sm mb-3 line-clamp-2">{course.description}</p>
+                                    <div className="flex justify-between items-center mb-4">
+                                        <span className="text-indigo-600 font-bold">${course.price}</span>
+                                        <span className="text-gray-500 text-sm">{course.duration}</span>
+                                    </div>
+                                    <button
+                                        onClick={() => navigate(`/admin/course/${course.id}/curriculum`)}
+                                        className="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                                    >
+                                        Manage Curriculum
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            {/* Upload New Course Section */}
             <div className="bg-white rounded-lg shadow-md p-6">
                 <h2 className="text-2xl font-semibold mb-6">Upload New Course</h2>
 
@@ -189,7 +278,7 @@ const AdminDashboard = () => {
 
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Course Video
+                            Course Intro Video
                         </label>
                         <input
                             id="video-upload"
