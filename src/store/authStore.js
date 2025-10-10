@@ -1,34 +1,61 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { auth, db } from '../config/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 
-export const useAuthStore = create(
-    persist(
-        (set) => ({
+const useAuthStore = create((set) => ({
+    user: null,
+    isAdmin: false,
+    isAuthenticated: false,
+    loading: false,
+    error: null,
+
+    setUser: async (userData) => {
+        if (userData) {
+            try {
+                // Check if user is admin
+                const userDoc = await getDoc(doc(db, 'users', userData.uid));
+                const isAdmin = userDoc.exists() && userDoc.data().role === 'admin';
+
+                set({
+                    user: userData,
+                    isAdmin,
+                    isAuthenticated: true,
+                    loading: false,
+                    error: null
+                });
+            } catch (error) {
+                console.error('Error checking admin status:', error);
+                set({
+                    user: userData,
+                    isAdmin: false,
+                    isAuthenticated: true,
+                    loading: false
+                });
+            }
+        } else {
+            set({
+                user: null,
+                isAdmin: false,
+                isAuthenticated: false,
+                loading: false
+            });
+        }
+    },
+
+    setLoading: (loading) => set({ loading }),
+
+    setError: (error) => set({ error }),
+
+    logout: () => {
+        auth.signOut();
+        set({
             user: null,
+            isAdmin: false,
             isAuthenticated: false,
             loading: false,
-            error: null,
+            error: null
+        });
+    }
+}));
 
-            setUser: (userData) => set({
-                user: userData,
-                isAuthenticated: !!userData,
-                error: null
-            }),
-
-            setLoading: (loading) => set({ loading }),
-
-            setError: (error) => set({ error }),
-
-            logout: () => set({
-                user: null,
-                isAuthenticated: false,
-                error: null
-            }),
-
-            clearError: () => set({ error: null }),
-        }),
-        {
-            name: 'auth-storage',
-        }
-    )
-);
+export default useAuthStore;

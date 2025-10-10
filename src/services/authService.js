@@ -5,7 +5,8 @@ import {
     updateProfile,
     onAuthStateChanged
 } from 'firebase/auth';
-import { auth } from '../config/firebase';
+import { auth, db } from '../config/firebase';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 // Register new user
 export const registerUser = async (email, password, name) => {
@@ -15,6 +16,14 @@ export const registerUser = async (email, password, name) => {
         // Update profile with name
         await updateProfile(userCredential.user, {
             displayName: name
+        });
+
+        // Create user document in Firestore
+        await setDoc(doc(db, 'users', userCredential.user.uid), {
+            email: userCredential.user.email,
+            name: name,
+            role: 'user', // default role
+            createdAt: serverTimestamp()
         });
 
         return {

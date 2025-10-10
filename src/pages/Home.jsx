@@ -1,43 +1,49 @@
 import { useState, useEffect } from 'react';
 import InfiniteScroll from 'react-infinite-scroll-component';
 import CourseCard from '../components/courses/CourseCard';
-
-// Mock data generator
-const generateCourses = (page) => {
-    return Array.from({ length: 6 }, (_, i) => ({
-        id: page * 6 + i,
-        title: `Course ${page * 6 + i + 1}: ${['React', 'Node.js', 'Python', 'Java', 'AWS', 'Docker'][i % 6]}`,
-        description: 'Learn the fundamentals and advanced concepts with hands-on projects and real-world examples.',
-        image: `https://picsum.photos/seed/${page * 6 + i}/400/300`,
-        duration: `${Math.floor(Math.random() * 20) + 5}h`,
-        students: `${Math.floor(Math.random() * 10000) + 100}`,
-        price: Math.floor(Math.random() * 100) + 29,
-    }));
-};
+import { fetchCourses } from '../services/courseService';
 
 const Home = () => {
     const [courses, setCourses] = useState([]);
-    const [page, setPage] = useState(0);
+    const [lastVisible, setLastVisible] = useState(null);
     const [hasMore, setHasMore] = useState(true);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Load initial courses
-        setCourses(generateCourses(0));
-        setPage(1);
+        loadInitialCourses();
     }, []);
 
-    const fetchMoreCourses = () => {
-        setTimeout(() => {
-            const newCourses = generateCourses(page);
-            setCourses((prev) => [...prev, ...newCourses]);
-            setPage((prev) => prev + 1);
-
-            // Stop after 5 pages (30 courses)
-            if (page >= 4) {
-                setHasMore(false);
-            }
-        }, 1000);
+    const loadInitialCourses = async () => {
+        try {
+            const { courses: newCourses, lastVisible: lastDoc, hasMore: more } = await fetchCourses();
+            setCourses(newCourses);
+            setLastVisible(lastDoc);
+            setHasMore(more);
+        } catch (error) {
+            console.error('Error loading courses:', error);
+        } finally {
+            setLoading(false);
+        }
     };
+
+    const fetchMoreCourses = async () => {
+        try {
+            const { courses: newCourses, lastVisible: lastDoc, hasMore: more } = await fetchCourses(lastVisible);
+            setCourses((prev) => [...prev, ...newCourses]);
+            setLastVisible(lastDoc);
+            setHasMore(more);
+        } catch (error) {
+            console.error('Error loading more courses:', error);
+        }
+    };
+
+    if (loading) {
+        return (
+            <div className="flex justify-center items-center h-64">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+            </div>
+        );
+    }
 
     return (
         <div>
@@ -50,28 +56,34 @@ const Home = () => {
                 </p>
             </div>
 
-            <InfiniteScroll
-                dataLength={courses.length}
-                next={fetchMoreCourses}
-                hasMore={hasMore}
-                loader={
-                    <div className="text-center py-8">
-                        <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-                        <p className="mt-2 text-gray-600">Loading more courses...</p>
-                    </div>
-                }
-                endMessage={
-                    <p className="text-center py-8 text-gray-600 font-semibold">
-                        You've seen all available courses!
-                    </p>
-                }
-            >
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {courses.map((course) => (
-                        <CourseCard key={course.id} course={course} />
-                    ))}
+            {courses.length === 0 ? (
+                <div className="text-center py-12">
+                    <p className="text-gray-600 text-lg">No courses available yet.</p>
                 </div>
-            </InfiniteScroll>
+            ) : (
+                <InfiniteScroll
+                    dataLength={courses.length}
+                    next={fetchMoreCourses}
+                    hasMore={hasMore}
+                    loader={
+                        <div className="text-center py-8">
+                            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+                            <p className="mt-2 text-gray-600">Loading more courses...</p>
+                        </div>
+                    }
+                    endMessage={
+                        <p className="text-center py-8 text-gray-600 font-semibold">
+                            You've seen all available courses!
+                        </p>
+                    }
+                >
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {courses.map((course) => (
+                            <CourseCard key={course.id} course={course} />
+                        ))}
+                    </div>
+                </InfiniteScroll>
+            )}
         </div>
     );
 };
