@@ -1,14 +1,17 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Home, BookOpen, User, LogIn, UserPlus, LogOut, Menu, X } from 'lucide-react';
-import { useAuthStore } from '../../store/authStore';
+import { Home, BookOpen, User, LogIn, UserPlus, LogOut, Menu, X, Shield } from 'lucide-react';
+import useAuthStore from '../../store/authStore';
 import { logoutUser } from '../../services/authService';
 import { useState } from 'react';
 
 const Sidebar = () => {
-    const { isAuthenticated, user, logout } = useAuthStore();
+    const { isAuthenticated, user, logout, isAdmin } = useAuthStore();
     const location = useLocation();
     const navigate = useNavigate();
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+    // Debug: Log admin status
+    console.log('Sidebar - isAdmin:', isAdmin, 'isAuthenticated:', isAuthenticated, 'user:', user);
 
     const isActive = (path) => location.pathname === path;
 
@@ -60,6 +63,11 @@ const Sidebar = () => {
                         <div className="mb-6 p-4 bg-gray-800 rounded-lg">
                             <p className="text-sm text-gray-400">Welcome back,</p>
                             <p className="font-semibold">{user?.name || user?.email || 'User'}</p>
+                            {isAdmin && (
+                                <span className="inline-block mt-2 px-2 py-1 bg-indigo-600 text-xs rounded">
+                                    Admin
+                                </span>
+                            )}
                         </div>
                     )}
 
@@ -82,6 +90,22 @@ const Sidebar = () => {
                                 </Link>
                             );
                         })}
+
+                        {/* Admin Dashboard Link - Separate from menuItems */}
+                        {isAuthenticated && isAdmin && (
+                            <Link
+                                to="/admin"
+                                onClick={() => setIsMobileMenuOpen(false)}
+                                className={`flex items-center space-x-3 p-3 rounded-lg transition-colors ${
+                                    isActive('/admin')
+                                        ? 'bg-indigo-600 text-white'
+                                        : 'text-gray-300 hover:bg-gray-800'
+                                }`}
+                            >
+                                <Shield size={20} />
+                                <span>Admin Dashboard</span>
+                            </Link>
+                        )}
                     </nav>
 
                     {isAuthenticated && (

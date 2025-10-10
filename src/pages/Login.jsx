@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useAuthStore } from '../store/authStore';
+import useAuthStore from '../store/authStore';
 import { loginUser } from '../services/authService';
 
 const Login = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const { setUser, setLoading, setError, error, loading } = useAuthStore();
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
     const navigate = useNavigate();
 
     const getErrorMessage = (errorCode) => {
@@ -32,13 +33,12 @@ const Login = () => {
         setError(null);
 
         try {
-            const userData = await loginUser(email, password);
-            setUser(userData);
+            await loginUser(email, password);
+            // Auth state listener in App.jsx will handle setUser
             navigate('/');
         } catch (error) {
             console.error('Login error:', error);
             setError(getErrorMessage(error.code));
-        } finally {
             setLoading(false);
         }
     };

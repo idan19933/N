@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useAuthStore } from '../store/authStore';
 import { registerUser } from '../services/authService';
 
 const Register = () => {
@@ -10,7 +9,8 @@ const Register = () => {
         password: '',
         confirmPassword: '',
     });
-    const { setUser, setLoading, setError, error, loading } = useAuthStore();
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
     const navigate = useNavigate();
 
     const getErrorMessage = (errorCode) => {
@@ -49,17 +49,16 @@ const Register = () => {
         setError(null);
 
         try {
-            const userData = await registerUser(
+            await registerUser(
                 formData.email,
                 formData.password,
                 formData.name
             );
-            setUser(userData);
+            // Auth state listener in App.jsx will handle setUser
             navigate('/');
         } catch (error) {
             console.error('Registration error:', error);
             setError(getErrorMessage(error.code));
-        } finally {
             setLoading(false);
         }
     };
