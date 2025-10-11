@@ -1,14 +1,17 @@
-import Sidebar from './Sidebar';
+import  React, { useState, useEffect } from 'react';
 
-const Layout = ({ children }) => {
+import { Outlet } from 'react-router-dom';
+import Navbar from './Navbar';
+import Footer from './Footer';
+
+const Layout = () => {
     return (
-        <div className="flex min-h-screen bg-gray-50">
-            <Sidebar />
-            <main className="flex-1 lg:ml-64 p-4 md:p-8">
-                <div className="max-w-7xl mx-auto">
-                    {children}
-                </div>
+        <div className="flex flex-col min-h-screen">
+            <Navbar />
+            <main className="flex-grow">
+                <Outlet />
             </main>
+            <Footer />
         </div>
     );
 };

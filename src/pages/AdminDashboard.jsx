@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { collection, getDocs, query, orderBy } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { uploadVideo, uploadThumbnail, createCourse } from '../services/adminService';
+import { deleteCourse } from '../services/courseService';
 import useAuthStore from '../store/authStore';
+import DeleteConfirmModal from '../components/common/DeleteConfirmModal';
 
 const AdminDashboard = () => {
     const { isAdmin, loading: authLoading } = useAuthStore();
@@ -23,6 +25,11 @@ const AdminDashboard = () => {
     const [message, setMessage] = useState({ type: '', text: '' });
     const [courses, setCourses] = useState([]);
     const [loadingCourses, setLoadingCourses] = useState(true);
+
+    // Delete modal state
+    const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+    const [courseToDelete, setCourseToDelete] = useState(null);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     // Redirect if not admin
     useEffect(() => {
@@ -55,6 +62,39 @@ const AdminDashboard = () => {
         } finally {
             setLoadingCourses(false);
         }
+    };
+
+    const handleDeleteClick = (course) => {
+        setCourseToDelete(course);
+        setDeleteModalOpen(true);
+    };
+
+    const handleDeleteConfirm = async () => {
+        if (!courseToDelete) return;
+
+        setIsDeleting(true);
+        try {
+            await deleteCourse(courseToDelete.id);
+            setCourses(courses.filter(c => c.id !== courseToDelete.id));
+            setDeleteModalOpen(false);
+            setCourseToDelete(null);
+            setMessage({ type: 'success', text: 'Course deleted successfully!' });
+
+            // Clear success message after 3 seconds
+            setTimeout(() => {
+                setMessage({ type: '', text: '' });
+            }, 3000);
+        } catch (error) {
+            console.error('Error deleting course:', error);
+            setMessage({ type: 'error', text: 'Failed to delete course. Please try again.' });
+        } finally {
+            setIsDeleting(false);
+        }
+    };
+
+    const handleDeleteCancel = () => {
+        setDeleteModalOpen(false);
+        setCourseToDelete(null);
     };
 
     const handleInputChange = (e) => {
@@ -159,6 +199,15 @@ const AdminDashboard = () => {
         <div className="max-w-6xl mx-auto">
             <h1 className="text-3xl font-bold text-gray-800 mb-8">Admin Dashboard</h1>
 
+            {/* Global Message */}
+            {message.text && (
+                <div className={`mb-6 p-4 rounded-lg ${
+                    message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                }`}>
+                    {message.text}
+                </div>
+            )}
+
             {/* Existing Courses Section */}
             <div className="mb-8">
                 <h2 className="text-2xl font-semibold mb-4">Your Courses</h2>
@@ -186,12 +235,20 @@ const AdminDashboard = () => {
                                         <span className="text-indigo-600 font-bold">${course.price}</span>
                                         <span className="text-gray-500 text-sm">{course.duration}</span>
                                     </div>
-                                    <button
-                                        onClick={() => navigate(`/admin/course/${course.id}/curriculum`)}
-                                        className="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-                                    >
-                                        Manage Curriculum
-                                    </button>
+                                    <div className="flex flex-col gap-2">
+                                        <button
+                                            onClick={() => navigate(`/admin/course/${course.id}/curriculum`)}
+                                            className="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                                        >
+                                            Manage Curriculum
+                                        </button>
+                                        <button
+                                            onClick={() => handleDeleteClick(course)}
+                                            className="w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-semibold"
+                                        >
+                                            Delete Course
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         ))}
@@ -202,14 +259,6 @@ const AdminDashboard = () => {
             {/* Upload New Course Section */}
             <div className="bg-white rounded-lg shadow-md p-6">
                 <h2 className="text-2xl font-semibold mb-6">Upload New Course</h2>
-
-                {message.text && (
-                    <div className={`mb-4 p-4 rounded ${
-                        message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                    }`}>
-                        {message.text}
-                    </div>
-                )}
 
                 <form onSubmit={handleSubmit} className="space-y-6">
                     <div>
@@ -360,6 +409,15 @@ const AdminDashboard = () => {
                     </button>
                 </form>
             </div>
+
+            {/* Delete Confirmation Modal */}
+            <DeleteConfirmModal
+                isOpen={deleteModalOpen}
+                onClose={handleDeleteCancel}
+                onConfirm={handleDeleteConfirm}
+                courseName={courseToDelete?.title}
+                isDeleting={isDeleting}
+            />
         </div>
     );
 };

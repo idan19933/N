@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import  React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Plus, Edit2, Trash2, GripVertical, Video, FileText, ChevronDown, ChevronUp } from 'lucide-react';
 import { doc, getDoc } from 'firebase/firestore';
