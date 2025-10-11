@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import  React, { useState, useEffect } from 'react';
 import InfiniteScroll from 'react-infinite-scroll-component';
 import CourseCard from '../components/courses/CourseCard';
 import { fetchCourses } from '../services/courseService';

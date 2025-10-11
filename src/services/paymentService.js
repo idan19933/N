@@ -1,14 +1,17 @@
-import { db } from '../config/firebase';
+import { db, functions } from '../config/firebase';
 import { collection, addDoc, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
+import { getAuth } from 'firebase/auth';
 
-// Create a purchase record
-export const createPurchase = async (userId, courseId, amount) => {
+// Create a purchase record (used by webhook)
+export const createPurchase = async (userId, courseId, amount, paymentIntentId) => {
     try {
         const purchaseRef = await addDoc(collection(db, 'purchases'), {
             userId,
             courseId,
             amount,
             status: 'completed',
+            paymentIntentId,
             purchasedAt: serverTimestamp()
         });
         return purchaseRef.id;
@@ -64,10 +67,78 @@ export const getUserPurchases = async (userId) => {
     }
 };
 
-// Simulate payment (replace with real Stripe integration)
+// Create Stripe Checkout Session (Real Payment)
+export const createCheckoutSession = async (courseId, courseName, amount, userId) => {
+    try {
+        // Check if user is authenticated
+        const auth = getAuth();
+        const currentUser = auth.currentUser;
+
+        console.log('Current User:', currentUser);
+        console.log('User ID:', userId);
+
+        if (!currentUser) {
+            throw new Error('User must be logged in to make a purchase');
+        }
+
+        // Get the current ID token
+        const idToken = await currentUser.getIdToken();
+        console.log('ID Token obtained:', idToken ? 'Yes' : 'No');
+
+        const createCheckout = httpsCallable(functions, 'createCheckoutSession');
+
+        console.log('Calling createCheckoutSession with:', {
+            courseId,
+            courseName,
+            amount: Math.round(amount * 100),
+            userId,
+            origin: window.location.origin
+        });
+
+        const result = await createCheckout({
+            courseId,
+            courseName,
+            amount: Math.round(amount * 100), // Convert to cents
+            userId,
+            origin: window.location.origin
+        });
+
+        console.log('Function result:', result);
+
+        const { sessionId, url } = result.data;
+
+        // NEW: Redirect directly to the checkout URL
+        if (url) {
+            window.location.href = url;
+        } else {
+            throw new Error('No checkout URL returned from server');
+        }
+    } catch (error) {
+        console.error('Error creating checkout session:', error);
+        console.error('Error details:', {
+            code: error.code,
+            message: error.message,
+            details: error.details
+        });
+        throw error;
+    }
+};
+
+// Verify payment and complete purchase
+export const verifyPaymentAndCompletePurchase = async (sessionId) => {
+    try {
+        const verifyPayment = httpsCallable(functions, 'verifyPayment');
+        const result = await verifyPayment({ sessionId });
+        return result.data;
+    } catch (error) {
+        console.error('Error verifying payment:', error);
+        throw error;
+    }
+};
+
+// DEPRECATED: Old fake payment function
 export const processPayment = async (courseId, amount) => {
-    // In production, this would call Stripe API
-    // For now, we'll simulate a successful payment
+    console.warn('processPayment is deprecated. Use createCheckoutSession for real Stripe payments.');
     return new Promise((resolve) => {
         setTimeout(() => {
             resolve({

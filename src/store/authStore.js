@@ -1,60 +1,126 @@
 import { create } from 'zustand';
+import {
+    signInWithEmailAndPassword,
+    createUserWithEmailAndPassword,
+    signOut,
+    onAuthStateChanged
+} from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
-import { doc, getDoc } from 'firebase/firestore';
 
 const useAuthStore = create((set) => ({
     user: null,
-    isAdmin: false,
     isAuthenticated: false,
-    loading: false,
-    error: null,
+    isAdmin: false,
+    loading: true,
 
-    setUser: async (userData) => {
-        if (userData) {
-            try {
-                // Check if user is admin
-                const userDoc = await getDoc(doc(db, 'users', userData.uid));
-                const isAdmin = userDoc.exists() && userDoc.data().role === 'admin';
+    // Initialize auth state listener
+    initAuth: () => {
+        onAuthStateChanged(auth, async (firebaseUser) => {
+            if (firebaseUser) {
+                try {
+                    // Get user data from Firestore
+                    const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+                    const userData = userDoc.data();
 
+                    set({
+                        user: {
+                            uid: firebaseUser.uid,
+                            email: firebaseUser.email,
+                            ...userData
+                        },
+                        isAuthenticated: true,
+                        isAdmin: userData?.role === 'admin',
+                        loading: false
+                    });
+                } catch (error) {
+                    console.error('Error fetching user data:', error);
+                    set({
+                        user: {
+                            uid: firebaseUser.uid,
+                            email: firebaseUser.email
+                        },
+                        isAuthenticated: true,
+                        isAdmin: false,
+                        loading: false
+                    });
+                }
+            } else {
                 set({
-                    user: userData,
-                    isAdmin,
-                    isAuthenticated: true,
-                    loading: false,
-                    error: null
-                });
-            } catch (error) {
-                console.error('Error checking admin status:', error);
-                set({
-                    user: userData,
+                    user: null,
+                    isAuthenticated: false,
                     isAdmin: false,
-                    isAuthenticated: true,
                     loading: false
                 });
             }
-        } else {
+        });
+    },
+
+    login: async (email, password) => {
+        try {
+            const userCredential = await signInWithEmailAndPassword(auth, email, password);
+            const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
+            const userData = userDoc.data();
+
             set({
-                user: null,
-                isAdmin: false,
-                isAuthenticated: false,
+                user: {
+                    uid: userCredential.user.uid,
+                    email: userCredential.user.email,
+                    ...userData
+                },
+                isAuthenticated: true,
+                isAdmin: userData?.role === 'admin',
                 loading: false
             });
+
+            return { success: true };
+        } catch (error) {
+            console.error('Login error:', error);
+            return { success: false, error: error.message };
         }
     },
 
-    setLoading: (loading) => set({ loading }),
+    register: async (email, password) => {
+        try {
+            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
 
-    setError: (error) => set({ error }),
+            // Create user document in Firestore
+            await setDoc(doc(db, 'users', userCredential.user.uid), {
+                email: email,
+                role: 'user',
+                createdAt: new Date()
+            });
 
-    logout: () => {
-        auth.signOut();
-        set({
-            user: null,
-            isAdmin: false,
-            isAuthenticated: false,
-            loading: false,
-            error: null
-        });
+            set({
+                user: {
+                    uid: userCredential.user.uid,
+                    email: userCredential.user.email,
+                    role: 'user'
+                },
+                isAuthenticated: true,
+                isAdmin: false,
+                loading: false
+            });
+
+            return { success: true };
+        } catch (error) {
+            console.error('Registration error:', error);
+            return { success: false, error: error.message };
+        }
+    },
+
+    logout: async () => {
+        try {
+            await signOut(auth);
+            set({
+                user: null,
+                isAuthenticated: false,
+                isAdmin: false,
+                loading: false
+            });
+        } catch (error) {
+            console.error('Logout error:', error);
+        }
     }
 }));
 
