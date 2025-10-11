@@ -1,12 +1,11 @@
-import  React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Plus, Edit2, Trash2, GripVertical, Video, FileText, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Edit2, Trash2, GripVertical, Video, ChevronDown, ChevronUp } from 'lucide-react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import {
     getSections,
     createSection,
-    updateSection,
     deleteSection,
     reorderSections,
     getLessons,
@@ -26,9 +25,7 @@ const ManageCurriculum = () => {
     const [loading, setLoading] = useState(true);
     const [showAddSection, setShowAddSection] = useState(false);
     const [newSectionTitle, setNewSectionTitle] = useState('');
-    const [editingSection, setEditingSection] = useState(null);
 
-    // Redirect if not admin
     useEffect(() => {
         if (!isAdmin && !authLoading) {
             navigate('/');
@@ -45,7 +42,6 @@ const ManageCurriculum = () => {
         try {
             setLoading(true);
 
-            // Load course info
             const courseRef = doc(db, 'courses', courseId);
             const courseSnap = await getDoc(courseRef);
             if (courseSnap.exists()) {
@@ -54,7 +50,6 @@ const ManageCurriculum = () => {
 
             const sectionsData = await getSections(courseId);
 
-            // Load lessons for each section
             const sectionsWithLessons = await Promise.all(
                 sectionsData.map(async (section) => {
                     const lessons = await getLessons(courseId, section.id);
@@ -84,28 +79,31 @@ const ManageCurriculum = () => {
             loadCurriculum();
         } catch (error) {
             console.error('Error adding section:', error);
+            alert('Error adding section: ' + error.message);
         }
     };
 
     const handleDeleteSection = async (sectionId) => {
-        if (!confirm('Delete this section and all its lessons?')) return;
+        if (!window.confirm('Delete this section and all its lessons?')) return;
 
         try {
             await deleteSection(courseId, sectionId);
             loadCurriculum();
         } catch (error) {
             console.error('Error deleting section:', error);
+            alert('Error deleting section: ' + error.message);
         }
     };
 
     const handleDeleteLesson = async (sectionId, lessonId, videoPath) => {
-        if (!confirm('Delete this lesson?')) return;
+        if (!window.confirm('Delete this lesson?')) return;
 
         try {
             await deleteLesson(courseId, sectionId, lessonId, videoPath);
             loadCurriculum();
         } catch (error) {
             console.error('Error deleting lesson:', error);
+            alert('Error deleting lesson: ' + error.message);
         }
     };
 
@@ -164,7 +162,6 @@ const ManageCurriculum = () => {
         await reorderLessons(courseId, section.id, newLessons);
     };
 
-    // Show loading while checking auth
     if (authLoading) {
         return (
             <div className="flex justify-center items-center h-64">
@@ -173,7 +170,6 @@ const ManageCurriculum = () => {
         );
     }
 
-    // Don't render if not admin
     if (!isAdmin) {
         return null;
     }
@@ -188,7 +184,6 @@ const ManageCurriculum = () => {
 
     return (
         <div className="max-w-5xl mx-auto p-6">
-            {/* Header with Course Title */}
             <div className="mb-8">
                 <div className="flex items-center gap-3 mb-3">
                     <button
@@ -206,7 +201,6 @@ const ManageCurriculum = () => {
                 </p>
             </div>
 
-            {/* Info Box */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
                 <h3 className="font-semibold text-blue-900 mb-2">📚 How to Structure Your Course:</h3>
                 <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
@@ -217,7 +211,6 @@ const ManageCurriculum = () => {
                 </ol>
             </div>
 
-            {/* Add Section Button */}
             <div className="mb-6">
                 {!showAddSection ? (
                     <button
@@ -258,7 +251,6 @@ const ManageCurriculum = () => {
                 )}
             </div>
 
-            {/* Sections List */}
             {sections.length === 0 ? (
                 <div className="text-center py-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
                     <Video size={48} className="mx-auto text-gray-400 mb-4" />
@@ -269,7 +261,6 @@ const ManageCurriculum = () => {
                 <div className="space-y-4">
                     {sections.map((section, sectionIndex) => (
                         <div key={section.id} className="bg-white rounded-lg shadow-md overflow-hidden">
-                            {/* Section Header */}
                             <div className="bg-gray-50 p-4 flex items-center justify-between border-b">
                                 <div className="flex items-center gap-3 flex-1">
                                     <div className="flex flex-col gap-1">
@@ -324,7 +315,6 @@ const ManageCurriculum = () => {
                                 </div>
                             </div>
 
-                            {/* Lessons List */}
                             {expandedSections[section.id] && (
                                 <div className="p-4">
                                     {section.lessons?.length === 0 ? (
@@ -368,12 +358,6 @@ const ManageCurriculum = () => {
                                                     </div>
 
                                                     <div className="flex items-center gap-2">
-                                                        <button
-                                                            onClick={() => navigate(`/admin/course/${courseId}/section/${section.id}/lesson/${lesson.id}/edit`)}
-                                                            className="p-2 text-gray-600 hover:bg-gray-200 rounded"
-                                                        >
-                                                            <Edit2 size={16} />
-                                                        </button>
                                                         <button
                                                             onClick={() => handleDeleteLesson(section.id, lesson.id, lesson.videoPath)}
                                                             className="p-2 text-red-600 hover:bg-red-50 rounded"

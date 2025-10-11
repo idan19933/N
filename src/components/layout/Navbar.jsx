@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
-
+import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import useAuthStore from '../../store/authStore';
-import { Menu, X, User, LogOut, BookOpen, LayoutDashboard } from 'lucide-react';
+import { Menu, X, User, LogOut, BookOpen, LayoutDashboard, Users as UsersIcon } from 'lucide-react';
 
 const Navbar = () => {
     const { user, isAuthenticated, isAdmin, logout } = useAuthStore();
@@ -19,7 +19,6 @@ const Navbar = () => {
         <nav className="bg-white shadow-md sticky top-0 z-50">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="flex justify-between items-center h-16">
-                    {/* Logo */}
                     <Link to="/" className="flex items-center">
                         <img src="/logo.png" alt="Nexon" className="h-10 w-auto" />
                     </Link>
@@ -32,15 +31,30 @@ const Navbar = () => {
 
                         {isAuthenticated ? (
                             <>
-                                <Link to="/my-courses" className="text-gray-700 hover:text-indigo-600 font-medium transition-colors">
-                                    הקורסים שלי
-                                </Link>
+                                {!isAdmin && (
+                                    <>
+                                        <Link to="/my-courses" className="text-gray-700 hover:text-indigo-600 font-medium transition-colors">
+                                            הקורסים שלי
+                                        </Link>
+
+                                        <Link to="/dashboard" className="text-gray-700 hover:text-indigo-600 font-medium transition-colors flex items-center gap-2">
+                                            <User size={18} />
+                                            איזור אישי
+                                        </Link>
+                                    </>
+                                )}
 
                                 {isAdmin && (
-                                    <Link to="/admin" className="text-gray-700 hover:text-indigo-600 font-medium transition-colors flex items-center gap-2">
-                                        <LayoutDashboard size={18} />
-                                        ניהול
-                                    </Link>
+                                    <>
+                                        <Link to="/admin" className="text-gray-700 hover:text-indigo-600 font-medium transition-colors flex items-center gap-2">
+                                            <LayoutDashboard size={18} />
+                                            ניהול קורסים
+                                        </Link>
+                                        <Link to="/admin/users" className="text-gray-700 hover:text-indigo-600 font-medium transition-colors flex items-center gap-2">
+                                            <UsersIcon size={18} />
+                                            ניהול משתמשים
+                                        </Link>
+                                    </>
                                 )}
 
                                 <div className="flex items-center gap-3">
@@ -89,23 +103,46 @@ const Navbar = () => {
 
                             {isAuthenticated ? (
                                 <>
-                                    <Link
-                                        to="/my-courses"
-                                        className="text-gray-700 hover:text-indigo-600 font-medium py-2"
-                                        onClick={() => setIsMenuOpen(false)}
-                                    >
-                                        הקורסים שלי
-                                    </Link>
+                                    {!isAdmin && (
+                                        <>
+                                            <Link
+                                                to="/my-courses"
+                                                className="text-gray-700 hover:text-indigo-600 font-medium py-2"
+                                                onClick={() => setIsMenuOpen(false)}
+                                            >
+                                                הקורסים שלי
+                                            </Link>
+
+                                            <Link
+                                                to="/dashboard"
+                                                className="text-gray-700 hover:text-indigo-600 font-medium py-2 flex items-center gap-2"
+                                                onClick={() => setIsMenuOpen(false)}
+                                            >
+                                                <User size={18} />
+                                                איזור אישי
+                                            </Link>
+                                        </>
+                                    )}
 
                                     {isAdmin && (
-                                        <Link
-                                            to="/admin"
-                                            className="text-gray-700 hover:text-indigo-600 font-medium py-2 flex items-center gap-2"
-                                            onClick={() => setIsMenuOpen(false)}
-                                        >
-                                            <LayoutDashboard size={18} />
-                                            ניהול
-                                        </Link>
+                                        <>
+                                            <Link
+                                                to="/admin"
+                                                className="text-gray-700 hover:text-indigo-600 font-medium py-2 flex items-center gap-2"
+                                                onClick={() => setIsMenuOpen(false)}
+                                            >
+                                                <LayoutDashboard size={18} />
+                                                ניהול קורסים
+                                            </Link>
+                                            <Link
+                                                to="/admin/users"
+                                                className="text-gray-700 hover:text-indigo-600 font-medium py-2 flex items-center gap-2"
+                                                onClick={() => setIsMenuOpen(false)}
+                                            >
+                                                <UsersIcon size={18} />
+                                                ניהול משתמשים
+                                            </Link>
+                                        </>
                                     )}
 
                                     <div className="pt-3 border-t">
