@@ -28,10 +28,13 @@ const UserDashboard = () => {
 
     const loadDashboardData = async () => {
         try {
+            console.log('📊 Loading dashboard for user:', user.uid);
+
             // טעינת רכישות
             const purchasesQuery = query(
                 collection(db, 'purchases'),
-                where('userId', '==', user.uid)
+                where('userId', '==', user.uid),
+                where('status', '==', 'completed')
             );
             const purchasesSnapshot = await getDocs(purchasesQuery);
             const purchasesData = purchasesSnapshot.docs.map(doc => ({
@@ -39,35 +42,58 @@ const UserDashboard = () => {
                 ...doc.data()
             }));
 
+            console.log('💳 Found purchases:', purchasesData.length, purchasesData);
+
             // טעינת התקדמות בקורסים
             const progressData = await getUserProgress(user.uid);
+            console.log('📈 Progress data:', progressData);
 
             // שילוב עם רכישות וטעינת פרטי קורסים
             const enrichedPurchases = await Promise.all(
                 purchasesData.map(async (purchase) => {
+                    console.log('🔍 Loading course:', purchase.courseId);
+
                     const courseDoc = await getDoc(doc(db, 'courses', purchase.courseId));
+
+                    if (!courseDoc.exists()) {
+                        console.log('❌ Course not found:', purchase.courseId);
+                        return null;
+                    }
+
                     const courseData = courseDoc.data();
-                    const progress = progressData.find(p => p.courseId === purchase.courseId);
+                    console.log('✅ Course loaded:', courseData.title);
+
+                    // progressData הוא אובייקט עם keys של courseId
+                    const progress = progressData[purchase.courseId] || {
+                        completionRate: 0,
+                        completedLessons: 0,
+                        totalLessons: 0
+                    };
+
+                    console.log('Progress for course:', progress);
 
                     return {
                         ...purchase,
-                        courseName: courseData?.title || 'Unknown Course',
-                        courseImage: courseData?.image,
-                        courseDescription: courseData?.description,
-                        progress: progress?.completionRate || 0,
-                        completedLessons: progress?.completedLessons || 0,
-                        totalLessons: progress?.totalLessons || 0
+                        courseName: courseData.title,
+                        courseImage: courseData.image,
+                        courseDescription: courseData.description,
+                        progress: progress.completionRate || 0,
+                        completedLessons: progress.completedLessons || 0,
+                        totalLessons: progress.totalLessons || 0
                     };
                 })
             );
 
-            setCoursesWithProgress(enrichedPurchases);
+            const validCourses = enrichedPurchases.filter(c => c !== null);
+            console.log('✅ Valid courses:', validCourses.length, validCourses);
+
+            setCoursesWithProgress(validCourses);
             setPurchases(purchasesData);
 
             // חישוב סטטיסטיקות
             const totalSpent = purchasesData.reduce((sum, p) => sum + (p.amount || 0), 0);
-            const completedCourses = enrichedPurchases.filter(p => p.progress >= 95).length;
-            const inProgressCourses = enrichedPurchases.filter(p => p.progress > 0 && p.progress < 95).length;
+            const completedCourses = validCourses.filter(p => p.progress >= 95).length;
+            const inProgressCourses = validCourses.filter(p => p.progress > 0 && p.progress < 95).length;
 
             setStats({
                 totalCourses: purchasesData.length,
@@ -83,8 +109,10 @@ const UserDashboard = () => {
                 setGoals(userData.goals);
             }
 
+            console.log('✅ Dashboard loaded successfully');
+
         } catch (error) {
-            console.error('Error loading dashboard:', error);
+            console.error('❌ Error loading dashboard:', error);
         } finally {
             setLoading(false);
         }
@@ -102,7 +130,9 @@ const UserDashboard = () => {
         <div className="max-w-7xl mx-auto px-4 py-8" dir="rtl">
             {/* Header */}
             <div className="mb-8">
-                <h1 className="text-4xl font-bold text-gray-800 mb-2">שלום, {user.email}</h1>
+                <h1 className="text-4xl font-bold text-gray-800 mb-2">
+                    שלום, {user.displayName || user.email}
+                </h1>
                 <p className="text-gray-600">ברוך הבא לאיזור האישי שלך</p>
             </div>
 
@@ -268,16 +298,20 @@ const UserDashboard = () => {
                                 <tr key={purchase.id} className="border-b hover:bg-gray-50">
                                     <td className="py-3 px-4">
                                         {coursesWithProgress.find(c => c.courseId === purchase.courseId)?.courseName ||
+                                            purchase.courseName ||
                                             'קורס #' + purchase.courseId.substring(0, 8)}
                                     </td>
                                     <td className="py-3 px-4">
-                                        {purchase.purchasedAt?.toDate().toLocaleDateString('he-IL')}
+                                        {purchase.purchasedAt?.toDate ?
+                                            purchase.purchasedAt.toDate().toLocaleDateString('he-IL') :
+                                            new Date(purchase.purchasedAt).toLocaleDateString('he-IL')
+                                        }
                                     </td>
-                                    <td className="py-3 px-4 font-semibold">${purchase.amount}</td>
+                                    <td className="py-3 px-4 font-semibold">${purchase.amount?.toFixed(2)}</td>
                                     <td className="py-3 px-4">
-                                            <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm">
-                                                {purchase.status}
-                                            </span>
+                                        <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm">
+                                            {purchase.status || 'completed'}
+                                        </span>
                                     </td>
                                 </tr>
                             ))}

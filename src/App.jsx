@@ -1,4 +1,4 @@
-import React from 'react'
+import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { useEffect } from 'react';
 import Layout from './components/layout/Layout';
@@ -12,7 +12,8 @@ import Register from './pages/Register';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminUsers from './pages/AdminUsers';
 import ManageCurriculum from './pages/ManageCurriculum';
-import AddLesson from './pages/AddLesson';  // NEW
+import AddLesson from './pages/AddLesson';
+import AdminNotifications from './pages/AdminNotifications';
 import PaymentSuccess from './pages/PaymentSuccess';
 import PaymentCancel from './pages/PaymentCancel';
 import PrivateRoute from './components/auth/PrivateRoute';
@@ -62,13 +63,18 @@ function App() {
                         </AdminRoute>
                     } />
 
+                    <Route path="admin/notifications" element={
+                        <AdminRoute>
+                            <AdminNotifications />
+                        </AdminRoute>
+                    } />
+
                     <Route path="admin/course/:courseId/curriculum" element={
                         <AdminRoute>
                             <ManageCurriculum />
                         </AdminRoute>
                     } />
 
-                    {/* NEW ROUTE */}
                     <Route path="admin/course/:courseId/section/:sectionId/add-lesson" element={
                         <AdminRoute>
                             <AddLesson />

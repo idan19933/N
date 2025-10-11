@@ -1,35 +1,31 @@
-import { doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, setDoc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
-// שמירת התקדמות וידאו
-export const saveVideoProgress = async (userId, courseId, lessonId, currentTime, duration) => {
+export const saveVideoProgress = async (userId, courseId, lessonId, currentTime, duration, completed = false) => {
     try {
         const progressRef = doc(db, 'progress', `${userId}_${courseId}_${lessonId}`);
 
-        const progressData = {
+        const percentage = (currentTime / duration) * 100;
+        const isCompleted = completed || percentage >= 90;
+
+        await setDoc(progressRef, {
             userId,
             courseId,
             lessonId,
             currentTime,
             duration,
-            percentage: (currentTime / duration) * 100,
-            lastUpdated: new Date(),
-            completed: currentTime >= duration * 0.95 // נחשב כהושלם אם צפה ב-95%
-        };
-
-        await setDoc(progressRef, progressData, { merge: true });
-
-        // עדכון התקדמות כללית בקורס
-        await updateCourseProgress(userId, courseId);
+            percentage,
+            completed: isCompleted,
+            lastUpdated: new Date()
+        }, { merge: true });
 
         return { success: true };
     } catch (error) {
-        console.error('Error saving video progress:', error);
-        return { success: false, error };
+        console.error('Error saving progress:', error);
+        return { success: false, error: error.message };
     }
 };
 
-// קבלת התקדמות וידאו
 export const getVideoProgress = async (userId, courseId, lessonId) => {
     try {
         const progressRef = doc(db, 'progress', `${userId}_${courseId}_${lessonId}`);
@@ -41,116 +37,94 @@ export const getVideoProgress = async (userId, courseId, lessonId) => {
 
         return { currentTime: 0, percentage: 0, completed: false };
     } catch (error) {
-        console.error('Error getting video progress:', error);
+        console.error('Error getting progress:', error);
         return { currentTime: 0, percentage: 0, completed: false };
     }
 };
 
-// עדכון התקדמות כללית בקורס
-export const updateCourseProgress = async (userId, courseId) => {
+export const getCourseProgress = async (userId, courseId) => {
     try {
-        // שליפת כל השיעורים בקורס
-        const curriculumRef = collection(db, 'curriculum');
-        const q = query(curriculumRef, where('courseId', '==', courseId));
-        const curriculumSnapshot = await getDocs(q);
-
-        const totalLessons = curriculumSnapshot.size;
-
-        if (totalLessons === 0) {
-            return { success: false, message: 'No lessons found' };
-        }
-
-        // שליפת התקדמות בכל השיעורים
         const progressQuery = query(
             collection(db, 'progress'),
             where('userId', '==', userId),
             where('courseId', '==', courseId)
         );
-        const progressSnapshot = await getDocs(progressQuery);
+
+        const snapshot = await getDocs(progressQuery);
 
         let completedLessons = 0;
-        let totalPercentage = 0;
+        let totalLessons = snapshot.size;
 
-        progressSnapshot.forEach(doc => {
+        snapshot.forEach(doc => {
             const data = doc.data();
             if (data.completed) {
                 completedLessons++;
             }
-            totalPercentage += data.percentage || 0;
         });
 
-        const averageProgress = totalPercentage / totalLessons;
-        const completionRate = (completedLessons / totalLessons) * 100;
-
-        // שמירת התקדמות כללית
-        const courseProgressRef = doc(db, 'courseProgress', `${userId}_${courseId}`);
-        await setDoc(courseProgressRef, {
-            userId,
-            courseId,
-            totalLessons,
-            completedLessons,
-            averageProgress,
-            completionRate,
-            lastUpdated: new Date()
-        }, { merge: true });
+        const completionRate = totalLessons > 0 ? (completedLessons / totalLessons) * 100 : 0;
 
         return {
-            success: true,
             completedLessons,
             totalLessons,
-            completionRate,
-            averageProgress
-        };
-    } catch (error) {
-        console.error('Error updating course progress:', error);
-        return { success: false, error };
-    }
-};
-
-// קבלת התקדמות כללית בקורס
-export const getCourseProgress = async (userId, courseId) => {
-    try {
-        const courseProgressRef = doc(db, 'courseProgress', `${userId}_${courseId}`);
-        const progressDoc = await getDoc(courseProgressRef);
-
-        if (progressDoc.exists()) {
-            return progressDoc.data();
-        }
-
-        return {
-            totalLessons: 0,
-            completedLessons: 0,
-            averageProgress: 0,
-            completionRate: 0
+            completionRate
         };
     } catch (error) {
         console.error('Error getting course progress:', error);
         return {
-            totalLessons: 0,
             completedLessons: 0,
-            averageProgress: 0,
+            totalLessons: 0,
             completionRate: 0
         };
     }
 };
 
-// קבלת כל ההתקדמות של משתמש
+// New function for UserDashboard
 export const getUserProgress = async (userId) => {
     try {
         const progressQuery = query(
-            collection(db, 'courseProgress'),
+            collection(db, 'progress'),
             where('userId', '==', userId)
         );
+
         const snapshot = await getDocs(progressQuery);
 
-        const progress = [];
+        const progressByeCourse = {};
+
         snapshot.forEach(doc => {
-            progress.push({ id: doc.id, ...doc.data() });
+            const data = doc.data();
+            const courseId = data.courseId;
+
+            if (!progressByeCourse[courseId]) {
+                progressByeCourse[courseId] = {
+                    totalLessons: 0,
+                    completedLessons: 0,
+                    lastUpdated: data.lastUpdated
+                };
+            }
+
+            progressByeCourse[courseId].totalLessons++;
+            if (data.completed) {
+                progressByeCourse[courseId].completedLessons++;
+            }
+
+            // Keep the most recent update time
+            if (data.lastUpdated > progressByeCourse[courseId].lastUpdated) {
+                progressByeCourse[courseId].lastUpdated = data.lastUpdated;
+            }
         });
 
-        return progress;
+        // Calculate completion rate for each course
+        Object.keys(progressByeCourse).forEach(courseId => {
+            const progress = progressByeCourse[courseId];
+            progress.completionRate = progress.totalLessons > 0
+                ? (progress.completedLessons / progress.totalLessons) * 100
+                : 0;
+        });
+
+        return progressByeCourse;
     } catch (error) {
         console.error('Error getting user progress:', error);
-        return [];
+        return {};
     }
 };

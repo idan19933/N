@@ -1,37 +1,36 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, where, orderBy, limit } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { uploadVideo, uploadThumbnail, createCourse } from '../services/adminService';
-import { deleteCourse } from '../services/courseService';
 import useAuthStore from '../store/authStore';
-import DeleteConfirmModal from '../components/common/DeleteConfirmModal';
+import { Plus, Edit2, Trash2, Users, BookOpen, DollarSign, TrendingUp, Bell } from 'lucide-react';
 
 const AdminDashboard = () => {
-    const { isAdmin, loading: authLoading } = useAuthStore();
     const navigate = useNavigate();
+    const { isAdmin, loading: authLoading } = useAuthStore();
+
+    const [courses, setCourses] = useState([]);
+    const [stats, setStats] = useState({
+        totalCourses: 0,
+        totalUsers: 0,
+        totalRevenue: 0,
+        totalEnrollments: 0
+    });
+    const [loading, setLoading] = useState(true);
+    const [showAddCourse, setShowAddCourse] = useState(false);
+    const [editingCourse, setEditingCourse] = useState(null);
+    const [unreadNotifications, setUnreadNotifications] = useState(0);
 
     const [formData, setFormData] = useState({
         title: '',
         description: '',
         price: '',
-        duration: ''
+        duration: '',
+        level: 'beginner',
+        image: '',
+        instructor: ''
     });
 
-    const [videoFile, setVideoFile] = useState(null);
-    const [thumbnailFile, setThumbnailFile] = useState(null);
-    const [uploading, setUploading] = useState(false);
-    const [uploadProgress, setUploadProgress] = useState({ video: 0, thumbnail: 0 });
-    const [message, setMessage] = useState({ type: '', text: '' });
-    const [courses, setCourses] = useState([]);
-    const [loadingCourses, setLoadingCourses] = useState(true);
-
-    // Delete modal state
-    const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-    const [courseToDelete, setCourseToDelete] = useState(null);
-    const [isDeleting, setIsDeleting] = useState(false);
-
-    // Redirect if not admin
     useEffect(() => {
         if (!isAdmin && !authLoading) {
             navigate('/');
@@ -40,61 +39,57 @@ const AdminDashboard = () => {
 
     useEffect(() => {
         if (isAdmin) {
-            loadCourses();
+            loadDashboardData();
+            loadNotificationsCount();
         }
     }, [isAdmin]);
 
-    const loadCourses = async () => {
+    const loadNotificationsCount = async () => {
         try {
-            setLoadingCourses(true);
-            const coursesRef = collection(db, 'courses');
-            const q = query(coursesRef, orderBy('createdAt', 'desc'));
-            const snapshot = await getDocs(q);
+            const notificationsQuery = query(
+                collection(db, 'notifications'),
+                where('read', '==', false)
+            );
+            const snapshot = await getDocs(notificationsQuery);
+            setUnreadNotifications(snapshot.size);
+        } catch (error) {
+            console.error('Error loading notifications count:', error);
+        }
+    };
 
-            const coursesData = [];
-            snapshot.forEach(doc => {
-                coursesData.push({ id: doc.id, ...doc.data() });
+    const loadDashboardData = async () => {
+        try {
+            setLoading(true);
+
+            // Load courses
+            const coursesSnapshot = await getDocs(collection(db, 'courses'));
+            const coursesData = coursesSnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+            setCourses(coursesData);
+
+            // Load stats
+            const usersSnapshot = await getDocs(collection(db, 'users'));
+            const purchasesSnapshot = await getDocs(collection(db, 'purchases'));
+
+            let totalRevenue = 0;
+            purchasesSnapshot.forEach(doc => {
+                totalRevenue += doc.data().amount || 0;
             });
 
-            setCourses(coursesData);
+            setStats({
+                totalCourses: coursesData.length,
+                totalUsers: usersSnapshot.size,
+                totalRevenue: totalRevenue,
+                totalEnrollments: purchasesSnapshot.size
+            });
+
         } catch (error) {
-            console.error('Error loading courses:', error);
+            console.error('Error loading dashboard data:', error);
         } finally {
-            setLoadingCourses(false);
+            setLoading(false);
         }
-    };
-
-    const handleDeleteClick = (course) => {
-        setCourseToDelete(course);
-        setDeleteModalOpen(true);
-    };
-
-    const handleDeleteConfirm = async () => {
-        if (!courseToDelete) return;
-
-        setIsDeleting(true);
-        try {
-            await deleteCourse(courseToDelete.id);
-            setCourses(courses.filter(c => c.id !== courseToDelete.id));
-            setDeleteModalOpen(false);
-            setCourseToDelete(null);
-            setMessage({ type: 'success', text: 'Course deleted successfully!' });
-
-            // Clear success message after 3 seconds
-            setTimeout(() => {
-                setMessage({ type: '', text: '' });
-            }, 3000);
-        } catch (error) {
-            console.error('Error deleting course:', error);
-            setMessage({ type: 'error', text: 'Failed to delete course. Please try again.' });
-        } finally {
-            setIsDeleting(false);
-        }
-    };
-
-    const handleDeleteCancel = () => {
-        setDeleteModalOpen(false);
-        setCourseToDelete(null);
     };
 
     const handleInputChange = (e) => {
@@ -104,149 +99,376 @@ const AdminDashboard = () => {
         });
     };
 
-    const handleVideoChange = (e) => {
-        const file = e.target.files[0];
-        if (file && file.type.startsWith('video/')) {
-            setVideoFile(file);
-        } else {
-            setMessage({ type: 'error', text: 'Please select a valid video file' });
-        }
-    };
-
-    const handleThumbnailChange = (e) => {
-        const file = e.target.files[0];
-        if (file && file.type.startsWith('image/')) {
-            setThumbnailFile(file);
-        } else {
-            setMessage({ type: 'error', text: 'Please select a valid image file' });
-        }
-    };
-
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        if (!videoFile || !thumbnailFile) {
-            setMessage({ type: 'error', text: 'Please select both video and thumbnail' });
-            return;
-        }
-
-        setUploading(true);
-        setMessage({ type: '', text: '' });
-
         try {
-            // Upload video
-            const videoData = await uploadVideo(videoFile, (progress) => {
-                setUploadProgress(prev => ({ ...prev, video: progress }));
+            if (editingCourse) {
+                await updateDoc(doc(db, 'courses', editingCourse.id), {
+                    ...formData,
+                    price: parseFloat(formData.price),
+                    updatedAt: new Date()
+                });
+            } else {
+                await addDoc(collection(db, 'courses'), {
+                    ...formData,
+                    price: parseFloat(formData.price),
+                    createdAt: new Date(),
+                    enrollmentCount: 0
+                });
+            }
+
+            setFormData({
+                title: '',
+                description: '',
+                price: '',
+                duration: '',
+                level: 'beginner',
+                image: '',
+                instructor: ''
             });
-
-            // Upload thumbnail
-            const thumbnailData = await uploadThumbnail(thumbnailFile, (progress) => {
-                setUploadProgress(prev => ({ ...prev, thumbnail: progress }));
-            });
-
-            // Create course document
-            const courseData = {
-                title: formData.title,
-                description: formData.description,
-                price: parseFloat(formData.price),
-                duration: formData.duration,
-                videoUrl: videoData.url,
-                videoPath: videoData.path,
-                image: thumbnailData.url,
-                thumbnailPath: thumbnailData.path
-            };
-
-            await createCourse(courseData);
-
-            setMessage({ type: 'success', text: 'Course uploaded successfully!' });
-
-            // Reset form
-            setFormData({ title: '', description: '', price: '', duration: '' });
-            setVideoFile(null);
-            setThumbnailFile(null);
-            setUploadProgress({ video: 0, thumbnail: 0 });
-
-            // Reset file inputs
-            document.getElementById('video-upload').value = '';
-            document.getElementById('thumbnail-upload').value = '';
-
-            // Reload courses
-            loadCourses();
-
+            setShowAddCourse(false);
+            setEditingCourse(null);
+            loadDashboardData();
         } catch (error) {
-            console.error('Error uploading course:', error);
-            setMessage({ type: 'error', text: 'Error uploading course. Please try again.' });
-        } finally {
-            setUploading(false);
+            console.error('Error saving course:', error);
+            alert('Error saving course: ' + error.message);
         }
     };
 
-    // Show loading while checking auth
-    if (authLoading) {
+    const handleEdit = (course) => {
+        setEditingCourse(course);
+        setFormData({
+            title: course.title,
+            description: course.description,
+            price: course.price.toString(),
+            duration: course.duration,
+            level: course.level,
+            image: course.image,
+            instructor: course.instructor
+        });
+        setShowAddCourse(true);
+    };
+
+    const handleDelete = async (courseId) => {
+        if (!window.confirm('Are you sure you want to delete this course?')) return;
+
+        try {
+            await deleteDoc(doc(db, 'courses', courseId));
+            loadDashboardData();
+        } catch (error) {
+            console.error('Error deleting course:', error);
+            alert('Error deleting course: ' + error.message);
+        }
+    };
+
+    if (authLoading || loading) {
         return (
-            <div className="flex justify-center items-center h-64">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+            <div className="flex justify-center items-center h-screen">
+                <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-600"></div>
             </div>
         );
     }
 
-    // Don't render if not admin
     if (!isAdmin) {
         return null;
     }
 
     return (
-        <div className="max-w-6xl mx-auto">
-            <h1 className="text-3xl font-bold text-gray-800 mb-8">Admin Dashboard</h1>
+        <div className="max-w-7xl mx-auto px-4 py-8">
+            {/* Header */}
+            <div className="flex justify-between items-center mb-8">
+                <div>
+                    <h1 className="text-3xl font-bold text-gray-800">Admin Dashboard</h1>
+                    <p className="text-gray-600 mt-2">Manage your courses and users</p>
+                </div>
+                <div className="flex gap-3">
+                    <button
+                        onClick={() => navigate('/admin/notifications')}
+                        className="relative px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 flex items-center gap-2"
+                    >
+                        <Bell size={20} />
+                        התראות
+                        {unreadNotifications > 0 && (
+                            <span className="absolute -top-2 -right-2 bg-red-600 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center font-bold">
+                                {unreadNotifications}
+                            </span>
+                        )}
+                    </button>
+                    <button
+                        onClick={() => navigate('/admin/users')}
+                        className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center gap-2"
+                    >
+                        <Users size={20} />
+                        Users
+                    </button>
+                </div>
+            </div>
 
-            {/* Global Message */}
-            {message.text && (
-                <div className={`mb-6 p-4 rounded-lg ${
-                    message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                }`}>
-                    {message.text}
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div className="bg-white rounded-xl shadow-md p-6">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-gray-600 text-sm">Total Courses</p>
+                            <p className="text-3xl font-bold text-gray-800 mt-2">{stats.totalCourses}</p>
+                        </div>
+                        <div className="bg-indigo-100 p-4 rounded-full">
+                            <BookOpen className="text-indigo-600" size={24} />
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-md p-6">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-gray-600 text-sm">Total Users</p>
+                            <p className="text-3xl font-bold text-gray-800 mt-2">{stats.totalUsers}</p>
+                        </div>
+                        <div className="bg-green-100 p-4 rounded-full">
+                            <Users className="text-green-600" size={24} />
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-md p-6">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-gray-600 text-sm">Total Revenue</p>
+                            <p className="text-3xl font-bold text-gray-800 mt-2">${stats.totalRevenue.toFixed(2)}</p>
+                        </div>
+                        <div className="bg-yellow-100 p-4 rounded-full">
+                            <DollarSign className="text-yellow-600" size={24} />
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-md p-6">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-gray-600 text-sm">Enrollments</p>
+                            <p className="text-3xl font-bold text-gray-800 mt-2">{stats.totalEnrollments}</p>
+                        </div>
+                        <div className="bg-purple-100 p-4 rounded-full">
+                            <TrendingUp className="text-purple-600" size={24} />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Add Course Button */}
+            <div className="mb-6">
+                {!showAddCourse && (
+                    <button
+                        onClick={() => {
+                            setShowAddCourse(true);
+                            setEditingCourse(null);
+                            setFormData({
+                                title: '',
+                                description: '',
+                                price: '',
+                                duration: '',
+                                level: 'beginner',
+                                image: '',
+                                instructor: ''
+                            });
+                        }}
+                        className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-semibold"
+                    >
+                        <Plus size={20} />
+                        Add New Course
+                    </button>
+                )}
+            </div>
+
+            {/* Add/Edit Course Form */}
+            {showAddCourse && (
+                <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
+                    <h2 className="text-2xl font-bold text-gray-800 mb-6">
+                        {editingCourse ? 'Edit Course' : 'Add New Course'}
+                    </h2>
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Course Title
+                                </label>
+                                <input
+                                    type="text"
+                                    name="title"
+                                    value={formData.title}
+                                    onChange={handleInputChange}
+                                    required
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Instructor
+                                </label>
+                                <input
+                                    type="text"
+                                    name="instructor"
+                                    value={formData.instructor}
+                                    onChange={handleInputChange}
+                                    required
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Description
+                            </label>
+                            <textarea
+                                name="description"
+                                value={formData.description}
+                                onChange={handleInputChange}
+                                required
+                                rows={4}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Price ($)
+                                </label>
+                                <input
+                                    type="number"
+                                    name="price"
+                                    value={formData.price}
+                                    onChange={handleInputChange}
+                                    required
+                                    step="0.01"
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Duration
+                                </label>
+                                <input
+                                    type="text"
+                                    name="duration"
+                                    value={formData.duration}
+                                    onChange={handleInputChange}
+                                    required
+                                    placeholder="e.g., 5h 30min"
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Level
+                                </label>
+                                <select
+                                    name="level"
+                                    value={formData.level}
+                                    onChange={handleInputChange}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                >
+                                    <option value="beginner">Beginner</option>
+                                    <option value="intermediate">Intermediate</option>
+                                    <option value="advanced">Advanced</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Image URL
+                            </label>
+                            <input
+                                type="url"
+                                name="image"
+                                value={formData.image}
+                                onChange={handleInputChange}
+                                required
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                            />
+                        </div>
+
+                        <div className="flex gap-4">
+                            <button
+                                type="submit"
+                                className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-semibold"
+                            >
+                                {editingCourse ? 'Update Course' : 'Create Course'}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowAddCourse(false);
+                                    setEditingCourse(null);
+                                }}
+                                className="px-6 py-3 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 font-semibold"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </form>
                 </div>
             )}
 
-            {/* Existing Courses Section */}
-            <div className="mb-8">
-                <h2 className="text-2xl font-semibold mb-4">Your Courses</h2>
-                {loadingCourses ? (
-                    <div className="flex justify-center py-8">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-                    </div>
-                ) : courses.length === 0 ? (
-                    <div className="bg-gray-50 rounded-lg p-6 text-center">
-                        <p className="text-gray-600">No courses yet. Upload your first course below!</p>
+            {/* Courses List */}
+            <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+                <div className="px-6 py-4 bg-gray-50 border-b">
+                    <h2 className="text-xl font-bold text-gray-800">Courses</h2>
+                </div>
+
+                {courses.length === 0 ? (
+                    <div className="p-8 text-center text-gray-600">
+                        No courses yet. Add your first course!
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {courses.map(course => (
-                            <div key={course.id} className="bg-white rounded-lg shadow-md overflow-hidden">
-                                <img
-                                    src={course.image}
-                                    alt={course.title}
-                                    className="w-full h-48 object-cover"
-                                />
-                                <div className="p-4">
-                                    <h3 className="font-semibold text-lg mb-2 line-clamp-2">{course.title}</h3>
-                                    <p className="text-gray-600 text-sm mb-3 line-clamp-2">{course.description}</p>
-                                    <div className="flex justify-between items-center mb-4">
-                                        <span className="text-indigo-600 font-bold">${course.price}</span>
-                                        <span className="text-gray-500 text-sm">{course.duration}</span>
+                    <div className="divide-y divide-gray-200">
+                        {courses.map((course) => (
+                            <div key={course.id} className="p-6 hover:bg-gray-50 transition-colors">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-4 flex-1">
+                                        <img
+                                            src={course.image}
+                                            alt={course.title}
+                                            className="w-20 h-20 object-cover rounded-lg"
+                                        />
+                                        <div className="flex-1">
+                                            <h3 className="font-bold text-lg text-gray-800">{course.title}</h3>
+                                            <p className="text-gray-600 text-sm mt-1">{course.instructor}</p>
+                                            <div className="flex items-center gap-4 mt-2 text-sm text-gray-600">
+                                                <span>${course.price}</span>
+                                                <span>•</span>
+                                                <span>{course.duration}</span>
+                                                <span>•</span>
+                                                <span className="capitalize">{course.level}</span>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div className="flex flex-col gap-2">
+
+                                    <div className="flex items-center gap-2">
                                         <button
                                             onClick={() => navigate(`/admin/course/${course.id}/curriculum`)}
-                                            className="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                                            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
                                         >
-                                            Manage Curriculum
+                                            <BookOpen size={16} />
+                                            Curriculum
                                         </button>
                                         <button
-                                            onClick={() => handleDeleteClick(course)}
-                                            className="w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-semibold"
+                                            onClick={() => handleEdit(course)}
+                                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
                                         >
-                                            Delete Course
+                                            <Edit2 size={20} />
+                                        </button>
+                                        <button
+                                            onClick={() => handleDelete(course.id)}
+                                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                                        >
+                                            <Trash2 size={20} />
                                         </button>
                                     </div>
                                 </div>
@@ -255,169 +477,6 @@ const AdminDashboard = () => {
                     </div>
                 )}
             </div>
-
-            {/* Upload New Course Section */}
-            <div className="bg-white rounded-lg shadow-md p-6">
-                <h2 className="text-2xl font-semibold mb-6">Upload New Course</h2>
-
-                <form onSubmit={handleSubmit} className="space-y-6">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Course Title
-                        </label>
-                        <input
-                            type="text"
-                            name="title"
-                            value={formData.title}
-                            onChange={handleInputChange}
-                            required
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                            placeholder="e.g., Complete React Course"
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Description
-                        </label>
-                        <textarea
-                            name="description"
-                            value={formData.description}
-                            onChange={handleInputChange}
-                            required
-                            rows={4}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                            placeholder="Course description..."
-                        />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Price ($)
-                            </label>
-                            <input
-                                type="number"
-                                name="price"
-                                value={formData.price}
-                                onChange={handleInputChange}
-                                required
-                                min="0"
-                                step="0.01"
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                placeholder="29.99"
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Duration
-                            </label>
-                            <input
-                                type="text"
-                                name="duration"
-                                value={formData.duration}
-                                onChange={handleInputChange}
-                                required
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                placeholder="e.g., 10h 30m"
-                            />
-                        </div>
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Course Intro Video
-                        </label>
-                        <input
-                            id="video-upload"
-                            type="file"
-                            accept="video/*"
-                            onChange={handleVideoChange}
-                            required
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                        />
-                        {videoFile && (
-                            <p className="mt-2 text-sm text-gray-600">
-                                Selected: {videoFile.name} ({(videoFile.size / 1024 / 1024).toFixed(2)} MB)
-                            </p>
-                        )}
-                        {uploading && uploadProgress.video > 0 && (
-                            <div className="mt-2">
-                                <div className="w-full bg-gray-200 rounded-full h-2">
-                                    <div
-                                        className="bg-indigo-600 h-2 rounded-full transition-all"
-                                        style={{ width: `${uploadProgress.video}%` }}
-                                    />
-                                </div>
-                                <p className="text-sm text-gray-600 mt-1">
-                                    Video: {uploadProgress.video.toFixed(0)}%
-                                </p>
-                            </div>
-                        )}
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Thumbnail Image
-                        </label>
-                        <input
-                            id="thumbnail-upload"
-                            type="file"
-                            accept="image/*"
-                            onChange={handleThumbnailChange}
-                            required
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                        />
-                        {thumbnailFile && (
-                            <div className="mt-2">
-                                <p className="text-sm text-gray-600">
-                                    Selected: {thumbnailFile.name}
-                                </p>
-                                <img
-                                    src={URL.createObjectURL(thumbnailFile)}
-                                    alt="Preview"
-                                    className="mt-2 w-48 h-32 object-cover rounded"
-                                />
-                            </div>
-                        )}
-                        {uploading && uploadProgress.thumbnail > 0 && (
-                            <div className="mt-2">
-                                <div className="w-full bg-gray-200 rounded-full h-2">
-                                    <div
-                                        className="bg-indigo-600 h-2 rounded-full transition-all"
-                                        style={{ width: `${uploadProgress.thumbnail}%` }}
-                                    />
-                                </div>
-                                <p className="text-sm text-gray-600 mt-1">
-                                    Thumbnail: {uploadProgress.thumbnail.toFixed(0)}%
-                                </p>
-                            </div>
-                        )}
-                    </div>
-
-                    <button
-                        type="submit"
-                        disabled={uploading}
-                        className={`w-full py-3 px-4 rounded-lg font-semibold text-white transition-colors ${
-                            uploading
-                                ? 'bg-gray-400 cursor-not-allowed'
-                                : 'bg-indigo-600 hover:bg-indigo-700'
-                        }`}
-                    >
-                        {uploading ? 'Uploading...' : 'Upload Course'}
-                    </button>
-                </form>
-            </div>
-
-            {/* Delete Confirmation Modal */}
-            <DeleteConfirmModal
-                isOpen={deleteModalOpen}
-                onClose={handleDeleteCancel}
-                onConfirm={handleDeleteConfirm}
-                courseName={courseToDelete?.title}
-                isDeleting={isDeleting}
-            />
         </div>
     );
 };
