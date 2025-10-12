@@ -1,9 +1,24 @@
 import { db } from '../config/firebase';
 import { collection, addDoc, query, where, getDocs, doc, updateDoc, deleteDoc, serverTimestamp, orderBy, limit, onSnapshot } from 'firebase/firestore';
 
-// ✅ שלח התראת רכישה למנהל
+// ✅ מערך זמני לעקוב אחר התראות שכבר נשלחו (במהלך הסשן)
+const processedNotifications = new Set();
+
+// ✅ שלח התראת רכישה למנהל (עם מניעת כפילויות)
 export const notifyPurchase = async (userId, userName, courseId, courseName, courseImage, amount = 0, userEmail = '') => {
     try {
+        // ✅ צור מזהה ייחודי לרכישה זו
+        const notificationKey = `${userId}-${courseId}-${Date.now().toString().slice(0, -4)}`;
+
+        // ✅ בדוק אם כבר עיבדנו את ההתראה הזו
+        if (processedNotifications.has(notificationKey)) {
+            console.log('⚠️ Duplicate notification prevented:', notificationKey);
+            return { success: true, skipped: true, reason: 'duplicate' };
+        }
+
+        // ✅ סמן שמעבדים את ההתראה
+        processedNotifications.add(notificationKey);
+
         console.log('📬 Creating purchase notification:', {
             userId,
             userName,
@@ -13,22 +28,33 @@ export const notifyPurchase = async (userId, userName, courseId, courseName, cou
         });
 
         await addDoc(collection(db, 'notifications'), {
-            type: 'purchase',
+            type: 'course_purchase',
+            userId: 'admin',
             title: 'רכישת קורס חדשה! 🎉',
             message: `${userName} רכש את הקורס "${courseName}"${amount > 0 ? ` בסכום של ₪${amount}` : ''}`,
-            userId,
-            userName,
-            userEmail: userEmail || '',
-            courseId,
-            courseName,
-            courseImage: courseImage || '',
-            amount: amount || 0,
-            paymentMethod: amount > 0 ? 'credit_card' : 'promo_code',
+            purchaseDetails: {
+                buyerId: userId,
+                buyerName: userName,
+                buyerEmail: userEmail || '',
+                courseId,
+                courseName,
+                courseImage: courseImage || '',
+                amount: amount || 0,
+                paymentMethod: amount > 0 ? 'credit_card' : 'promo_code',
+                codeUsed: null
+            },
             read: false,
+            timestamp: serverTimestamp(),
             createdAt: serverTimestamp()
         });
 
         console.log('✅ Purchase notification created successfully');
+
+        // ✅ נקה את המזהה אחרי 10 שניות (למקרה של ניסיון חוזר לגיטימי)
+        setTimeout(() => {
+            processedNotifications.delete(notificationKey);
+        }, 10000);
+
         return { success: true };
     } catch (error) {
         console.error('❌ Error creating purchase notification:', error);
@@ -42,6 +68,7 @@ export const createNotification = async (notificationData) => {
         await addDoc(collection(db, 'notifications'), {
             ...notificationData,
             read: false,
+            timestamp: notificationData.timestamp || serverTimestamp(),
             createdAt: serverTimestamp()
         });
 
@@ -203,13 +230,11 @@ export const deleteAllNotifications = async (userId = null) => {
         let notificationsQuery;
 
         if (userId) {
-            // מחק רק את ההתראות של המשתמש הספציפי
             notificationsQuery = query(
                 collection(db, 'notifications'),
                 where('userId', '==', userId)
             );
         } else {
-            // מחק את כל ההתראות (למנהל)
             notificationsQuery = query(
                 collection(db, 'notifications')
             );
@@ -274,11 +299,17 @@ export const notifyNewUserRegistration = async (userId, userName, userEmail) => 
     try {
         await createNotification({
             type: 'registration',
+            userId: 'admin',
             title: 'משתמש חדש נרשם! 👋',
             message: `${userName} (${userEmail}) הצטרף לפלטפורמה`,
-            userId,
+            userDetails: {
+                newUserId: userId,
+                newUserName: userName,
+                newUserEmail: userEmail
+            },
             userName,
-            userEmail
+            userEmail,
+            timestamp: serverTimestamp()
         });
 
         return { success: true };
@@ -293,13 +324,23 @@ export const notifyPromoCodeUsed = async (userId, userName, courseId, courseName
     try {
         await createNotification({
             type: 'promo_code',
+            userId: 'admin',
             title: 'קוד פרומו שומש! 🎟️',
             message: `${userName} פתח את הקורס "${courseName}" באמצעות קוד: ${promoCode}`,
-            userId,
+            purchaseDetails: {
+                buyerId: userId,
+                buyerName: userName,
+                courseId,
+                courseName,
+                amount: 0,
+                paymentMethod: 'promo_code',
+                codeUsed: promoCode
+            },
             userName,
             courseId,
             courseName,
-            promoCode
+            promoCode,
+            timestamp: serverTimestamp()
         });
 
         return { success: true };
@@ -314,13 +355,19 @@ export const notifyCourseCompleted = async (userId, userName, courseId, courseNa
     try {
         await createNotification({
             type: 'course_completed',
+            userId: 'admin',
             title: 'קורס הושלם! 🎓',
             message: `${userName} השלים את הקורס "${courseName}"`,
-            userId,
+            courseDetails: {
+                completedById: userId,
+                completedByName: userName,
+                courseId,
+                courseName,
+                courseImage: courseImage || ''
+            },
             userName,
-            courseId,
             courseName,
-            courseImage
+            timestamp: serverTimestamp()
         });
 
         return { success: true };
@@ -336,7 +383,6 @@ export const subscribeToNotifications = (callback, userId = null, limitCount = 2
         let notificationsQuery;
 
         if (userId) {
-            // התראות של משתמש ספציפי
             notificationsQuery = query(
                 collection(db, 'notifications'),
                 where('userId', '==', userId),
@@ -344,7 +390,6 @@ export const subscribeToNotifications = (callback, userId = null, limitCount = 2
                 limit(limitCount)
             );
         } else {
-            // כל ההתראות (למנהל)
             notificationsQuery = query(
                 collection(db, 'notifications'),
                 orderBy('createdAt', 'desc'),
@@ -352,7 +397,6 @@ export const subscribeToNotifications = (callback, userId = null, limitCount = 2
             );
         }
 
-        // onSnapshot מחזיר פונקציה לביטול המנוי
         const unsubscribe = onSnapshot(notificationsQuery, (snapshot) => {
             const notifications = snapshot.docs.map(doc => ({
                 id: doc.id,
@@ -364,11 +408,10 @@ export const subscribeToNotifications = (callback, userId = null, limitCount = 2
             console.error('❌ Error in notifications subscription:', error);
         });
 
-        // החזר את פונקציית הביטול
         return unsubscribe;
     } catch (error) {
         console.error('❌ Error setting up notifications subscription:', error);
-        return () => {}; // החזר פונקציה ריקה במקרה של שגיאה
+        return () => {};
     }
 };
 

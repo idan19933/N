@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { CheckCircle, ArrowLeft } from 'lucide-react';
@@ -16,32 +16,43 @@ const PaymentSuccess = () => {
     const [courseImage, setCourseImage] = useState('');
     const courseId = searchParams.get('courseId');
 
+    // ✅ הוסף ref למניעת קריאות כפולות
+    const notificationSent = useRef(false);
+
     useEffect(() => {
         const loadCourse = async () => {
-            if (courseId && user) {
-                try {
-                    const courseDoc = await getDoc(doc(db, 'courses', courseId));
-                    if (courseDoc.exists()) {
-                        const courseData = courseDoc.data();
-                        setCourseName(courseData.title);
-                        setCourseImage(courseData.image);
+            // ✅ בדוק אם כבר שלחנו התראה
+            if (!courseId || !user || notificationSent.current) {
+                return;
+            }
 
-                        // ✅ שלח התראת רכישה עם כל הפרטים
-                        await handleSuccessfulPurchase(
-                            user.uid,                           // userId
-                            user.displayName || user.email,     // userName
-                            courseId,                           // courseId
-                            courseData.title,                   // courseName
-                            courseData.image || '',             // courseImage
-                            courseData.price || 0,              // ✅ amount - הסכום מהקורס
-                            user.email || ''                    // ✅ userEmail - אימייל המשתמש
-                        );
+            try {
+                const courseDoc = await getDoc(doc(db, 'courses', courseId));
+                if (courseDoc.exists()) {
+                    const courseData = courseDoc.data();
+                    setCourseName(courseData.title);
+                    setCourseImage(courseData.image);
 
-                        console.log('✅ Purchase processed and notification sent');
-                    }
-                } catch (error) {
-                    console.error('Error loading course:', error);
+                    // ✅ סמן שהתראה נשלחת
+                    notificationSent.current = true;
+
+                    // ✅ שלח התראת רכישה עם כל הפרטים
+                    await handleSuccessfulPurchase(
+                        user.uid,
+                        user.displayName || user.email,
+                        courseId,
+                        courseData.title,
+                        courseData.image || '',
+                        courseData.price || 0,
+                        user.email || ''
+                    );
+
+                    console.log('✅ Purchase processed and notification sent');
                 }
+            } catch (error) {
+                console.error('Error loading course:', error);
+                // ✅ במקרה של שגיאה, אפשר ניסיון נוסף
+                notificationSent.current = false;
             }
         };
 

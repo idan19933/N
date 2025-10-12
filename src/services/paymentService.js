@@ -1,6 +1,7 @@
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
+import { notifyPurchase } from './notificationService'; // ✅ ADD THIS
 
 const functions = getFunctions();
 const createCheckoutSessionFunction = httpsCallable(functions, 'createCheckoutSession');
@@ -181,5 +182,45 @@ export const getValidUserPurchases = async (userId) => {
     } catch (error) {
         console.error('❌ Error getting valid purchases:', error);
         return [];
+    }
+};
+
+// ✅ NEW - Handle successful purchase and send notification
+export const handleSuccessfulPurchase = async (
+    userId,
+    userName,
+    courseId,
+    courseName,
+    courseImage,
+    amount = 0,
+    userEmail = ''
+) => {
+    try {
+        console.log('🎉 Handling successful purchase notification');
+        console.log('📦 Purchase details:', {
+            userId,
+            userName,
+            courseId,
+            courseName,
+            amount,
+            userEmail
+        });
+
+        // Send notification with all details
+        await notifyPurchase(
+            userId,
+            userName,
+            courseId,
+            courseName,
+            courseImage,
+            amount,
+            userEmail
+        );
+
+        console.log('✅ Purchase notification sent successfully');
+        return { success: true };
+    } catch (error) {
+        console.error('❌ Error sending purchase notification:', error);
+        return { success: false, error: error.message };
     }
 };
