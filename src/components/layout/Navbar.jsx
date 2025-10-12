@@ -2,6 +2,7 @@ import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import useAuthStore from '../../store/authStore';
+import NotificationBell from '../common/NotificationBell'; // ✅ הוסף
 import { Menu, X, User, LogOut, BookOpen, LayoutDashboard, Users as UsersIcon, Moon, Sun } from 'lucide-react';
 
 const Navbar = () => {
@@ -10,7 +11,6 @@ const Navbar = () => {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [isDark, setIsDark] = useState(false);
 
-    // Dark mode logic
     useEffect(() => {
         const saved = localStorage.getItem('theme');
         if (saved === 'dark') {
@@ -93,7 +93,9 @@ const Navbar = () => {
                                     </>
                                 )}
 
-                                {/* Dark Mode Toggle - INLINE */}
+                                {/* ✅ הוסף NotificationBell */}
+                                <NotificationBell />
+
                                 <button
                                     onClick={toggleTheme}
                                     className="p-2 rounded-lg bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
@@ -118,7 +120,6 @@ const Navbar = () => {
                             </>
                         ) : (
                             <>
-                                {/* Dark Mode Toggle for non-authenticated users */}
                                 <button
                                     onClick={toggleTheme}
                                     className="p-2 rounded-lg bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
@@ -150,7 +151,9 @@ const Navbar = () => {
 
                     {/* Mobile Menu Button */}
                     <div className="md:hidden flex items-center gap-2">
-                        {/* Dark Mode Toggle - Mobile */}
+                        {/* ✅ הוסף NotificationBell במובייל */}
+                        {isAuthenticated && <NotificationBell />}
+
                         <button
                             onClick={toggleTheme}
                             className="p-2 rounded-lg bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
