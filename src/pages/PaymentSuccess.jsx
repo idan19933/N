@@ -22,16 +22,31 @@ const PaymentSuccess = () => {
         console.log('Session ID:', sessionId);
         console.log('Course ID:', courseId);
 
+        // ✅ בדוק שיש courseId
+        if (!courseId) {
+            console.error('❌ No courseId in URL!');
+            setError('לא נמצא מזהה קורס. אנא צור קשר עם התמיכה.');
+            setSaving(false);
+            return;
+        }
+
         if (user && courseId && sessionId) {
             savePurchase();
         } else {
             console.error('Missing data:', { hasUser: !!user, sessionId, courseId });
             if (!user) {
-                setTimeout(() => {
-                    if (useAuthStore.getState().user) {
+                // המתן למשתמש להיטען
+                const timer = setTimeout(() => {
+                    const currentUser = useAuthStore.getState().user;
+                    if (currentUser && courseId && sessionId) {
                         savePurchase();
+                    } else {
+                        setError('משתמש לא מחובר. אנא התחבר ונסה שוב.');
+                        setSaving(false);
                     }
-                }, 1000);
+                }, 2000);
+
+                return () => clearTimeout(timer);
             } else {
                 setSaving(false);
             }
@@ -47,6 +62,14 @@ const PaymentSuccess = () => {
             if (!currentUser || !currentUser.uid) {
                 console.error('❌ No user!');
                 setError('משתמש לא מחובר');
+                setSaving(false);
+                return;
+            }
+
+            // ✅ וודא ש-courseId קיים
+            if (!courseId) {
+                console.error('❌ No courseId!');
+                setError('מזהה קורס חסר');
                 setSaving(false);
                 return;
             }
@@ -96,10 +119,14 @@ const PaymentSuccess = () => {
                 courseId: courseId,
                 sessionId: sessionId,
                 amount: parseFloat(courseData.price) || 0,
+                currency: 'ILS', // ✅ הוסף מטבע
                 status: 'completed',
+                purchaseDate: new Date(),
                 purchasedAt: new Date(),
                 courseName: courseData.title,
-                userEmail: currentUser.email
+                courseImage: courseData.image,
+                userEmail: currentUser.email,
+                paymentMethod: 'stripe'
             };
 
             console.log('💾 Creating purchase with data:', purchaseData);
@@ -125,10 +152,10 @@ const PaymentSuccess = () => {
 
     if (saving) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-gray-50">
+            <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
                 <div className="text-center">
-                    <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-600 mx-auto mb-4"></div>
-                    <p className="text-gray-600">מעבד את הרכישה...</p>
+                    <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-600 dark:border-indigo-400 mx-auto mb-4"></div>
+                    <p className="text-gray-600 dark:text-gray-400">מעבד את הרכישה...</p>
                 </div>
             </div>
         );
@@ -136,21 +163,21 @@ const PaymentSuccess = () => {
 
     if (error) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-                <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl p-8 text-center">
+            <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
+                <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 text-center">
                     <div className="text-red-600 mb-4 text-4xl">❌</div>
-                    <h1 className="text-2xl font-bold text-gray-900 mb-4">שגיאה</h1>
-                    <p className="text-gray-600 mb-6">{error}</p>
+                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">שגיאה</h1>
+                    <p className="text-gray-600 dark:text-gray-400 mb-6">{error}</p>
                     <div className="flex gap-4">
                         <button
                             onClick={() => navigate('/courses')}
-                            className="flex-1 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+                            className="flex-1 px-6 py-3 bg-indigo-600 dark:bg-indigo-500 text-white rounded-lg hover:bg-indigo-700 dark:hover:bg-indigo-600"
                         >
                             חזרה לקורסים
                         </button>
                         <button
                             onClick={() => window.location.reload()}
-                            className="flex-1 px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+                            className="flex-1 px-6 py-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600"
                         >
                             נסה שוב
                         </button>
@@ -161,12 +188,12 @@ const PaymentSuccess = () => {
     }
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
             <motion.div
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.5 }}
-                className="max-w-md w-full bg-white rounded-2xl shadow-2xl p-6 sm:p-8 text-center"
+                className="max-w-md w-full bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 sm:p-8 text-center"
             >
                 <motion.div
                     initial={{ scale: 0 }}
@@ -174,8 +201,8 @@ const PaymentSuccess = () => {
                     transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
                     className="flex justify-center mb-6"
                 >
-                    <div className="w-16 h-16 sm:w-20 sm:h-20 bg-green-100 rounded-full flex items-center justify-center">
-                        <CheckCircle className="text-green-600" size={40} />
+                    <div className="w-16 h-16 sm:w-20 sm:h-20 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center">
+                        <CheckCircle className="text-green-600 dark:text-green-400" size={40} />
                     </div>
                 </motion.div>
 
@@ -183,7 +210,7 @@ const PaymentSuccess = () => {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.3 }}
-                    className="text-2xl sm:text-3xl font-bold text-gray-900 mb-4"
+                    className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-4"
                 >
                     תשלום בוצע בהצלחה! 🎉
                 </motion.h1>
@@ -192,7 +219,7 @@ const PaymentSuccess = () => {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.4 }}
-                    className="text-gray-600 mb-6 sm:mb-8 text-base sm:text-lg"
+                    className="text-gray-600 dark:text-gray-400 mb-6 sm:mb-8 text-base sm:text-lg"
                 >
                     הקורס שלך מוכן! אתה יכול להתחיל ללמוד עכשיו.
                 </motion.p>
@@ -208,7 +235,7 @@ const PaymentSuccess = () => {
                             console.log('🚀 Navigating to course:', courseId);
                             navigate(`/courses/${courseId}`);
                         }}
-                        className="w-full px-6 py-3 sm:py-4 bg-indigo-600 text-white rounded-xl font-bold text-base sm:text-lg hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2 shadow-lg"
+                        className="w-full px-6 py-3 sm:py-4 bg-indigo-600 dark:bg-indigo-500 text-white rounded-xl font-bold text-base sm:text-lg hover:bg-indigo-700 dark:hover:bg-indigo-600 transition-colors flex items-center justify-center gap-2 shadow-lg"
                     >
                         התחל ללמוד
                         <ArrowRight size={20} />
@@ -216,7 +243,7 @@ const PaymentSuccess = () => {
 
                     <button
                         onClick={() => navigate('/my-courses')}
-                        className="w-full px-6 py-3 sm:py-4 bg-gray-200 text-gray-700 rounded-xl font-semibold hover:bg-gray-300 transition-colors"
+                        className="w-full px-6 py-3 sm:py-4 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-semibold hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
                     >
                         הקורסים שלי
                     </button>

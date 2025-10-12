@@ -5,10 +5,10 @@ import { auth, db } from '../config/firebase';
 const functions = getFunctions();
 const createCheckoutSessionFunction = httpsCallable(functions, 'createCheckoutSession');
 
-export const createCheckoutSession = async (courseId, price) => {
+export const createCheckoutSession = async (courseId, price, codeId = null) => {
     try {
         console.log('💳 Creating checkout session');
-        console.log('📦 Received params:', { courseId, price });
+        console.log('📦 Received params:', { courseId, price, codeId });
 
         if (!auth.currentUser) {
             console.error('❌ No authenticated user');
@@ -35,7 +35,7 @@ export const createCheckoutSession = async (courseId, price) => {
             return { success: false, error: 'Invalid price format' };
         }
 
-        if (isNaN(amount) || amount <= 0) {
+        if (isNaN(amount) || amount < 0) {
             console.error('❌ Invalid amount:', amount);
             return { success: false, error: 'Invalid price amount' };
         }
@@ -48,6 +48,12 @@ export const createCheckoutSession = async (courseId, price) => {
             userId: userId,
             origin: window.location.origin
         };
+
+        // ✅ הוסף codeId אם קיים
+        if (codeId) {
+            requestData.codeId = codeId;
+            console.log('🎟️ Code ID included:', codeId);
+        }
 
         console.log('📤 Sending request:', requestData);
 
@@ -74,25 +80,38 @@ export const createCheckoutSession = async (courseId, price) => {
     }
 };
 
-// Get user's purchased courses
+// ✅ תוקן - Get user's purchased courses (כולל רכישות עם קופון)
 export const getUserPurchases = async (userId) => {
     try {
         console.log('📦 Getting purchases for user:', userId);
 
+        // ✅ הסרנו את התנאי status כדי לתפוס את כל הרכישות
         const purchasesQuery = query(
             collection(db, 'purchases'),
-            where('userId', '==', userId),
-            where('status', '==', 'completed')
+            where('userId', '==', userId)
         );
 
         const snapshot = await getDocs(purchasesQuery);
 
-        const purchases = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        }));
+        const purchases = snapshot.docs.map(doc => {
+            const data = doc.data();
+            console.log('📄 Purchase found:', {
+                id: doc.id,
+                courseId: data.courseId,
+                amount: data.amount,
+                status: data.status,
+                paymentMethod: data.paymentMethod
+            });
+            return {
+                id: doc.id,
+                ...data
+            };
+        });
 
-        console.log('✅ Found purchases:', purchases.length);
+        console.log('✅ Total purchases found:', purchases.length);
+        console.log('🎁 Promo code purchases:', purchases.filter(p => p.paymentMethod === 'promo_code').length);
+        console.log('💳 Regular purchases:', purchases.filter(p => p.paymentMethod !== 'promo_code').length);
+
         return purchases;
     } catch (error) {
         console.error('❌ Error getting purchases:', error);
@@ -100,20 +119,67 @@ export const getUserPurchases = async (userId) => {
     }
 };
 
-// Check if user purchased a specific course
+// ✅ תוקן - Check if user purchased a specific course (כולל רכישות עם קופון)
 export const hasUserPurchasedCourse = async (userId, courseId) => {
     try {
+        console.log('🔍 Checking purchase for:', { userId, courseId });
+
+        // ✅ הסרנו את התנאי status
         const purchasesQuery = query(
             collection(db, 'purchases'),
             where('userId', '==', userId),
-            where('courseId', '==', courseId),
-            where('status', '==', 'completed')
+            where('courseId', '==', courseId)
         );
 
         const snapshot = await getDocs(purchasesQuery);
-        return !snapshot.empty;
+        const hasPurchased = !snapshot.empty;
+
+        console.log(hasPurchased ? '✅ User has purchased this course' : '❌ User has NOT purchased this course');
+
+        if (hasPurchased) {
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                console.log('📦 Purchase details:', {
+                    amount: data.amount,
+                    paymentMethod: data.paymentMethod,
+                    status: data.status,
+                    purchaseDate: data.purchaseDate || data.purchasedAt
+                });
+            });
+        }
+
+        return hasPurchased;
     } catch (error) {
-        console.error('Error checking purchase:', error);
+        console.error('❌ Error checking purchase:', error);
         return false;
+    }
+};
+
+// ✅ חדש - פונקציה לסינון רכישות תקפות בלבד
+export const getValidUserPurchases = async (userId) => {
+    try {
+        console.log('📦 Getting valid purchases for user:', userId);
+
+        const allPurchases = await getUserPurchases(userId);
+
+        // סנן רק רכישות תקפות (completed או עם amount >= 0)
+        const validPurchases = allPurchases.filter(purchase => {
+            const isValid =
+                purchase.status === 'completed' ||
+                purchase.paymentMethod === 'promo_code' ||
+                (purchase.amount !== undefined && purchase.amount >= 0);
+
+            if (!isValid) {
+                console.log('⏭️ Skipping invalid purchase:', purchase);
+            }
+
+            return isValid;
+        });
+
+        console.log('✅ Valid purchases:', validPurchases.length);
+        return validPurchases;
+    } catch (error) {
+        console.error('❌ Error getting valid purchases:', error);
+        return [];
     }
 };

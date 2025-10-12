@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, where, orderBy, limit } from 'firebase/firestore';
+import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import useAuthStore from '../store/authStore';
-import { Plus, Edit2, Trash2, Users, BookOpen, DollarSign, TrendingUp, Bell } from 'lucide-react';
+import { Plus, Edit2, Trash2, Users, BookOpen, DollarSign, TrendingUp, Bell, Target, Ticket } from 'lucide-react';
+import { formatPrice } from '../utils/currency';
+import toast from 'react-hot-toast';
 
 const AdminDashboard = () => {
     const navigate = useNavigate();
@@ -46,12 +48,9 @@ const AdminDashboard = () => {
 
     const loadNotificationsCount = async () => {
         try {
-            const notificationsQuery = query(
-                collection(db, 'notifications'),
-                where('read', '==', false)
-            );
-            const snapshot = await getDocs(notificationsQuery);
-            setUnreadNotifications(snapshot.size);
+            const notificationsSnapshot = await getDocs(collection(db, 'notifications'));
+            const unread = notificationsSnapshot.docs.filter(doc => !doc.data().read).length;
+            setUnreadNotifications(unread);
         } catch (error) {
             console.error('Error loading notifications count:', error);
         }
@@ -61,7 +60,6 @@ const AdminDashboard = () => {
         try {
             setLoading(true);
 
-            // Load courses
             const coursesSnapshot = await getDocs(collection(db, 'courses'));
             const coursesData = coursesSnapshot.docs.map(doc => ({
                 id: doc.id,
@@ -69,7 +67,6 @@ const AdminDashboard = () => {
             }));
             setCourses(coursesData);
 
-            // Load stats
             const usersSnapshot = await getDocs(collection(db, 'users'));
             const purchasesSnapshot = await getDocs(collection(db, 'purchases'));
 
@@ -87,6 +84,7 @@ const AdminDashboard = () => {
 
         } catch (error) {
             console.error('Error loading dashboard data:', error);
+            toast.error('שגיאה בטעינת נתונים');
         } finally {
             setLoading(false);
         }
@@ -102,6 +100,8 @@ const AdminDashboard = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
 
+        const loadingToast = toast.loading(editingCourse ? 'מעדכן קורס...' : 'יוצר קורס...');
+
         try {
             if (editingCourse) {
                 await updateDoc(doc(db, 'courses', editingCourse.id), {
@@ -109,6 +109,7 @@ const AdminDashboard = () => {
                     price: parseFloat(formData.price),
                     updatedAt: new Date()
                 });
+                toast.success('✅ הקורס עודכן בהצלחה!', { id: loadingToast });
             } else {
                 await addDoc(collection(db, 'courses'), {
                     ...formData,
@@ -116,6 +117,7 @@ const AdminDashboard = () => {
                     createdAt: new Date(),
                     enrollmentCount: 0
                 });
+                toast.success('✅ הקורס נוצר בהצלחה!', { id: loadingToast });
             }
 
             setFormData({
@@ -132,7 +134,7 @@ const AdminDashboard = () => {
             loadDashboardData();
         } catch (error) {
             console.error('Error saving course:', error);
-            alert('Error saving course: ' + error.message);
+            toast.error('❌ שגיאה בשמירת הקורס', { id: loadingToast });
         }
     };
 
@@ -151,21 +153,24 @@ const AdminDashboard = () => {
     };
 
     const handleDelete = async (courseId) => {
-        if (!window.confirm('Are you sure you want to delete this course?')) return;
+        if (!window.confirm('האם אתה בטוח שברצונך למחוק קורס זה?')) return;
+
+        const loadingToast = toast.loading('מוחק קורס...');
 
         try {
             await deleteDoc(doc(db, 'courses', courseId));
+            toast.success('✅ הקורס נמחק בהצלחה!', { id: loadingToast });
             loadDashboardData();
         } catch (error) {
             console.error('Error deleting course:', error);
-            alert('Error deleting course: ' + error.message);
+            toast.error('❌ שגיאה במחיקת הקורס', { id: loadingToast });
         }
     };
 
     if (authLoading || loading) {
         return (
-            <div className="flex justify-center items-center h-screen">
-                <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-600"></div>
+            <div className="flex justify-center items-center h-screen bg-white dark:bg-gray-900">
+                <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-600 dark:border-indigo-400"></div>
             </div>
         );
     }
@@ -179,10 +184,24 @@ const AdminDashboard = () => {
             {/* Header */}
             <div className="flex justify-between items-center mb-8">
                 <div>
-                    <h1 className="text-3xl font-bold text-gray-800">Admin Dashboard</h1>
-                    <p className="text-gray-600 mt-2">Manage your courses and users</p>
+                    <h1 className="text-3xl font-bold text-gray-800 dark:text-white">Admin Dashboard</h1>
+                    <p className="text-gray-600 dark:text-gray-400 mt-2">Manage your courses and users</p>
                 </div>
                 <div className="flex gap-3">
+                    <button
+                        onClick={() => navigate('/admin/goals')}
+                        className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2"
+                    >
+                        <Target size={20} />
+                        יעדים
+                    </button>
+                    <button
+                        onClick={() => navigate('/admin/codes')}
+                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
+                    >
+                        <Ticket size={20} />
+                        קודים
+                    </button>
                     <button
                         onClick={() => navigate('/admin/notifications')}
                         className="relative px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 flex items-center gap-2"
@@ -207,52 +226,36 @@ const AdminDashboard = () => {
 
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                <div className="bg-white rounded-xl shadow-md p-6">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-gray-600 text-sm">Total Courses</p>
-                            <p className="text-3xl font-bold text-gray-800 mt-2">{stats.totalCourses}</p>
-                        </div>
-                        <div className="bg-indigo-100 p-4 rounded-full">
-                            <BookOpen className="text-indigo-600" size={24} />
-                        </div>
+                <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 dark:from-indigo-600 dark:to-indigo-700 text-white rounded-xl shadow-lg p-6">
+                    <div className="flex items-center justify-between mb-4">
+                        <BookOpen size={32} />
                     </div>
+                    <div className="text-3xl font-bold mb-1">{stats.totalCourses}</div>
+                    <div className="text-indigo-100 dark:text-indigo-200">Total Courses</div>
                 </div>
 
-                <div className="bg-white rounded-xl shadow-md p-6">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-gray-600 text-sm">Total Users</p>
-                            <p className="text-3xl font-bold text-gray-800 mt-2">{stats.totalUsers}</p>
-                        </div>
-                        <div className="bg-green-100 p-4 rounded-full">
-                            <Users className="text-green-600" size={24} />
-                        </div>
+                <div className="bg-gradient-to-br from-green-500 to-green-600 dark:from-green-600 dark:to-green-700 text-white rounded-xl shadow-lg p-6">
+                    <div className="flex items-center justify-between mb-4">
+                        <Users size={32} />
                     </div>
+                    <div className="text-3xl font-bold mb-1">{stats.totalUsers}</div>
+                    <div className="text-green-100 dark:text-green-200">Total Users</div>
                 </div>
 
-                <div className="bg-white rounded-xl shadow-md p-6">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-gray-600 text-sm">Total Revenue</p>
-                            <p className="text-3xl font-bold text-gray-800 mt-2">${stats.totalRevenue.toFixed(2)}</p>
-                        </div>
-                        <div className="bg-yellow-100 p-4 rounded-full">
-                            <DollarSign className="text-yellow-600" size={24} />
-                        </div>
+                <div className="bg-gradient-to-br from-yellow-500 to-yellow-600 dark:from-yellow-600 dark:to-yellow-700 text-white rounded-xl shadow-lg p-6">
+                    <div className="flex items-center justify-between mb-4">
+                        <DollarSign size={32} />
                     </div>
+                    <div className="text-3xl font-bold mb-1">{formatPrice(stats.totalRevenue)}</div>
+                    <div className="text-yellow-100 dark:text-yellow-200">Total Revenue</div>
                 </div>
 
-                <div className="bg-white rounded-xl shadow-md p-6">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-gray-600 text-sm">Enrollments</p>
-                            <p className="text-3xl font-bold text-gray-800 mt-2">{stats.totalEnrollments}</p>
-                        </div>
-                        <div className="bg-purple-100 p-4 rounded-full">
-                            <TrendingUp className="text-purple-600" size={24} />
-                        </div>
+                <div className="bg-gradient-to-br from-purple-500 to-purple-600 dark:from-purple-600 dark:to-purple-700 text-white rounded-xl shadow-lg p-6">
+                    <div className="flex items-center justify-between mb-4">
+                        <TrendingUp size={32} />
                     </div>
+                    <div className="text-3xl font-bold mb-1">{stats.totalEnrollments}</div>
+                    <div className="text-purple-100 dark:text-purple-200">Enrollments</div>
                 </div>
             </div>
 
@@ -283,14 +286,14 @@ const AdminDashboard = () => {
 
             {/* Add/Edit Course Form */}
             {showAddCourse && (
-                <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
-                    <h2 className="text-2xl font-bold text-gray-800 mb-6">
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 mb-8">
+                    <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-6">
                         {editingCourse ? 'Edit Course' : 'Add New Course'}
                     </h2>
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                     Course Title
                                 </label>
                                 <input
@@ -299,12 +302,12 @@ const AdminDashboard = () => {
                                     value={formData.title}
                                     onChange={handleInputChange}
                                     required
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                     Instructor
                                 </label>
                                 <input
@@ -313,13 +316,13 @@ const AdminDashboard = () => {
                                     value={formData.instructor}
                                     onChange={handleInputChange}
                                     required
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                                 />
                             </div>
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                 Description
                             </label>
                             <textarea
@@ -328,14 +331,14 @@ const AdminDashboard = () => {
                                 onChange={handleInputChange}
                                 required
                                 rows={4}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                             />
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Price ($)
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                    Price (₪)
                                 </label>
                                 <input
                                     type="number"
@@ -344,12 +347,12 @@ const AdminDashboard = () => {
                                     onChange={handleInputChange}
                                     required
                                     step="0.01"
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                     Duration
                                 </label>
                                 <input
@@ -359,19 +362,19 @@ const AdminDashboard = () => {
                                     onChange={handleInputChange}
                                     required
                                     placeholder="e.g., 5h 30min"
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                     Level
                                 </label>
                                 <select
                                     name="level"
                                     value={formData.level}
                                     onChange={handleInputChange}
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                                 >
                                     <option value="beginner">Beginner</option>
                                     <option value="intermediate">Intermediate</option>
@@ -381,7 +384,7 @@ const AdminDashboard = () => {
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                 Image URL
                             </label>
                             <input
@@ -390,7 +393,7 @@ const AdminDashboard = () => {
                                 value={formData.image}
                                 onChange={handleInputChange}
                                 required
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                             />
                         </div>
 
@@ -407,7 +410,7 @@ const AdminDashboard = () => {
                                     setShowAddCourse(false);
                                     setEditingCourse(null);
                                 }}
-                                className="px-6 py-3 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 font-semibold"
+                                className="px-6 py-3 bg-gray-300 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-600 font-semibold"
                             >
                                 Cancel
                             </button>
@@ -417,19 +420,19 @@ const AdminDashboard = () => {
             )}
 
             {/* Courses List */}
-            <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-                <div className="px-6 py-4 bg-gray-50 border-b">
-                    <h2 className="text-xl font-bold text-gray-800">Courses</h2>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden">
+                <div className="px-6 py-4 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
+                    <h2 className="text-xl font-bold text-gray-800 dark:text-white">Courses</h2>
                 </div>
 
                 {courses.length === 0 ? (
-                    <div className="p-8 text-center text-gray-600">
+                    <div className="p-8 text-center text-gray-600 dark:text-gray-400">
                         No courses yet. Add your first course!
                     </div>
                 ) : (
-                    <div className="divide-y divide-gray-200">
+                    <div className="divide-y divide-gray-200 dark:divide-gray-700">
                         {courses.map((course) => (
-                            <div key={course.id} className="p-6 hover:bg-gray-50 transition-colors">
+                            <div key={course.id} className="p-6 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-4 flex-1">
                                         <img
@@ -438,10 +441,10 @@ const AdminDashboard = () => {
                                             className="w-20 h-20 object-cover rounded-lg"
                                         />
                                         <div className="flex-1">
-                                            <h3 className="font-bold text-lg text-gray-800">{course.title}</h3>
-                                            <p className="text-gray-600 text-sm mt-1">{course.instructor}</p>
-                                            <div className="flex items-center gap-4 mt-2 text-sm text-gray-600">
-                                                <span>${course.price}</span>
+                                            <h3 className="font-bold text-lg text-gray-800 dark:text-white">{course.title}</h3>
+                                            <p className="text-gray-600 dark:text-gray-400 text-sm mt-1">{course.instructor}</p>
+                                            <div className="flex items-center gap-4 mt-2 text-sm text-gray-600 dark:text-gray-400">
+                                                <span>{formatPrice(course.price)}</span>
                                                 <span>•</span>
                                                 <span>{course.duration}</span>
                                                 <span>•</span>
@@ -460,13 +463,13 @@ const AdminDashboard = () => {
                                         </button>
                                         <button
                                             onClick={() => handleEdit(course)}
-                                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+                                            className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900 rounded-lg"
                                         >
                                             <Edit2 size={20} />
                                         </button>
                                         <button
                                             onClick={() => handleDelete(course.id)}
-                                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                                            className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900 rounded-lg"
                                         >
                                             <Trash2 size={20} />
                                         </button>
