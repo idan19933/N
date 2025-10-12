@@ -3,6 +3,7 @@ import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firesto
 import { db } from '../config/firebase';
 import useAuthStore from '../store/authStore';
 import { getUserProgress } from '../services/progressService';
+import { formatPrice } from '../utils/currency';
 import { Target, TrendingUp, BookOpen, Calendar, Award, Clock, Play } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -197,7 +198,7 @@ const UserDashboard = () => {
                     <div className="flex items-center justify-between mb-4">
                         <Target size={32} />
                     </div>
-                    <div className="text-3xl font-bold mb-1">${stats.totalSpent.toFixed(2)}</div>
+                    <div className="text-3xl font-bold mb-1">{formatPrice(stats.totalSpent)}</div>
                     <div className="text-orange-100 dark:text-orange-200">סה"כ השקעה</div>
                 </div>
             </div>
@@ -393,7 +394,9 @@ const UserDashboard = () => {
                                             new Date(purchase.purchasedAt).toLocaleDateString('he-IL')
                                         }
                                     </td>
-                                    <td className="py-3 px-4 font-semibold text-gray-800 dark:text-white">${purchase.amount?.toFixed(2)}</td>
+                                    <td className="py-3 px-4 font-semibold text-gray-800 dark:text-white">
+                                        {formatPrice(purchase.amount || 0)}
+                                    </td>
                                     <td className="py-3 px-4">
                                         <span className="px-3 py-1 bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 rounded-full text-sm">
                                             {purchase.status || 'completed'}

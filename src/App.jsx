@@ -10,6 +10,7 @@ import MyCourses from './pages/MyCourses';
 import UserDashboard from './pages/UserDashboard';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import Notifications from './pages/Notifications'; // ✅ הוסף
 import AdminDashboard from './pages/AdminDashboard';
 import AdminUsers from './pages/AdminUsers';
 import AdminGoals from './pages/AdminGoals';
@@ -75,6 +76,13 @@ function App() {
                     <Route path="register" element={<Register />} />
                     <Route path="payment-success" element={<PaymentSuccess />} />
                     <Route path="payment-cancel" element={<PaymentCancel />} />
+
+                    {/* ✅ הוסף route להתראות */}
+                    <Route path="notifications" element={
+                        <PrivateRoute>
+                            <Notifications />
+                        </PrivateRoute>
+                    } />
 
                     <Route path="my-courses" element={
                         <PrivateRoute>

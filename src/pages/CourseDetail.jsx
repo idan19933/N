@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { notifyCourseCompleted, notifyCoursePurchase } from '../services/notificationService';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, collection, query, where, getDocs, addDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
@@ -20,6 +21,7 @@ const CourseDetail = () => {
     const navigate = useNavigate();
     const { user, isAuthenticated } = useAuthStore();
     const videoRef = useRef(null);
+    const videoContainerRef = useRef(null);
 
     const [course, setCourse] = useState(null);
     const [sections, setSections] = useState([]);
@@ -40,6 +42,12 @@ const CourseDetail = () => {
     const [applyingCode, setApplyingCode] = useState(false);
 
     const FREE_SECTIONS_COUNT = 2;
+
+    // Detect if mobile
+    const isMobile = () => {
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+            || window.innerWidth <= 768;
+    };
 
     useEffect(() => {
         loadCourse();
@@ -66,6 +74,30 @@ const CourseDetail = () => {
         }
     }, [selectedLesson?.id, user?.uid]);
 
+    // Improved scroll to video function
+    useEffect(() => {
+        if (selectedLesson && videoContainerRef.current) {
+            // Use a longer delay for mobile and ensure smooth scrolling
+            const scrollDelay = isMobile() ? 300 : 100;
+
+            const scrollTimer = setTimeout(() => {
+                if (videoContainerRef.current) {
+                    // For mobile, scroll to top of video container with offset
+                    const yOffset = isMobile() ? -80 : -20;
+                    const element = videoContainerRef.current;
+                    const y = element.getBoundingClientRect().top + window.pageYOffset + yOffset;
+
+                    window.scrollTo({
+                        top: y,
+                        behavior: 'smooth'
+                    });
+                }
+            }, scrollDelay);
+
+            return () => clearTimeout(scrollTimer);
+        }
+    }, [selectedLesson]);
+
     useEffect(() => {
         if (!videoRef.current || !selectedLesson || !user) return;
 
@@ -78,7 +110,8 @@ const CourseDetail = () => {
                     id,
                     selectedLesson.id,
                     video.currentTime,
-                    video.duration
+                    video.duration,
+                    parseDuration(selectedLesson.duration)
                 );
             }
         };
@@ -90,6 +123,7 @@ const CourseDetail = () => {
                 selectedLesson.id,
                 video.duration,
                 video.duration,
+                parseDuration(selectedLesson.duration),
                 true
             );
             goToNextLesson();
@@ -120,8 +154,8 @@ const CourseDetail = () => {
                 totalMinutes += duration;
 
                 const progress = lessonProgress[lesson.id];
-                if (progress?.completed) {
-                    completedMinutes += duration;
+                if (progress?.watchedMinutes) {
+                    completedMinutes += progress.watchedMinutes;
                 }
             });
         });
@@ -162,7 +196,6 @@ const CourseDetail = () => {
             }
 
             setSelectedLesson(nextLesson);
-            toast.success('🎥 מעבר לשיעור הבא');
             return;
         }
 
@@ -181,7 +214,6 @@ const CourseDetail = () => {
                     ...prev,
                     [nextSection.id]: true
                 }));
-                toast.success('📚 מעבר לסקשן הבא');
             }
         } else {
             sendCompletionNotification();
@@ -191,15 +223,13 @@ const CourseDetail = () => {
 
     const sendCompletionNotification = async () => {
         try {
-            await addDoc(collection(db, 'notifications'), {
-                type: 'course_completed',
-                userId: user.uid,
-                userName: user.displayName || user.email,
-                courseId: id,
-                courseName: course.title,
-                timestamp: new Date(),
-                read: false
-            });
+            await notifyCourseCompleted(
+                user.uid,
+                user.displayName || user.email,
+                id,
+                course.title,
+                course.image
+            );
         } catch (error) {
             console.error('Error sending notification:', error);
         }
@@ -213,9 +243,7 @@ const CourseDetail = () => {
 
     const checkPurchaseStatus = async () => {
         try {
-            console.log('🔍 Checking purchase status for user:', user.uid, 'course:', id);
             setCheckingPurchase(true);
-
             const purchaseQuery = query(
                 collection(db, 'purchases'),
                 where('userId', '==', user.uid),
@@ -223,19 +251,9 @@ const CourseDetail = () => {
             );
 
             const purchaseSnapshot = await getDocs(purchaseQuery);
-            const purchased = !purchaseSnapshot.empty;
-
-            console.log('💳 Purchase found:', purchased, 'Count:', purchaseSnapshot.size);
-
-            if (purchased) {
-                purchaseSnapshot.forEach(doc => {
-                    console.log('📦 Purchase data:', doc.data());
-                });
-            }
-
-            setHasPurchased(purchased);
+            setHasPurchased(!purchaseSnapshot.empty);
         } catch (error) {
-            console.error('❌ Error checking purchase:', error);
+            console.error('Error checking purchase:', error);
             toast.error('שגיאה בבדיקת סטטוס רכישה');
             setHasPurchased(false);
         } finally {
@@ -249,14 +267,12 @@ const CourseDetail = () => {
 
             const courseDoc = await getDoc(doc(db, 'courses', id));
             if (courseDoc.exists()) {
-                const courseData = { id: courseDoc.id, ...courseDoc.data() };
-                setCourse(courseData);
+                setCourse({ id: courseDoc.id, ...courseDoc.data() });
             } else {
                 toast.error('הקורס לא נמצא');
             }
 
             const sectionsData = await getSections(id);
-
             const sectionsWithLessons = await Promise.all(
                 sectionsData.map(async (section) => {
                     const lessons = await getLessons(id, section.id);
@@ -283,7 +299,6 @@ const CourseDetail = () => {
             setCourseProgress(progress);
 
             const allLessons = sections.flatMap(s => s.lessons || []);
-
             const progressPromises = allLessons.map(lesson =>
                 getVideoProgress(user.uid, id, lesson.id)
             );
@@ -317,7 +332,6 @@ const CourseDetail = () => {
         }
     };
 
-    // Apply Promo Code
     const handleApplyCode = async () => {
         if (!promoCode.trim()) {
             toast.error('נא להזין קוד');
@@ -356,14 +370,13 @@ const CourseDetail = () => {
             return;
         }
 
-        // אם יש קוד UNLOCK - פתח את הקורס חינם
+        // Handle promo code unlock
         if (appliedCode && appliedCode.type === CODE_TYPES.UNLOCK) {
             const loadingToast = toast.loading('פותח קורס...');
 
             try {
-                console.log('🎁 Creating free purchase with UNLOCK code...');
-
-                await addDoc(collection(db, 'purchases'), {
+                // Create purchase record
+                const purchaseData = {
                     userId: user.uid,
                     courseId: id,
                     amount: 0,
@@ -374,34 +387,40 @@ const CourseDetail = () => {
                     codeUsed: appliedCode.code,
                     courseName: course.title,
                     courseImage: course.image
+                };
+
+                await addDoc(collection(db, 'purchases'), purchaseData);
+
+                // ✅ SEND NOTIFICATION TO ADMIN
+                await notifyCoursePurchase({
+                    userId: user.uid,
+                    userName: user.displayName || user.email,
+                    userEmail: user.email,
+                    courseId: id,
+                    courseName: course.title,
+                    courseImage: course.image,
+                    amount: 0,
+                    paymentMethod: 'promo_code',
+                    codeUsed: appliedCode.code
                 });
 
-                console.log('✅ Purchase created successfully');
-
                 await useCode(appliedCode.id);
-                console.log('✅ Code marked as used');
-
                 toast.success('🎉 הקורס נפתח בהצלחה!', { id: loadingToast });
 
                 setHasPurchased(true);
                 setAppliedCode(null);
                 setPromoCode('');
 
-                await checkPurchaseStatus();
-
-                setTimeout(() => {
-                    window.location.reload();
-                }, 1500);
-
+                setTimeout(() => window.location.reload(), 1500);
                 return;
             } catch (error) {
-                console.error('❌ Error unlocking course:', error);
+                console.error('Error unlocking course:', error);
                 toast.error('שגיאה בפתיחת הקורס: ' + error.message, { id: loadingToast });
                 return;
             }
         }
 
-        // אחרת - תשלום רגיל (עם או בלי הנחה)
+        // Handle regular purchase or discount code
         const finalPrice = appliedCode && appliedCode.type === CODE_TYPES.DISCOUNT
             ? course.price * (1 - appliedCode.discount / 100)
             : course.price;
@@ -409,22 +428,33 @@ const CourseDetail = () => {
         const loadingToast = toast.loading('מכין את עמוד התשלום...');
 
         try {
-            console.log('💳 Creating checkout session...');
-            const result = await createCheckoutSession(id, finalPrice, appliedCode?.id);
+            // Pass user and course info to payment session for notification later
+            const result = await createCheckoutSession(
+                id,
+                finalPrice,
+                appliedCode?.id,
+                {
+                    userId: user.uid,
+                    userName: user.displayName || user.email,
+                    userEmail: user.email,
+                    courseName: course.title,
+                    courseImage: course.image
+                }
+            );
 
             if (result.success && result.url) {
                 toast.success('מעביר לתשלום...', { id: loadingToast });
+                if (appliedCode) await useCode(appliedCode.id);
 
-                if (appliedCode) {
-                    await useCode(appliedCode.id);
-                }
+                // Note: The purchase notification will be sent from the payment success handler
+                // after the payment is confirmed
 
                 window.location.href = result.url;
             } else {
                 toast.error('שגיאה ביצירת תשלום: ' + (result.error || 'Unknown error'), { id: loadingToast });
             }
         } catch (error) {
-            console.error('❌ Error in handleBuyNow:', error);
+            console.error('Error in handleBuyNow:', error);
             toast.error('שגיאה: ' + error.message, { id: loadingToast });
         }
     };
@@ -435,8 +465,23 @@ const CourseDetail = () => {
             toast.error('🔒 תוכן זה דורש רכישה');
             return;
         }
+
+        // Prevent double-click issues
+        if (selectedLesson?.id === lesson.id && videoContainerRef.current) {
+            // If clicking the same lesson, just scroll to it
+            const yOffset = isMobile() ? -80 : -20;
+            const element = videoContainerRef.current;
+            const y = element.getBoundingClientRect().top + window.pageYOffset + yOffset;
+
+            window.scrollTo({
+                top: y,
+                behavior: 'smooth'
+            });
+            return;
+        }
+
+        // Set the selected lesson
         setSelectedLesson(lesson);
-        toast.success(`▶️ משחק: ${lesson.title}`);
     };
 
     const toggleSection = (sectionId) => {
@@ -445,6 +490,134 @@ const CourseDetail = () => {
             [sectionId]: !prev[sectionId]
         }));
     };
+
+    // ✅ Component for Curriculum (reusable)
+    const CurriculumContent = () => (
+        <div className="space-y-2">
+            {sections.map((section, sectionIndex) => {
+                const isFreeSection = sectionIndex < FREE_SECTIONS_COUNT;
+
+                return (
+                    <motion.div
+                        key={section.id}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: sectionIndex * 0.1 }}
+                        className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden"
+                    >
+                        <button
+                            onClick={() => toggleSection(section.id)}
+                            className="w-full text-right p-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center justify-between"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div>
+                                    <div className="font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                                        {sectionIndex + 1}. {section.title}
+                                        {isFreeSection && (
+                                            <span className="px-2 py-1 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 rounded text-xs font-normal">
+                                                חינם
+                                            </span>
+                                        )}
+                                        {!isFreeSection && !hasPurchased && (
+                                            <Lock size={16} className="text-gray-400 dark:text-gray-500" />
+                                        )}
+                                    </div>
+                                    <div className="text-sm text-gray-600 dark:text-gray-400">
+                                        {section.lessons?.length || 0} שיעורים
+                                    </div>
+                                </div>
+                            </div>
+                            <motion.div
+                                animate={{ rotate: expandedSections[section.id] ? 180 : 0 }}
+                                transition={{ duration: 0.2 }}
+                            >
+                                <ChevronDown size={20} className="text-gray-600 dark:text-gray-400" />
+                            </motion.div>
+                        </button>
+
+                        <AnimatePresence>
+                            {expandedSections[section.id] && (
+                                <motion.div
+                                    initial={{ height: 0, opacity: 0 }}
+                                    animate={{ height: "auto", opacity: 1 }}
+                                    exit={{ height: 0, opacity: 0 }}
+                                    transition={{ duration: 0.3 }}
+                                    className="border-t border-gray-200 dark:border-gray-700 overflow-hidden"
+                                >
+                                    {!section.lessons || section.lessons.length === 0 ? (
+                                        <div className="p-4 text-center text-gray-500 dark:text-gray-400 text-sm">
+                                            אין שיעורים בסקשן זה
+                                        </div>
+                                    ) : (
+                                        section.lessons.map((lesson, lessonIndex) => {
+                                            const progress = lessonProgress[lesson.id];
+                                            const isCompleted = progress?.completed;
+                                            const canPlay = canAccessLesson(sectionIndex, lesson);
+                                            const isSelected = selectedLesson?.id === lesson.id;
+
+                                            return (
+                                                <motion.button
+                                                    key={lesson.id}
+                                                    initial={{ opacity: 0, x: -10 }}
+                                                    animate={{ opacity: 1, x: 0 }}
+                                                    transition={{ delay: lessonIndex * 0.05 }}
+                                                    whileHover={canPlay ? { backgroundColor: "rgba(99, 102, 241, 0.05)" } : {}}
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        handleLessonClick(lesson, sectionIndex);
+                                                    }}
+                                                    className={`w-full text-right p-3 transition-colors flex items-center justify-between ${
+                                                        isSelected
+                                                            ? 'bg-indigo-50 dark:bg-indigo-900 border-l-4 border-indigo-600 dark:border-indigo-400'
+                                                            : ''
+                                                    } ${!canPlay ? 'opacity-60' : 'cursor-pointer'}`}
+                                                >
+                                                    <div className="flex items-center gap-3 flex-1">
+                                                        {canPlay ? (
+                                                            isCompleted ? (
+                                                                <CheckCircle className="text-green-600 dark:text-green-400 flex-shrink-0" size={20} />
+                                                            ) : isSelected ? (
+                                                                <div className="animate-pulse">
+                                                                    <Play className="text-indigo-600 dark:text-indigo-400 flex-shrink-0" size={20} />
+                                                                </div>
+                                                            ) : (
+                                                                <Play className="text-indigo-600 dark:text-indigo-400 flex-shrink-0" size={20} />
+                                                            )
+                                                        ) : (
+                                                            <Lock className="text-gray-400 dark:text-gray-500 flex-shrink-0" size={20} />
+                                                        )}
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="font-semibold text-gray-800 dark:text-white truncate">
+                                                                {sectionIndex + 1}.{lessonIndex + 1} {lesson.title}
+                                                            </div>
+                                                            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                                                                <span>{lesson.duration}</span>
+                                                                {lesson.isFree && (
+                                                                    <span className="px-2 py-0.5 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 rounded text-xs">
+                                                                        Free
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    {progress?.percentage > 0 && canPlay && (
+                                                        <div className="text-sm text-indigo-600 dark:text-indigo-400 font-semibold flex-shrink-0">
+                                                            {Math.round(progress.percentage)}%
+                                                        </div>
+                                                    )}
+                                                </motion.button>
+                                            );
+                                        })
+                                    )}
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </motion.div>
+                );
+            })}
+        </div>
+    );
 
     if (loading || checkingPurchase) {
         return (
@@ -567,16 +740,18 @@ const CourseDetail = () => {
                             />
                         </div>
                         <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
-                            <span>{Math.round(completedDuration)} דקות הושלמו</span>
+                            <span>{Math.round(completedDuration)} דקות נצפו</span>
                             <span>מתוך {Math.round(totalCourseDuration)} דקות</span>
                         </div>
                     </motion.div>
                 )}
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    {/* Video Player */}
+                    {/* Left Column - Video & Content */}
                     <div className="lg:col-span-2">
+                        {/* Video Player */}
                         <motion.div
+                            ref={videoContainerRef}
                             variants={fadeInUp}
                             className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden mb-6"
                         >
@@ -611,6 +786,7 @@ const CourseDetail = () => {
                             )}
                         </motion.div>
 
+                        {/* Course Info */}
                         <motion.div
                             variants={fadeInUp}
                             className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 mb-8"
@@ -630,6 +806,15 @@ const CourseDetail = () => {
                             </div>
                         </motion.div>
 
+                        {/* ✅ Curriculum - MOBILE ONLY */}
+                        <motion.div
+                            variants={fadeInUp}
+                            className="lg:hidden bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 mb-8"
+                        >
+                            <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-4">תוכן הקורס</h3>
+                            <CurriculumContent />
+                        </motion.div>
+
                         {/* Reviews Section */}
                         <ReviewSection
                             courseId={id}
@@ -638,8 +823,9 @@ const CourseDetail = () => {
                         />
                     </div>
 
-                    {/* Sidebar */}
-                    <div>
+                    {/* Right Sidebar - DESKTOP */}
+                    <div className="lg:sticky lg:top-8 lg:self-start">
+                        {/* Purchase Card */}
                         {!hasPurchased && (
                             <motion.div
                                 variants={fadeInUp}
@@ -651,7 +837,7 @@ const CourseDetail = () => {
                                     </p>
                                 </div>
 
-                                {/* Promo Code Input */}
+                                {/* Promo Code */}
                                 <div className="mb-4 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
                                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
                                         <Ticket size={16} />
@@ -691,7 +877,7 @@ const CourseDetail = () => {
                                     )}
                                 </div>
 
-                                {/* Price with Discount */}
+                                {/* Price */}
                                 <div className="mb-4">
                                     {appliedCode && appliedCode.type === CODE_TYPES.DISCOUNT ? (
                                         <>
@@ -746,127 +932,13 @@ const CourseDetail = () => {
                             </motion.div>
                         )}
 
-                        {/* Curriculum */}
+                        {/* ✅ Curriculum - DESKTOP ONLY */}
                         <motion.div
                             variants={fadeInUp}
-                            className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6"
+                            className="hidden lg:block bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6"
                         >
                             <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-4">תוכן הקורס</h3>
-                            <div className="space-y-2">
-                                {sections.map((section, sectionIndex) => {
-                                    const isFreeSection = sectionIndex < FREE_SECTIONS_COUNT;
-
-                                    return (
-                                        <motion.div
-                                            key={section.id}
-                                            initial={{ opacity: 0, x: -20 }}
-                                            animate={{ opacity: 1, x: 0 }}
-                                            transition={{ delay: sectionIndex * 0.1 }}
-                                            className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden"
-                                        >
-                                            <button
-                                                onClick={() => toggleSection(section.id)}
-                                                className="w-full text-right p-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center justify-between"
-                                            >
-                                                <div className="flex items-center gap-3">
-                                                    <div>
-                                                        <div className="font-bold text-gray-800 dark:text-white flex items-center gap-2">
-                                                            {sectionIndex + 1}. {section.title}
-                                                            {isFreeSection && (
-                                                                <span className="px-2 py-1 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 rounded text-xs font-normal">
-                                                                    חינם
-                                                                </span>
-                                                            )}
-                                                            {!isFreeSection && !hasPurchased && (
-                                                                <Lock size={16} className="text-gray-400 dark:text-gray-500" />
-                                                            )}
-                                                        </div>
-                                                        <div className="text-sm text-gray-600 dark:text-gray-400">
-                                                            {section.lessons?.length || 0} שיעורים
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <motion.div
-                                                    animate={{ rotate: expandedSections[section.id] ? 180 : 0 }}
-                                                    transition={{ duration: 0.2 }}
-                                                >
-                                                    <ChevronDown size={20} className="text-gray-600 dark:text-gray-400" />
-                                                </motion.div>
-                                            </button>
-
-                                            <AnimatePresence>
-                                                {expandedSections[section.id] && (
-                                                    <motion.div
-                                                        initial={{ height: 0, opacity: 0 }}
-                                                        animate={{ height: "auto", opacity: 1 }}
-                                                        exit={{ height: 0, opacity: 0 }}
-                                                        transition={{ duration: 0.3 }}
-                                                        className="border-t border-gray-200 dark:border-gray-700 overflow-hidden"
-                                                    >
-                                                        {!section.lessons || section.lessons.length === 0 ? (
-                                                            <div className="p-4 text-center text-gray-500 dark:text-gray-400 text-sm">
-                                                                אין שיעורים בסקשן זה
-                                                            </div>
-                                                        ) : (
-                                                            section.lessons.map((lesson, lessonIndex) => {
-                                                                const progress = lessonProgress[lesson.id];
-                                                                const isCompleted = progress?.completed;
-                                                                const canPlay = canAccessLesson(sectionIndex, lesson);
-
-                                                                return (
-                                                                    <motion.button
-                                                                        key={lesson.id}
-                                                                        initial={{ opacity: 0, x: -10 }}
-                                                                        animate={{ opacity: 1, x: 0 }}
-                                                                        transition={{ delay: lessonIndex * 0.05 }}
-                                                                        whileHover={canPlay ? { backgroundColor: "rgba(99, 102, 241, 0.05)" } : {}}
-                                                                        onClick={() => handleLessonClick(lesson, sectionIndex)}
-                                                                        className={`w-full text-right p-3 transition-colors flex items-center justify-between ${
-                                                                            selectedLesson?.id === lesson.id
-                                                                                ? 'bg-indigo-50 dark:bg-indigo-900 border-l-4 border-indigo-600 dark:border-indigo-400'
-                                                                                : ''
-                                                                        } ${!canPlay ? 'opacity-60' : 'cursor-pointer'}`}
-                                                                    >
-                                                                        <div className="flex items-center gap-3 flex-1">
-                                                                            {canPlay ? (
-                                                                                isCompleted ? (
-                                                                                    <CheckCircle className="text-green-600 dark:text-green-400 flex-shrink-0" size={20} />
-                                                                                ) : (
-                                                                                    <Play className="text-indigo-600 dark:text-indigo-400 flex-shrink-0" size={20} />
-                                                                                )
-                                                                            ) : (
-                                                                                <Lock className="text-gray-400 dark:text-gray-500 flex-shrink-0" size={20} />
-                                                                            )}
-                                                                            <div className="flex-1 min-w-0">
-                                                                                <div className="font-semibold text-gray-800 dark:text-white truncate">
-                                                                                    {sectionIndex + 1}.{lessonIndex + 1} {lesson.title}
-                                                                                </div>
-                                                                                <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                                                                                    <span>{lesson.duration}</span>
-                                                                                    {lesson.isFree && (
-                                                                                        <span className="px-2 py-0.5 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 rounded text-xs">
-                                                                                            Free
-                                                                                        </span>
-                                                                                    )}
-                                                                                </div>
-                                                                            </div>
-                                                                        </div>
-                                                                        {progress?.percentage > 0 && canPlay && (
-                                                                            <div className="text-sm text-indigo-600 dark:text-indigo-400 font-semibold flex-shrink-0">
-                                                                                {Math.round(progress.percentage)}%
-                                                                            </div>
-                                                                        )}
-                                                                    </motion.button>
-                                                                );
-                                                            })
-                                                        )}
-                                                    </motion.div>
-                                                )}
-                                            </AnimatePresence>
-                                        </motion.div>
-                                    );
-                                })}
-                            </div>
+                            <CurriculumContent />
                         </motion.div>
                     </div>
                 </div>
