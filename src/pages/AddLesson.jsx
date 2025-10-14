@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Upload, Video } from 'lucide-react';
+import { ArrowLeft, Upload, Video, Clock } from 'lucide-react';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { storage } from '../config/firebase';
 import { createLesson, getLessons } from '../services/curriculumService';
@@ -20,6 +20,8 @@ const AddLesson = () => {
     const [uploading, setUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [message, setMessage] = useState({ type: '', text: '' });
+    const [extractingDuration, setExtractingDuration] = useState(false);
+    const [videoDurationMinutes, setVideoDurationMinutes] = useState(0);
 
     const handleInputChange = (e) => {
         const { name, value, type, checked } = e.target;
@@ -29,11 +31,71 @@ const AddLesson = () => {
         });
     };
 
-    const handleVideoChange = (e) => {
+    /**
+     * ✅ Extract actual video duration from file
+     */
+    const extractVideoDuration = (file) => {
+        return new Promise((resolve, reject) => {
+            setExtractingDuration(true);
+
+            const video = document.createElement('video');
+            video.preload = 'metadata';
+
+            video.onloadedmetadata = () => {
+                window.URL.revokeObjectURL(video.src);
+                const durationSeconds = video.duration;
+                const durationMinutes = durationSeconds / 60;
+
+                // Format as MM:SS
+                const minutes = Math.floor(durationMinutes);
+                const seconds = Math.round((durationMinutes - minutes) * 60);
+                const formattedDuration = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+
+                console.log('🎬 Video duration extracted:', {
+                    seconds: durationSeconds,
+                    minutes: durationMinutes.toFixed(2),
+                    formatted: formattedDuration
+                });
+
+                setExtractingDuration(false);
+                resolve({ formatted: formattedDuration, minutes: durationMinutes });
+            };
+
+            video.onerror = () => {
+                window.URL.revokeObjectURL(video.src);
+                setExtractingDuration(false);
+                reject(new Error('שגיאה בקריאת משך הוידאו'));
+            };
+
+            video.src = URL.createObjectURL(file);
+        });
+    };
+
+    const handleVideoChange = async (e) => {
         const file = e.target.files[0];
         if (file && file.type.startsWith('video/')) {
             setVideoFile(file);
             setMessage({ type: '', text: '' });
+
+            try {
+                // ✅ Auto-extract duration
+                const { formatted, minutes } = await extractVideoDuration(file);
+                setFormData(prev => ({
+                    ...prev,
+                    duration: formatted
+                }));
+                setVideoDurationMinutes(minutes);
+                setMessage({
+                    type: 'success',
+                    text: `✅ משך הוידאו זוהה אוטומטית: ${formatted} דקות`
+                });
+            } catch (error) {
+                console.error('Error extracting duration:', error);
+                setMessage({
+                    type: 'warning',
+                    text: 'לא ניתן לזהות את משך הוידאו אוטומטית, אנא הזן ידנית'
+                });
+            }
         } else {
             setMessage({ type: 'error', text: 'אנא בחר קובץ וידאו תקין' });
         }
@@ -45,11 +107,17 @@ const AddLesson = () => {
         console.log('📝 Form submitted');
         console.log('📦 Form data:', formData);
         console.log('🎥 Video file:', videoFile);
+        console.log('⏱️ Video duration (minutes):', videoDurationMinutes);
         console.log('🎯 Course ID:', courseId);
         console.log('📂 Section ID:', sectionId);
 
         if (!videoFile) {
             alert('אנא בחר קובץ וידאו');
+            return;
+        }
+
+        if (!formData.duration) {
+            alert('אנא הזן או המתן לזיהוי אוטומטי של משך הוידאו');
             return;
         }
 
@@ -88,11 +156,12 @@ const AddLesson = () => {
                         const lessons = await getLessons(courseId, sectionId);
                         console.log('📚 Current lessons count:', lessons.length);
 
-                        // Create lesson document
+                        // ✅ Create lesson document with actual duration
                         const lessonData = {
                             title: formData.title,
                             description: formData.description,
                             duration: formData.duration,
+                            actualDurationMinutes: videoDurationMinutes, // ✅ Store actual duration
                             videoUrl,
                             videoPath,
                             isFree: formData.isFree,
@@ -138,7 +207,9 @@ const AddLesson = () => {
 
                 {message.text && (
                     <div className={`mb-6 p-4 rounded-lg ${
-                        message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                        message.type === 'success' ? 'bg-green-100 text-green-700' :
+                            message.type === 'warning' ? 'bg-yellow-100 text-yellow-700' :
+                                'bg-red-100 text-red-700'
                     }`}>
                         {message.text}
                     </div>
@@ -176,21 +247,6 @@ const AddLesson = () => {
 
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                            משך זמן *
-                        </label>
-                        <input
-                            type="text"
-                            name="duration"
-                            value={formData.duration}
-                            onChange={handleInputChange}
-                            required
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                            placeholder="לדוגמה: 15:30"
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
                             קובץ וידאו *
                         </label>
                         <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
@@ -201,19 +257,57 @@ const AddLesson = () => {
                                     accept="video/*"
                                     onChange={handleVideoChange}
                                     required
+                                    disabled={extractingDuration}
                                     className="w-full"
                                 />
+                                {extractingDuration && (
+                                    <p className="text-sm text-indigo-600 mt-2 animate-pulse">
+                                        🔍 מזהה משך וידאו...
+                                    </p>
+                                )}
                             </div>
                             {videoFile && (
                                 <div className="mt-4 flex items-center gap-2 text-sm text-gray-600 bg-gray-50 p-3 rounded">
                                     <Video size={20} className="text-indigo-600" />
-                                    <div>
+                                    <div className="flex-1">
                                         <div className="font-medium">{videoFile.name}</div>
                                         <div className="text-xs">{(videoFile.size / 1024 / 1024).toFixed(2)} MB</div>
                                     </div>
+                                    {formData.duration && (
+                                        <div className="flex items-center gap-1 text-indigo-600 font-semibold">
+                                            <Clock size={16} />
+                                            {formData.duration}
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                            משך זמן * (זוהה אוטומטית)
+                        </label>
+                        <div className="relative">
+                            <input
+                                type="text"
+                                name="duration"
+                                value={formData.duration}
+                                onChange={handleInputChange}
+                                required
+                                readOnly={extractingDuration}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-gray-50"
+                                placeholder="יזוהה אוטומטית מהוידאו"
+                            />
+                            {videoDurationMinutes > 0 && (
+                                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-500">
+                                    ({videoDurationMinutes.toFixed(2)} דקות)
+                                </div>
+                            )}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                            משך הזמן יזוהה אוטומטית כאשר תבחר קובץ וידאו
+                        </p>
                     </div>
 
                     <div className="flex items-center gap-2">
@@ -247,19 +341,19 @@ const AddLesson = () => {
                     <div className="flex gap-4">
                         <button
                             type="submit"
-                            disabled={uploading}
+                            disabled={uploading || extractingDuration}
                             className={`flex-1 py-3 px-4 rounded-lg font-semibold text-white transition-colors ${
-                                uploading
+                                uploading || extractingDuration
                                     ? 'bg-gray-400 cursor-not-allowed'
                                     : 'bg-indigo-600 hover:bg-indigo-700'
                             }`}
                         >
-                            {uploading ? 'מעלה...' : 'הוסף שיעור'}
+                            {uploading ? 'מעלה...' : extractingDuration ? 'מזהה וידאו...' : 'הוסף שיעור'}
                         </button>
                         <button
                             type="button"
                             onClick={() => navigate(`/admin/course/${courseId}/curriculum`)}
-                            disabled={uploading}
+                            disabled={uploading || extractingDuration}
                             className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 disabled:opacity-50"
                         >
                             ביטול
