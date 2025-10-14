@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, where } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import useAuthStore from '../store/authStore';
-import { Plus, Edit2, Trash2, Users, BookOpen, DollarSign, TrendingUp, Bell, Target, Ticket, Menu, X } from 'lucide-react';
+import { Plus, Edit2, Trash2, Users, BookOpen, DollarSign, TrendingUp, Bell, Target, Ticket, Menu, X, Clock } from 'lucide-react';
 import { formatPrice } from '../utils/currency';
+import { getSections, getLessons } from '../services/curriculumService';
 import toast from 'react-hot-toast';
 
 const AdminDashboard = () => {
@@ -16,7 +17,8 @@ const AdminDashboard = () => {
         totalCourses: 0,
         totalUsers: 0,
         totalRevenue: 0,
-        totalEnrollments: 0
+        totalEnrollments: 0,
+        totalVideoDuration: 0
     });
     const [loading, setLoading] = useState(true);
     const [showAddCourse, setShowAddCourse] = useState(false);
@@ -64,6 +66,101 @@ const AdminDashboard = () => {
         }
     };
 
+    /**
+     * ✅ Parse duration string (e.g., "5:30") into minutes
+     */
+    const parseDuration = (durationStr) => {
+        if (!durationStr) return 0;
+        if (typeof durationStr === 'number') return durationStr;
+
+        const parts = String(durationStr).split(':');
+        if (parts.length === 2) {
+            const mins = parseInt(parts[0]) || 0;
+            const secs = parseInt(parts[1]) || 0;
+            return mins + (secs / 60);
+        }
+
+        const parsed = parseFloat(durationStr);
+        return isNaN(parsed) ? 0 : parsed;
+    };
+
+    /**
+     * ✅ Format minutes to hours and minutes display
+     */
+    const formatDuration = (totalMinutes) => {
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = Math.round(totalMinutes % 60);
+
+        if (hours === 0) {
+            return `${minutes} דק'`;
+        } else if (minutes === 0) {
+            return `${hours} שעות`;
+        } else {
+            return `${hours}:${minutes.toString().padStart(2, '0')} שעות`;
+        }
+    };
+
+    /**
+     * ✅ Calculate actual duration for a single course
+     */
+    const getCourseDuration = async (courseId) => {
+        try {
+            const sections = await getSections(courseId);
+            let totalMinutes = 0;
+
+            for (const section of sections) {
+                const lessons = await getLessons(courseId, section.id);
+
+                lessons.forEach(lesson => {
+                    const durationMinutes = lesson.actualDurationMinutes && lesson.actualDurationMinutes > 0
+                        ? lesson.actualDurationMinutes
+                        : parseDuration(lesson.duration);
+
+                    totalMinutes += durationMinutes;
+                });
+            }
+
+            return {
+                formatted: formatDuration(totalMinutes),
+                minutes: totalMinutes
+            };
+        } catch (error) {
+            console.error('Error calculating course duration:', error);
+            return null;
+        }
+    };
+
+    /**
+     * ✅ Calculate total video duration across all courses
+     */
+    const calculateTotalVideoDuration = async (coursesData) => {
+        let totalMinutes = 0;
+
+        try {
+            for (const course of coursesData) {
+                const sections = await getSections(course.id);
+
+                for (const section of sections) {
+                    const lessons = await getLessons(course.id, section.id);
+
+                    lessons.forEach(lesson => {
+                        const durationMinutes = lesson.actualDurationMinutes && lesson.actualDurationMinutes > 0
+                            ? lesson.actualDurationMinutes
+                            : parseDuration(lesson.duration);
+
+                        totalMinutes += durationMinutes;
+                    });
+                }
+            }
+
+            console.log(`✅ Total video duration: ${totalMinutes.toFixed(2)} minutes (${(totalMinutes / 60).toFixed(2)} hours)`);
+        } catch (error) {
+            console.error('❌ Error calculating video duration:', error);
+        }
+
+        return totalMinutes;
+    };
+
     const loadDashboardData = async () => {
         try {
             setLoading(true);
@@ -72,7 +169,21 @@ const AdminDashboard = () => {
                 id: doc.id,
                 ...doc.data()
             }));
-            setCourses(coursesData);
+
+            // ✅ Calculate actual duration for each course
+            console.log('📊 Calculating actual durations for all courses...');
+            const coursesWithDuration = await Promise.all(
+                coursesData.map(async (course) => {
+                    const durationData = await getCourseDuration(course.id);
+                    return {
+                        ...course,
+                        actualDuration: durationData?.formatted || course.duration,
+                        actualDurationMinutes: durationData?.minutes || 0
+                    };
+                })
+            );
+
+            setCourses(coursesWithDuration);
 
             const usersSnapshot = await getDocs(collection(db, 'users'));
             const purchasesSnapshot = await getDocs(collection(db, 'purchases'));
@@ -82,12 +193,21 @@ const AdminDashboard = () => {
                 totalRevenue += doc.data().amount || 0;
             });
 
+            // ✅ Calculate total video duration from courses with calculated durations
+            const totalVideoDuration = coursesWithDuration.reduce(
+                (sum, course) => sum + (course.actualDurationMinutes || 0),
+                0
+            );
+
             setStats({
                 totalCourses: coursesData.length,
                 totalUsers: usersSnapshot.size,
                 totalRevenue: totalRevenue,
-                totalEnrollments: purchasesSnapshot.size
+                totalEnrollments: purchasesSnapshot.size,
+                totalVideoDuration: totalVideoDuration
             });
+
+            console.log('✅ Dashboard loaded with accurate durations');
         } catch (error) {
             console.error('Error loading dashboard data:', error);
             toast.error('שגיאה בטעינת נתונים');
@@ -103,18 +223,69 @@ const AdminDashboard = () => {
         });
     };
 
+    /**
+     * ✅ Reset all user progress for a specific course
+     */
+    const resetCourseProgress = async (courseId) => {
+        try {
+            console.log(`🔄 Resetting progress for course ${courseId}...`);
+
+            // Query all progress records for this course
+            const progressQuery = query(
+                collection(db, 'progress'),
+                where('courseId', '==', courseId)
+            );
+
+            const progressSnapshot = await getDocs(progressQuery);
+            console.log(`📊 Found ${progressSnapshot.size} progress records to reset`);
+
+            // Delete all progress records for this course
+            const deletePromises = progressSnapshot.docs.map(doc =>
+                deleteDoc(doc.ref)
+            );
+
+            await Promise.all(deletePromises);
+            console.log(`✅ Reset ${progressSnapshot.size} progress records`);
+
+            return progressSnapshot.size;
+        } catch (error) {
+            console.error('❌ Error resetting course progress:', error);
+            throw error;
+        }
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         const loadingToast = toast.loading(editingCourse ? 'מעדכן קורס...' : 'יוצר קורס...');
 
         try {
             if (editingCourse) {
+                // Update the course
                 await updateDoc(doc(db, 'courses', editingCourse.id), {
                     ...formData,
                     price: parseFloat(formData.price),
                     updatedAt: new Date()
                 });
-                toast.success('✅ הקורס עודכן בהצלחה!', { id: loadingToast });
+
+                console.log('✅ Course updated, now resetting progress...');
+
+                // ✅ ALWAYS reset progress when course is updated
+                try {
+                    toast.loading('מאפס התקדמות משתמשים...', { id: loadingToast });
+                    const resetCount = await resetCourseProgress(editingCourse.id);
+
+                    if (resetCount > 0) {
+                        toast.success(
+                            `✅ הקורס עודכן והתקדמות של ${resetCount} משתמשים אופסה!`,
+                            { id: loadingToast, duration: 4000 }
+                        );
+                    } else {
+                        toast.success('✅ הקורס עודכן בהצלחה! (אין התקדמות לאיפוס)', { id: loadingToast });
+                    }
+                } catch (resetError) {
+                    console.error('❌ Error resetting progress:', resetError);
+                    toast.success('✅ הקורס עודכן (אבל לא ניתן לאפס התקדמות)', { id: loadingToast });
+                }
             } else {
                 await addDoc(collection(db, 'courses'), {
                     ...formData,
@@ -278,8 +449,8 @@ const AdminDashboard = () => {
                 </div>
             )}
 
-            {/* Stats Cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-6 sm:mb-8">
+            {/* Stats Cards - 5 cards with video duration */}
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-6 mb-6 sm:mb-8">
                 <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 dark:from-indigo-600 dark:to-indigo-700 text-white rounded-lg sm:rounded-xl shadow-lg p-4 sm:p-6">
                     <BookOpen size={24} className="sm:w-8 sm:h-8 mb-2 sm:mb-4" />
                     <div className="text-2xl sm:text-3xl font-bold mb-1">{stats.totalCourses}</div>
@@ -302,6 +473,13 @@ const AdminDashboard = () => {
                     <TrendingUp size={24} className="sm:w-8 sm:h-8 mb-2 sm:mb-4" />
                     <div className="text-2xl sm:text-3xl font-bold mb-1">{stats.totalEnrollments}</div>
                     <div className="text-xs sm:text-base text-purple-100 dark:text-purple-200">סה"כ רכישות</div>
+                </div>
+
+                {/* ✅ Total Video Duration Card */}
+                <div className="bg-gradient-to-br from-blue-500 to-blue-600 dark:from-blue-600 dark:to-blue-700 text-white rounded-lg sm:rounded-xl shadow-lg p-4 sm:p-6 col-span-2 lg:col-span-1">
+                    <Clock size={24} className="sm:w-8 sm:h-8 mb-2 sm:mb-4" />
+                    <div className="text-xl sm:text-2xl font-bold mb-1">{formatDuration(stats.totalVideoDuration)}</div>
+                    <div className="text-xs sm:text-base text-blue-100 dark:text-blue-200">תוכן וידאו</div>
                 </div>
             </div>
 
@@ -399,7 +577,7 @@ const AdminDashboard = () => {
 
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                    משך הקורס
+                                    משך הקורס (לתצוגה)
                                 </label>
                                 <input
                                     type="text"
@@ -410,6 +588,9 @@ const AdminDashboard = () => {
                                     placeholder="לדוגמה: 5 שעות"
                                     className="w-full px-3 sm:px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm sm:text-base"
                                 />
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                    המשך האמיתי יחושב אוטומטית מהווידאו
+                                </p>
                             </div>
 
                             <div>
@@ -494,7 +675,11 @@ const AdminDashboard = () => {
                                         <div className="flex flex-wrap items-center gap-2 sm:gap-4 mt-2 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
                                             <span>{formatPrice(course.price)}</span>
                                             <span>•</span>
-                                            <span>{course.duration}</span>
+                                            {/* ✅ Show actual calculated duration */}
+                                            <span className="flex items-center gap-1">
+                                                <Clock size={14} />
+                                                {course.actualDuration || course.duration}
+                                            </span>
                                             <span>•</span>
                                             <span className="capitalize">
                                                 {course.level === 'beginner' ? 'מתחילים' :
