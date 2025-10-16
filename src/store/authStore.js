@@ -1,3 +1,4 @@
+// src/store/authStore.js - EXTENSIVE DEBUGGING VERSION
 import { create } from 'zustand';
 import {
     signInWithEmailAndPassword,
@@ -7,121 +8,198 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
-
-import {
-    createSession,
-    validateSession,
-    terminateAllSessions,
-    logActivity,
-    checkRateLimit
-} from '../services/sessionService';
+import { profileService } from '../services/profileService';
 
 const useAuthStore = create((set, get) => ({
     user: null,
     isAuthenticated: false,
     isAdmin: false,
-    loading: true,
+    loading: false,
     sessionValid: false,
 
-    // Initialize auth state listener
+    studentProfile: null,
+    needsOnboarding: false,
+
     initAuth: () => {
+        console.log('🔧 initAuth: Setting up auth listener...');
+
         onAuthStateChanged(auth, async (firebaseUser) => {
+            console.log('👤 onAuthStateChanged triggered:', firebaseUser?.email || 'no user');
+
             if (firebaseUser) {
                 try {
-                    // Check if session exists
-                    const hasSession = localStorage.getItem('sessionId');
+                    console.log('📄 Fetching user document from Firestore...');
+                    const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
 
-                    if (hasSession) {
-                        // Validate existing session
-                        const sessionValidation = await validateSession();
-
-                        if (!sessionValidation.valid) {
-                            console.log('Invalid session, logging out');
-                            await get().logout();
-                            return;
-                        }
-                    } else {
-                        // Create new session for authenticated user
-                        await createSession(firebaseUser.uid, firebaseUser.email);
+                    if (!userDoc.exists()) {
+                        console.error('❌ User document NOT FOUND in Firestore!');
+                        return;
                     }
 
-                    // Get user data from Firestore
-                    const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-                    const userData = userDoc.exists() ? userDoc.data() : {};
+                    const userData = userDoc.data();
+                    console.log('✅ User document loaded:', userData);
+
+                    const userObj = {
+                        uid: firebaseUser.uid,
+                        email: firebaseUser.email,
+                        displayName: firebaseUser.displayName,
+                        ...userData
+                    };
 
                     set({
-                        user: {
-                            uid: firebaseUser.uid,
-                            email: firebaseUser.email,
-                            displayName: firebaseUser.displayName,
-                            ...userData
-                        },
+                        user: userObj,
                         isAuthenticated: true,
                         isAdmin: userData?.role === 'admin',
                         sessionValid: true,
                         loading: false
                     });
 
-                } catch (error) {
-                    console.error('Error in auth state change:', error);
-                    set({
-                        user: {
-                            uid: firebaseUser.uid,
-                            email: firebaseUser.email,
-                            displayName: firebaseUser.displayName
-                        },
-                        isAuthenticated: true,
-                        isAdmin: false,
-                        sessionValid: false,
-                        loading: false
+                    console.log('📊 User state set:', {
+                        email: userObj.email,
+                        role: userData?.role,
+                        isAdmin: userData?.role === 'admin'
                     });
+
+                    // ✅ CHECK ONBOARDING
+                    console.log('🔍 Calling checkOnboarding...');
+                    await get().checkOnboarding();
+
+                } catch (error) {
+                    console.error('❌ Error in onAuthStateChanged:', error);
                 }
             } else {
-                // User not authenticated
+                console.log('🚪 No user - clearing state');
                 set({
                     user: null,
                     isAuthenticated: false,
                     isAdmin: false,
                     sessionValid: false,
-                    loading: false
+                    loading: false,
+                    studentProfile: null,
+                    needsOnboarding: false
                 });
             }
         });
     },
 
-    // Login with rate limiting
-    login: async (email, password) => {
-        try {
-            // Check rate limit
-            const rateLimitCheck = await checkRateLimit(email);
+    checkOnboarding: async () => {
+        const user = get().user;
+        if (!user) {
+            console.log('⚠️ checkOnboarding: No user found');
+            return;
+        }
 
-            if (!rateLimitCheck.allowed) {
-                const minutesRemaining = rateLimitCheck.retryAfter || 15;
-                return {
-                    success: false,
-                    error: `Too many login attempts. Please try again in ${minutesRemaining} minutes.`
-                };
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log('🔍 CHECKING ONBOARDING');
+        console.log('   User:', user.email);
+        console.log('   UID:', user.uid);
+        console.log('   Role:', user.role);
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+        // Admins skip onboarding
+        if (user.role === 'admin') {
+            console.log('👑 Admin user - SKIP onboarding');
+            set({
+                studentProfile: null,
+                needsOnboarding: false
+            });
+            return;
+        }
+
+        try {
+            console.log('📡 Calling profileService.getProfile...');
+            const profile = await profileService.getProfile(user.uid);
+
+            console.log('📦 Profile retrieved:', profile);
+            console.log('   onboardingCompleted:', profile?.onboardingCompleted);
+
+            if (profile && profile.onboardingCompleted === true) {
+                console.log('✅ ONBOARDING COMPLETED - User has valid profile');
+                set({
+                    studentProfile: profile,
+                    needsOnboarding: false
+                });
+                console.log('📊 State updated: needsOnboarding = false');
+            } else {
+                console.log('❌ NEEDS ONBOARDING - No profile or incomplete');
+                set({
+                    studentProfile: null,
+                    needsOnboarding: true
+                });
+                console.log('📊 State updated: needsOnboarding = true');
             }
 
-            // Authenticate with Firebase
-            const userCredential = await signInWithEmailAndPassword(auth, email, password);
+            // Log final state
+            const finalState = get();
+            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+            console.log('📊 FINAL STATE:');
+            console.log('   needsOnboarding:', finalState.needsOnboarding);
+            console.log('   hasProfile:', !!finalState.studentProfile);
+            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-            // Get user data
+        } catch (error) {
+            console.error('❌ Error in checkOnboarding:', error);
+            console.error('   Error details:', error.message);
+            // Default to needs onboarding on error
+            set({
+                studentProfile: null,
+                needsOnboarding: user.role === 'user'
+            });
+        }
+    },
+
+    completeOnboarding: async (formData) => {
+        const user = get().user;
+        if (!user) {
+            throw new Error('No user logged in');
+        }
+
+        console.log('💾 completeOnboarding called');
+        console.log('   User:', user.email);
+        console.log('   FormData:', formData);
+
+        const profileData = {
+            ...formData,
+            onboardingCompleted: true,
+            completedAt: new Date().toISOString()
+        };
+
+        console.log('💾 Saving profile:', profileData);
+
+        try {
+            const savedProfile = await profileService.saveProfile(user.uid, profileData);
+            console.log('✅ Profile saved:', savedProfile);
+
+            set({
+                studentProfile: savedProfile,
+                needsOnboarding: false
+            });
+
+            console.log('📊 State updated after onboarding complete');
+            return savedProfile;
+        } catch (error) {
+            console.error('❌ Error saving profile:', error);
+            throw error;
+        }
+    },
+
+    login: async (email, password) => {
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log('🔐 LOGIN STARTING');
+        console.log('   Email:', email);
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+        try {
+            set({ loading: true });
+
+            const userCredential = await signInWithEmailAndPassword(auth, email, password);
+            console.log('✅ Firebase auth successful');
+            console.log('   UID:', userCredential.user.uid);
+
             const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
             const userData = userDoc.exists() ? userDoc.data() : {};
+            console.log('📄 User data loaded:', userData);
 
-            // Create session
-            const sessionResult = await createSession(
-                userCredential.user.uid,
-                email
-            );
-
-            if (!sessionResult.success) {
-                console.error('Session creation failed:', sessionResult.error);
-                // Don't block login if session creation fails
-            }
-
-            // Update state
             set({
                 user: {
                     uid: userCredential.user.uid,
@@ -135,65 +213,34 @@ const useAuthStore = create((set, get) => ({
                 loading: false
             });
 
-            // Log successful login
-            await logActivity(userCredential.user.uid, 'login_success', {
-                email: email,
-                timestamp: new Date().toISOString()
-            });
+            console.log('🔍 Calling checkOnboarding after login...');
+            await get().checkOnboarding();
 
+            console.log('✅ Login complete');
+            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
             return { success: true };
+
         } catch (error) {
-            console.error('Login error:', error);
-
-            // Log failed attempt
-            await logActivity(email, 'login_failed', {
-                error: error.code || error.message,
-                timestamp: new Date().toISOString()
-            });
-
-            // User-friendly error messages
-            let errorMessage = 'Login error. Please try again.';
-
-            switch (error.code) {
-                case 'auth/wrong-password':
-                case 'auth/invalid-credential':
-                    errorMessage = 'Invalid email or password';
-                    break;
-                case 'auth/user-not-found':
-                    errorMessage = 'User not found';
-                    break;
-                case 'auth/invalid-email':
-                    errorMessage = 'Invalid email address';
-                    break;
-                case 'auth/too-many-requests':
-                    errorMessage = 'Too many attempts. Try again later.';
-                    break;
-                case 'auth/user-disabled':
-                    errorMessage = 'This account has been disabled';
-                    break;
-            }
-
-            return { success: false, error: errorMessage };
+            console.error('❌ Login failed:', error);
+            set({ loading: false });
+            return { success: false, error: error.message };
         }
     },
 
-    // Register with rate limiting
     register: async (email, password, displayName = '') => {
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log('📝 REGISTRATION STARTING');
+        console.log('   Email:', email);
+        console.log('   Name:', displayName);
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
         try {
-            // Check rate limit
-            const rateLimitCheck = await checkRateLimit(email);
+            set({ loading: true });
 
-            if (!rateLimitCheck.allowed) {
-                return {
-                    success: false,
-                    error: 'Too many attempts. Try again later.'
-                };
-            }
-
-            // Create Firebase user
             const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+            console.log('✅ Firebase user created');
+            console.log('   UID:', userCredential.user.uid);
 
-            // Create user document
             await setDoc(doc(db, 'users', userCredential.user.uid), {
                 email: email,
                 displayName: displayName || email.split('@')[0],
@@ -201,18 +248,8 @@ const useAuthStore = create((set, get) => ({
                 createdAt: new Date(),
                 emailVerified: false
             });
+            console.log('📄 User document created in Firestore');
 
-            // Create session
-            const sessionResult = await createSession(
-                userCredential.user.uid,
-                email
-            );
-
-            if (!sessionResult.success) {
-                console.error('Session creation failed:', sessionResult.error);
-            }
-
-            // Update state
             set({
                 user: {
                     uid: userCredential.user.uid,
@@ -226,98 +263,37 @@ const useAuthStore = create((set, get) => ({
                 loading: false
             });
 
-            // Log registration
-            await logActivity(userCredential.user.uid, 'register', {
-                email: email,
-                timestamp: new Date().toISOString()
-            });
+            console.log('🔍 Calling checkOnboarding after registration...');
+            await get().checkOnboarding();
 
+            console.log('✅ Registration complete');
+            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
             return { success: true };
+
         } catch (error) {
-            console.error('Registration error:', error);
-
-            // Log failed registration
-            await logActivity(email, 'register_failed', {
-                error: error.code || error.message
-            });
-
-            let errorMessage = 'Registration error. Please try again.';
-
-            switch (error.code) {
-                case 'auth/email-already-in-use':
-                    errorMessage = 'Email already in use';
-                    break;
-                case 'auth/weak-password':
-                    errorMessage = 'Password too weak. Use at least 6 characters';
-                    break;
-                case 'auth/invalid-email':
-                    errorMessage = 'Invalid email address';
-                    break;
-            }
-
-            return { success: false, error: errorMessage };
+            console.error('❌ Registration failed:', error);
+            set({ loading: false });
+            return { success: false, error: error.message };
         }
     },
 
-    // Logout
     logout: async () => {
         try {
-            const currentUser = get().user;
-
-            if (currentUser) {
-                // Log logout
-                await logActivity(currentUser.uid, 'logout', {
-                    timestamp: new Date().toISOString()
-                });
-
-                // Terminate all sessions
-                await terminateAllSessions(currentUser.uid);
-            }
-
-            // Sign out from Firebase
             await signOut(auth);
-
-            // Clear state
             set({
                 user: null,
                 isAuthenticated: false,
                 isAdmin: false,
                 sessionValid: false,
-                loading: false
+                loading: false,
+                studentProfile: null,
+                needsOnboarding: false
             });
-
+            console.log('✅ Logout successful');
             return { success: true };
         } catch (error) {
-            console.error('Logout error:', error);
-
-            // Force clear state
-            set({
-                user: null,
-                isAuthenticated: false,
-                isAdmin: false,
-                sessionValid: false,
-                loading: false
-            });
-
-            return { success: false, error: 'Logout error' };
-        }
-    },
-
-    // Manually validate session
-    checkSession: async () => {
-        try {
-            const validation = await validateSession();
-
-            if (!validation.valid) {
-                await get().logout();
-                return { valid: false, reason: validation.reason };
-            }
-
-            set({ sessionValid: true });
-            return { valid: true };
-        } catch (error) {
-            console.error('Session validation error:', error);
-            return { valid: false, reason: 'Validation error' };
+            console.error('❌ Logout error:', error);
+            return { success: false };
         }
     }
 }));

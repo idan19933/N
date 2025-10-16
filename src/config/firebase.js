@@ -1,3 +1,4 @@
+// src/config/firebase.js - ADD DEBUGGING
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
@@ -13,11 +14,22 @@ const firebaseConfig = {
     appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
+// ✅ ADD THIS DEBUG CHECK
+console.log('🔥 Firebase Config:', {
+    hasApiKey: !!firebaseConfig.apiKey,
+    hasAuthDomain: !!firebaseConfig.authDomain,
+    hasProjectId: !!firebaseConfig.projectId,
+    projectId: firebaseConfig.projectId,
+    authDomain: firebaseConfig.authDomain
+});
+
 const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 export const functions = getFunctions(app);
+
+console.log('✅ Firebase initialized successfully');
 
 export { app };
