@@ -1,69 +1,76 @@
-﻿import sqlite3 from 'sqlite3';
+﻿// server/db.js - DATABASE CONNECTION
+import sqlite3 from 'sqlite3';
+import { open } from 'sqlite';
+import path from 'path';
 import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const __dirname = path.dirname(__filename);
 
-const DB_PATH = join(__dirname, '../database/mathtutor.db');
+let db = null;
 
-class Database {
-    constructor() {
-        this.db = new sqlite3.Database(DB_PATH, (err) => {
-            if (err) {
-                console.error('❌ Error opening database:', err);
-            } else {
-                console.log('✅ Connected to SQLite database');
-                this.init();
-            }
+export async function initDatabase() {
+    if (db) return db;
+
+    try {
+        db = await open({
+            filename: path.join(__dirname, '../database/nexon.db'),
+            driver: sqlite3.Database
         });
-    }
 
-    async init() {
-        return new Promise((resolve, reject) => {
-            this.db.run('PRAGMA foreign_keys = ON', (err) => {
-                if (err) reject(err);
-                else resolve();
-            });
-        });
-    }
+        // Create tables if they don't exist
+        await db.exec(`
+            CREATE TABLE IF NOT EXISTS problems (
+                                                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                                    question TEXT NOT NULL,
+                                                    answer TEXT NOT NULL,
+                                                    steps TEXT,
+                                                    hints TEXT,
+                                                    difficulty INTEGER,
+                                                    topic TEXT,
+                                                    category TEXT,
+                                                    subcategory TEXT,
+                                                    grade TEXT,
+                                                    tier INTEGER,
+                                                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
 
-    run(sql, params = []) {
-        return new Promise((resolve, reject) => {
-            this.db.run(sql, params, function(err) {
-                if (err) reject(err);
-                else resolve({ id: this.lastID, changes: this.changes });
-            });
-        });
-    }
+            CREATE INDEX IF NOT EXISTS idx_topic ON problems(topic);
+            CREATE INDEX IF NOT EXISTS idx_difficulty ON problems(difficulty);
+            CREATE INDEX IF NOT EXISTS idx_category ON problems(category);
+        `);
 
-    get(sql, params = []) {
-        return new Promise((resolve, reject) => {
-            this.db.get(sql, params, (err, row) => {
-                if (err) reject(err);
-                else resolve(row);
-            });
-        });
-    }
+        console.log('✅ Database tables initialized');
 
-    all(sql, params = []) {
-        return new Promise((resolve, reject) => {
-            this.db.all(sql, params, (err, rows) => {
-                if (err) reject(err);
-                else resolve(rows);
-            });
-        });
-    }
+        // Check if database has data
+        const count = await db.get('SELECT COUNT(*) as count FROM problems');
+        console.log(`📊 Database has ${count.count} problems`);
 
-    close() {
-        return new Promise((resolve, reject) => {
-            this.db.close((err) => {
-                if (err) reject(err);
-                else resolve();
-            });
-        });
+        if (count.count === 0) {
+            console.warn('⚠️ Database is empty! Run: cd database && node populate.js');
+        }
+
+        return db;
+
+    } catch (error) {
+        console.error('❌ Database initialization error:', error);
+        throw error;
     }
 }
 
-const db = new Database();
-export default db;
+export function getDatabase() {
+    if (!db) {
+        throw new Error('Database not initialized. Call initDatabase() first.');
+    }
+    return db;
+}
+
+export async function closeDatabase() {
+    if (db) {
+        await db.close();
+        db = null;
+        console.log('✅ Database connection closed');
+    }
+}
+
+export default { initDatabase, getDatabase, closeDatabase };

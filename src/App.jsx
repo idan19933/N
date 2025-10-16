@@ -1,4 +1,4 @@
-// src/App.jsx - COMPLETE WITH PRACTICE ROUTE
+// src/App.jsx - COMPLETE WITH PRACTICE ROUTE AND PROBLEM UPLOADER
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
@@ -36,6 +36,7 @@ import AdminCodes from './pages/AdminCodes';
 import ManageCurriculum from './pages/ManageCurriculum';
 import AddLesson from './pages/AddLesson';
 import AdminNotifications from './pages/AdminNotifications';
+import AdminProblemUploader from './pages/AdminProblemUploader';
 
 function App() {
     const initAuth = useAuthStore(state => state.initAuth);
@@ -175,6 +176,16 @@ function App() {
                         element={
                             <AdminRoute>
                                 <AdminNotifications />
+                            </AdminRoute>
+                        }
+                    />
+
+                    {/* ✅ NEW: PROBLEM UPLOADER ROUTE */}
+                    <Route
+                        path="admin/problems"
+                        element={
+                            <AdminRoute>
+                                <AdminProblemUploader />
                             </AdminRoute>
                         }
                     />

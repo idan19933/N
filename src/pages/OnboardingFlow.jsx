@@ -1,101 +1,129 @@
-// src/pages/OnboardingFlow.jsx - MULTI-STEP WITH AI QUESTIONS
+// src/pages/OnboardingFlow.jsx - NEXON ENHANCED VERSION
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-    Sparkles, Rocket, ChevronRight, ChevronLeft,
-    Brain, Target, Clock, BookOpen, Zap
-} from 'lucide-react';
+import { Heart, Brain, Target, BookOpen, MessageCircle } from 'lucide-react';
 import useAuthStore from '../store/authStore';
 import toast from 'react-hot-toast';
 
+// Israeli curriculum topic bank by grade
+const topicsByGrade = {
+    '7': ['מספרים טבעיים ושלמים', 'חזקות ושורשים', 'ביטויים אלגבריים', 'משוואות פשוטות', 'אחוזים ויחסים', 'גאומטריה בסיסית'],
+    '8': ['משוואות ואי-שוויונות', 'ביטויים אלגבריים מורכבים', 'פרופורציה ויחסים', 'דמיון ומשולשים', 'מעגל', 'גרפים של פונקציות'],
+    '9': ['חזקות ושורשים ריבועיים', 'משוואות ריבועיות', 'גאומטריה מתקדמת', 'פונקציות קוויות וריבועיות', 'הסתברות'],
+    '10-3': ['אלגברה בסיסית', 'משוואות ריבועיים', 'פונקציות', 'גאומטריה אנליטית', 'טריגונומטריה בסיסית'],
+    '10-4': ['משוואות מעריכיות', 'פונקציות מעריכיות ולוגריתמיות', 'טריגונומטריה', 'גאומטריה אנליטית', 'סדרות'],
+    '10-5': ['פונקציות מתקדמות', 'טריגונומטריה מתקדמת', 'גאומטריה אנליטית', 'סדרות', 'נגזרות בסיסיות'],
+    '11-3': ['פונקציות ריבועיות ומעריכיות', 'בעיות קיצון', 'טריגונומטריה במרחב', 'הסתברות'],
+    '11-4': ['חשבון דיפרנציאלי', 'פונקציות מעריכיות', 'גאומטריה במרחב', 'טריגונומטריה מתקדמת', 'הסתברות מותנית'],
+    '11-5': ['חשבון דיפרנציאלי מתקדם', 'גאומטריה במרחב', 'פונקציות מתקדמות', 'טריגונומטריה במרחב', 'הסתברות בינומית'],
+    '12-3': ['חזרה כללית', 'פונקציות מעריכיות בסיסיות', 'גרפים', 'הכנה לבגרות'],
+    '12-4': ['אינטגרלים', 'נגזרות ואופטימיזציה', 'בעיות קיצון', 'הסתברות מתקדמת'],
+    '12-5': ['אינטגרלים מתקדמים', 'אופטימיזציה', 'סדרות אינסופיות', 'הסתברות רציפה']
+};
+
 const OnboardingFlow = () => {
-    const [currentStep, setCurrentStep] = useState(0);
-    const [formData, setFormData] = useState({
-        gradeLevel: '',
-        mathLevel: '',
-        learningStyle: '',
-        goals: [],
-        weakSubjects: [],
-        studyTime: '',
-        preferredTime: '',
-        motivation: ''
-    });
+    const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
     const completeOnboarding = useAuthStore(state => state.completeOnboarding);
-    const user = useAuthStore(state => state.user);
 
-    const steps = [
-        {
-            id: 'welcome',
-            title: 'Welcome to Your AI Learning Journey!',
-            subtitle: `Hi ${user?.displayName || 'there'}! Let's personalize your experience in just 2 minutes.`,
-            icon: <Sparkles className="w-12 h-12" />
-        },
-        {
-            id: 'grade',
-            title: 'What grade are you in?',
-            subtitle: 'This helps us match content to your level',
-            icon: <BookOpen className="w-12 h-12" />
-        },
-        {
-            id: 'math',
-            title: 'How comfortable are you with math?',
-            subtitle: 'Be honest - this helps us start at the right level',
-            icon: <Brain className="w-12 h-12" />
-        },
-        {
-            id: 'style',
-            title: 'How do you learn best?',
-            subtitle: 'Everyone learns differently',
-            icon: <Zap className="w-12 h-12" />
-        },
-        {
-            id: 'goals',
-            title: 'What are your learning goals?',
-            subtitle: 'Select all that apply',
-            icon: <Target className="w-12 h-12" />
-        },
-        {
-            id: 'subjects',
-            title: 'Which subjects need the most help?',
-            subtitle: 'We\'ll focus your AI tutor on these areas',
-            icon: <BookOpen className="w-12 h-12" />
-        },
-        {
-            id: 'schedule',
-            title: 'When do you prefer to study?',
-            subtitle: 'We\'ll send reminders at the best time',
-            icon: <Clock className="w-12 h-12" />
-        },
-        {
-            id: 'motivation',
-            title: 'What motivates you to learn?',
-            subtitle: 'This helps us keep you engaged',
-            icon: <Rocket className="w-12 h-12" />
-        }
+    const [formData, setFormData] = useState({
+        // Nexon-specific fields
+        name: '',
+        grade: '',
+        educationLevel: '',
+        track: '',
+        mathFeeling: '',
+        learningStyle: '',
+        goalFocus: '',
+        topicMastery: {},
+        strugglesText: '',
+
+        // Keep existing fields for compatibility
+        gradeLevel: '',
+        mathLevel: 'intermediate',
+        difficultSubjects: [],
+        studyTime: '',
+        goals: '',
+        interests: []
+    });
+
+    const grades = ['7', '8', '9', '10', '11', '12'];
+    const tracks = {
+        'middle': ['הקבצה א', 'הקבצה ב', 'הקבצה ג'],
+        'high': ['3 יחידות', '4 יחידות', '5 יחידות']
+    };
+
+    const mathFeelings = [
+        { value: 'love', emoji: '😍', text: 'אני אוהב/ת מתמטיקה ונהנה/ת ממנה', enText: 'I love math and enjoy it' },
+        { value: 'okay', emoji: '😐', text: 'אני בסדר עם מתמטיקה, אבל לפעמים זה מתסכל', enText: 'Math is okay, but sometimes frustrating' },
+        { value: 'struggle', emoji: '😰', text: 'אני לא מסתדר/ת עם מתמטיקה בכלל', enText: 'I really struggle with math' }
     ];
 
-    const handleNext = () => {
-        if (currentStep < steps.length - 1) {
-            setCurrentStep(currentStep + 1);
+    const learningStyles = [
+        { value: 'independent', emoji: '💪', text: 'מנסה/ה לבד עד שמצליח/ה', enText: 'I try by myself until I succeed' },
+        { value: 'ask', emoji: '🙋', text: 'שואל/ת חבר/ה או מורה/ה', enText: 'I ask friends or teachers for help' },
+        { value: 'quit', emoji: '😔', text: 'מתייאש/ת או עובר/ת הלאה', enText: 'I get discouraged and move on' }
+    ];
+
+    const goalFocus = [
+        { value: 'understanding', emoji: '💡', text: 'להבין יותר לעומק', enText: 'Deeper understanding' },
+        { value: 'speed', emoji: '⚡', text: 'להיות מהיר/ה יותר בפתרון', enText: 'Faster problem solving' },
+        { value: 'accuracy', emoji: '🎯', text: 'לא לטעות בשאלות טיפשיות', enText: 'Avoid silly mistakes' },
+        { value: 'confidence', emoji: '💪', text: 'להרגיש ביטחון לפני מבחנים', enText: 'Feel confident before tests' }
+    ];
+
+    const handleTopicMasteryToggle = (topic, level) => {
+        setFormData(prev => ({
+            ...prev,
+            topicMastery: {
+                ...prev.topicMastery,
+                [topic]: level
+            }
+        }));
+    };
+
+    const getTopicsForCurrentSelection = () => {
+        const { grade, track } = formData;
+        if (!grade) return [];
+
+        if (parseInt(grade) <= 9) {
+            return topicsByGrade[grade] || [];
         } else {
-            handleSubmit();
+            // High school - need track
+            const trackNum = track?.includes('3') ? '3' : track?.includes('4') ? '4' : track?.includes('5') ? '5' : '';
+            const key = `${grade}-${trackNum}`;
+            return topicsByGrade[key] || [];
         }
     };
 
-    const handleBack = () => {
-        if (currentStep > 0) {
-            setCurrentStep(currentStep - 1);
+    const canProceed = () => {
+        switch(step) {
+            case 1: return formData.name && formData.grade && (parseInt(formData.grade) <= 9 || formData.track);
+            case 2: return formData.mathFeeling && formData.learningStyle;
+            case 3: return formData.goalFocus;
+            case 4: return Object.keys(formData.topicMastery).length > 0;
+            case 5: return true; // Free text is optional
+            default: return false;
         }
     };
 
     const handleSubmit = async () => {
         setLoading(true);
         try {
-            await completeOnboarding(formData);
-            toast.success('Profile created! 🎉 Generating your personalized dashboard...');
+            // Merge Nexon data with existing format for compatibility
+            const combinedData = {
+                ...formData,
+                gradeLevel: formData.grade,
+                onboardingCompleted: true,
+                nexonProfile: true,
+                completedAt: new Date().toISOString()
+            };
+
+            await completeOnboarding(combinedData);
+            toast.success('🎉 פרופיל נוצר! Profile created!');
+
             setTimeout(() => {
                 navigate('/dashboard', { replace: true });
             }, 1500);
@@ -106,364 +134,369 @@ const OnboardingFlow = () => {
         }
     };
 
-    const toggleArrayItem = (field, value) => {
-        setFormData(prev => ({
-            ...prev,
-            [field]: prev[field].includes(value)
-                ? prev[field].filter(item => item !== value)
-                : [...prev[field], value]
-        }));
-    };
+    const renderStep = () => {
+        switch(step) {
+            case 1:
+                return (
+                    <motion.div
+                        key="step1"
+                        initial={{ opacity: 0, x: 50 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -50 }}
+                        className="space-y-6"
+                    >
+                        <div className="flex items-center mb-6">
+                            <Heart className="w-12 h-12 text-pink-400 mr-4" />
+                            <div>
+                                <h2 className="text-3xl font-bold text-white">
+                                    היי! אני נקסון 👋
+                                </h2>
+                                <p className="text-gray-400">Your AI Math Tutor - Let's get to know you!</p>
+                            </div>
+                        </div>
 
-    const canProceed = () => {
-        const step = steps[currentStep];
-        switch (step.id) {
-            case 'welcome': return true;
-            case 'grade': return formData.gradeLevel !== '';
-            case 'math': return formData.mathLevel !== '';
-            case 'style': return formData.learningStyle !== '';
-            case 'goals': return formData.goals.length > 0;
-            case 'subjects': return formData.weakSubjects.length > 0;
-            case 'schedule': return formData.preferredTime !== '';
-            case 'motivation': return formData.motivation !== '';
-            default: return true;
+                        {/* Name */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-300 mb-2">
+                                מה השם שלך? / What's your name?
+                            </label>
+                            <input
+                                type="text"
+                                value={formData.name}
+                                onChange={(e) => setFormData({...formData, name: e.target.value})}
+                                placeholder="Your name..."
+                                className="w-full px-4 py-3 bg-gray-800 border-2 border-gray-700 rounded-xl text-white placeholder-gray-500 focus:border-pink-500 focus:outline-none"
+                            />
+                        </div>
+
+                        {/* Grade */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-300 mb-2">
+                                באיזו כיתה? / What grade?
+                            </label>
+                            <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+                                {grades.map(grade => (
+                                    <button
+                                        key={grade}
+                                        onClick={() => {
+                                            setFormData({
+                                                ...formData,
+                                                grade,
+                                                educationLevel: parseInt(grade) <= 9 ? 'middle' : 'high',
+                                                track: parseInt(grade) <= 9 ? 'הקבצה ב' : ''
+                                            });
+                                        }}
+                                        className={`p-4 rounded-xl border-2 transition-all font-bold ${
+                                            formData.grade === grade
+                                                ? 'border-pink-500 bg-pink-500/20 text-white'
+                                                : 'border-gray-700 bg-gray-800 text-gray-300 hover:border-gray-600'
+                                        }`}
+                                    >
+                                        כיתה {grade}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Track (only for high school) */}
+                        {formData.grade && parseInt(formData.grade) >= 10 && (
+                            <div>
+                                <label className="block text-sm font-medium text-gray-300 mb-2">
+                                    באיזו רמת לימוד? / Which track?
+                                </label>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                    {tracks.high.map(track => (
+                                        <button
+                                            key={track}
+                                            onClick={() => setFormData({...formData, track})}
+                                            className={`p-4 rounded-xl border-2 transition-all ${
+                                                formData.track === track
+                                                    ? 'border-pink-500 bg-pink-500/20 text-white'
+                                                    : 'border-gray-700 bg-gray-800 text-gray-300 hover:border-gray-600'
+                                            }`}
+                                        >
+                                            {track}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </motion.div>
+                );
+
+            case 2:
+                return (
+                    <motion.div
+                        key="step2"
+                        initial={{ opacity: 0, x: 50 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -50 }}
+                        className="space-y-8"
+                    >
+                        <div className="flex items-center mb-6">
+                            <Brain className="w-12 h-12 text-purple-400 mr-4" />
+                            <div>
+                                <h2 className="text-3xl font-bold text-white">
+                                    איך אתה מרגיש כלפי מתמטיקה?
+                                </h2>
+                                <p className="text-gray-400">How do you feel about math?</p>
+                            </div>
+                        </div>
+
+                        {/* Math Feeling */}
+                        <div className="space-y-3">
+                            {mathFeelings.map(feeling => (
+                                <button
+                                    key={feeling.value}
+                                    onClick={() => setFormData({...formData, mathFeeling: feeling.value})}
+                                    className={`w-full p-4 rounded-xl border-2 transition-all text-right ${
+                                        formData.mathFeeling === feeling.value
+                                            ? 'border-purple-500 bg-purple-500/20 text-white'
+                                            : 'border-gray-700 bg-gray-800 text-gray-300 hover:border-gray-600'
+                                    }`}
+                                >
+                                    <div className="flex items-center">
+                                        <span className="text-3xl ml-4">{feeling.emoji}</span>
+                                        <div className="flex-1 text-right">
+                                            <div className="font-semibold">{feeling.text}</div>
+                                            <div className="text-sm text-gray-400">{feeling.enText}</div>
+                                        </div>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Learning Style */}
+                        <div>
+                            <h3 className="text-xl font-bold text-white mb-4">
+                                כשלא מבין/ה משהו, אתה בדרך כלל... / When you don't understand:
+                            </h3>
+                            <div className="space-y-3">
+                                {learningStyles.map(style => (
+                                    <button
+                                        key={style.value}
+                                        onClick={() => setFormData({...formData, learningStyle: style.value})}
+                                        className={`w-full p-4 rounded-xl border-2 transition-all text-right ${
+                                            formData.learningStyle === style.value
+                                                ? 'border-purple-500 bg-purple-500/20 text-white'
+                                                : 'border-gray-700 bg-gray-800 text-gray-300 hover:border-gray-600'
+                                        }`}
+                                    >
+                                        <div className="flex items-center">
+                                            <span className="text-2xl ml-3">{style.emoji}</span>
+                                            <div className="flex-1 text-right">
+                                                <div className="font-semibold">{style.text}</div>
+                                                <div className="text-sm text-gray-400">{style.enText}</div>
+                                            </div>
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </motion.div>
+                );
+
+            case 3:
+                return (
+                    <motion.div
+                        key="step3"
+                        initial={{ opacity: 0, x: 50 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -50 }}
+                        className="space-y-6"
+                    >
+                        <div className="flex items-center mb-6">
+                            <Target className="w-12 h-12 text-green-400 mr-4" />
+                            <div>
+                                <h2 className="text-3xl font-bold text-white">
+                                    מה אתה הכי רוצה לשפר?
+                                </h2>
+                                <p className="text-gray-400">What do you most want to improve?</p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {goalFocus.map(goal => (
+                                <button
+                                    key={goal.value}
+                                    onClick={() => setFormData({...formData, goalFocus: goal.value})}
+                                    className={`p-6 rounded-xl border-2 transition-all ${
+                                        formData.goalFocus === goal.value
+                                            ? 'border-green-500 bg-green-500/20 text-white'
+                                            : 'border-gray-700 bg-gray-800 text-gray-300 hover:border-gray-600'
+                                    }`}
+                                >
+                                    <div className="text-4xl mb-3">{goal.emoji}</div>
+                                    <div className="font-bold text-lg mb-1">{goal.text}</div>
+                                    <div className="text-sm text-gray-400">{goal.enText}</div>
+                                </button>
+                            ))}
+                        </div>
+                    </motion.div>
+                );
+
+            case 4:
+                const topics = getTopicsForCurrentSelection();
+                return (
+                    <motion.div
+                        key="step4"
+                        initial={{ opacity: 0, x: 50 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -50 }}
+                        className="space-y-6"
+                    >
+                        <div className="flex items-center mb-6">
+                            <BookOpen className="w-12 h-12 text-blue-400 mr-4" />
+                            <div>
+                                <h2 className="text-3xl font-bold text-white">
+                                    במה נתמקד?
+                                </h2>
+                                <p className="text-gray-400">Rate your comfort level with each topic</p>
+                            </div>
+                        </div>
+
+                        <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
+                            {topics.map(topic => (
+                                <div key={topic} className="bg-gray-800/50 rounded-xl p-4">
+                                    <div className="font-semibold text-white mb-3">{topic}</div>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {[
+                                            { value: 'good', label: 'שולט', emoji: '👍', color: 'green' },
+                                            { value: 'needs-work', label: 'צריך חיזוק', emoji: '📚', color: 'yellow' },
+                                            { value: 'struggle', label: 'מתקשה', emoji: '😓', color: 'red' }
+                                        ].map(level => (
+                                            <button
+                                                key={level.value}
+                                                onClick={() => handleTopicMasteryToggle(topic, level.value)}
+                                                className={`p-2 rounded-lg border-2 transition-all text-sm ${
+                                                    formData.topicMastery[topic] === level.value
+                                                        ? `border-${level.color}-500 bg-${level.color}-500/20 text-white`
+                                                        : 'border-gray-700 bg-gray-800 text-gray-400 hover:border-gray-600'
+                                                }`}
+                                            >
+                                                <div className="text-xl mb-1">{level.emoji}</div>
+                                                <div>{level.label}</div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </motion.div>
+                );
+
+            case 5:
+                return (
+                    <motion.div
+                        key="step5"
+                        initial={{ opacity: 0, x: 50 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -50 }}
+                        className="space-y-6"
+                    >
+                        <div className="flex items-center mb-6">
+                            <MessageCircle className="w-12 h-12 text-indigo-400 mr-4" />
+                            <div>
+                                <h2 className="text-3xl font-bold text-white">
+                                    ספר/י לי במילים שלך
+                                </h2>
+                                <p className="text-gray-400">Tell me in your own words (optional)</p>
+                            </div>
+                        </div>
+
+                        <textarea
+                            value={formData.strugglesText}
+                            onChange={(e) => setFormData({...formData, strugglesText: e.target.value})}
+                            placeholder="באילו נושאים אתה מרגיש קושי? מה היית רוצה ללמוד קודם? / What topics are most challenging? What would you like to learn first?"
+                            className="w-full p-4 bg-gray-800 border-2 border-gray-700 rounded-xl text-white placeholder-gray-500 focus:border-indigo-500 focus:outline-none min-h-[200px]"
+                            dir="auto"
+                        />
+
+                        <div className="bg-indigo-900/30 border border-indigo-500/50 rounded-xl p-6">
+                            <h3 className="text-xl font-bold text-white mb-3">
+                                🎉 נראה נכון!
+                            </h3>
+                            <div className="space-y-2 text-gray-300">
+                                <div>• <strong>שם:</strong> {formData.name}</div>
+                                <div>• <strong>כיתה:</strong> {formData.grade} {formData.track && `(${formData.track})`}</div>
+                                <div>• <strong>יחס למתמטיקה:</strong> {mathFeelings.find(f => f.value === formData.mathFeeling)?.text}</div>
+                                <div>• <strong>סגנון למידה:</strong> {learningStyles.find(s => s.value === formData.learningStyle)?.text}</div>
+                                <div>• <strong>מטרה עיקרית:</strong> {goalFocus.find(g => g.value === formData.goalFocus)?.text}</div>
+                                <div>• <strong>נושאים לחיזוק:</strong> {Object.entries(formData.topicMastery).filter(([_, v]) => v !== 'good').length} topics</div>
+                            </div>
+                        </div>
+                    </motion.div>
+                );
+
+            default:
+                return null;
         }
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 flex items-center justify-center p-6 relative overflow-hidden">
-            {/* Background Animation */}
-            <div className="absolute inset-0 overflow-hidden">
-                <motion.div
-                    animate={{ scale: [1, 1.2, 1], rotate: [0, 90, 0] }}
-                    transition={{ duration: 20, repeat: Infinity }}
-                    className="absolute top-20 left-20 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl"
-                />
-            </div>
-
-            <div className="relative z-10 w-full max-w-3xl">
+        <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 flex items-center justify-center p-6">
+            <div className="max-w-4xl w-full">
                 {/* Progress Bar */}
                 <div className="mb-8">
-                    <div className="flex justify-between items-center mb-2">
-                        <span className="text-sm text-gray-400">Step {currentStep + 1} of {steps.length}</span>
-                        <span className="text-sm text-gray-400">{Math.round(((currentStep + 1) / steps.length) * 100)}%</span>
+                    <div className="flex justify-between mb-2">
+                        <span className="text-gray-400 text-sm">שלב {step} מתוך 5 • Step {step} of 5</span>
+                        <span className="text-gray-400 text-sm">{Math.round((step / 5) * 100)}%</span>
                     </div>
                     <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
                         <motion.div
+                            className="h-full bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500"
                             initial={{ width: 0 }}
-                            animate={{ width: `${((currentStep + 1) / steps.length) * 100}%` }}
+                            animate={{ width: `${(step / 5) * 100}%` }}
                             transition={{ duration: 0.3 }}
-                            className="h-full bg-gradient-to-r from-indigo-600 to-purple-600"
                         />
                     </div>
                 </div>
 
-                {/* Step Content */}
-                <AnimatePresence mode="wait">
-                    <motion.div
-                        key={currentStep}
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -20 }}
-                        transition={{ duration: 0.3 }}
-                        className="bg-gray-900/50 backdrop-blur-xl rounded-2xl p-8 border border-gray-800 shadow-2xl"
+                {/* Main Content */}
+                <div className="bg-gray-900/50 backdrop-blur-xl rounded-2xl p-8 border border-gray-800 min-h-[550px]">
+                    <AnimatePresence mode="wait">
+                        {renderStep()}
+                    </AnimatePresence>
+                </div>
+
+                {/* Navigation Buttons */}
+                <div className="flex justify-between mt-6">
+                    <button
+                        onClick={() => setStep(Math.max(1, step - 1))}
+                        disabled={step === 1}
+                        className="px-6 py-3 bg-gray-800 text-white rounded-xl hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                     >
-                        {/* Icon */}
-                        <div className="flex justify-center mb-6">
-                            <div className="w-20 h-20 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-2xl flex items-center justify-center text-white">
-                                {steps[currentStep].icon}
-                            </div>
-                        </div>
+                        Back • חזור
+                    </button>
 
-                        {/* Title */}
-                        <h2 className="text-3xl font-bold text-white text-center mb-2">
-                            {steps[currentStep].title}
-                        </h2>
-                        <p className="text-gray-400 text-center mb-8">
-                            {steps[currentStep].subtitle}
-                        </p>
-
-                        {/* Step Content */}
-                        <div className="min-h-[300px]">
-                            {renderStepContent(steps[currentStep].id, formData, setFormData, toggleArrayItem)}
-                        </div>
-
-                        {/* Navigation Buttons */}
-                        <div className="flex justify-between mt-8">
-                            <button
-                                onClick={handleBack}
-                                disabled={currentStep === 0}
-                                className="px-6 py-3 bg-gray-800 text-white rounded-xl hover:bg-gray-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-                            >
-                                <ChevronLeft className="w-5 h-5 mr-2" />
-                                Back
-                            </button>
-
-                            <button
-                                onClick={handleNext}
-                                disabled={!canProceed() || loading}
-                                className="px-8 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg hover:shadow-indigo-500/50 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center font-semibold"
-                            >
-                                {loading ? (
-                                    <>
-                                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                                        Creating...
-                                    </>
-                                ) : currentStep === steps.length - 1 ? (
-                                    <>
-                                        Complete
-                                        <Rocket className="w-5 h-5 ml-2" />
-                                    </>
-                                ) : (
-                                    <>
-                                        Next
-                                        <ChevronRight className="w-5 h-5 ml-2" />
-                                    </>
-                                )}
-                            </button>
-                        </div>
-                    </motion.div>
-                </AnimatePresence>
+                    {step < 5 ? (
+                        <button
+                            onClick={() => setStep(step + 1)}
+                            disabled={!canProceed()}
+                            className="px-8 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg hover:shadow-indigo-500/50 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-semibold"
+                        >
+                            Next • הבא
+                        </button>
+                    ) : (
+                        <button
+                            onClick={handleSubmit}
+                            disabled={loading}
+                            className="px-8 py-3 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-xl hover:shadow-lg hover:shadow-green-500/50 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-semibold"
+                        >
+                            {loading ? (
+                                <>
+                                    <div className="inline-block animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                                    Saving...
+                                </>
+                            ) : (
+                                'Complete Setup • סיימתי 🎉'
+                            )}
+                        </button>
+                    )}
+                </div>
             </div>
         </div>
     );
 };
-
-// ============================================
-// RENDER STEP CONTENT
-// ============================================
-function renderStepContent(stepId, formData, setFormData, toggleArrayItem) {
-    switch (stepId) {
-        case 'welcome':
-            return (
-                <div className="text-center space-y-4">
-                    <p className="text-lg text-gray-300">
-                        We'll ask you a few questions to create a personalized learning experience with:
-                    </p>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
-                        <FeatureCard icon="🤖" title="AI Tutor" desc="24/7 personalized help" />
-                        <FeatureCard icon="📊" title="Progress Tracking" desc="See your improvement" />
-                        <FeatureCard icon="🎯" title="Custom Goals" desc="Tailored to your needs" />
-                    </div>
-                </div>
-            );
-
-        case 'grade':
-            return (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {[
-                        { value: 'elementary', label: 'Elementary (K-5)', emoji: '🎒' },
-                        { value: 'middle', label: 'Middle School (6-8)', emoji: '📚' },
-                        { value: 'high', label: 'High School (9-12)', emoji: '🎓' },
-                        { value: 'college', label: 'College/University', emoji: '🏫' },
-                        { value: 'adult', label: 'Adult Learner', emoji: '👨‍🎓' },
-                        { value: 'other', label: 'Other', emoji: '📖' }
-                    ].map(option => (
-                        <OptionCard
-                            key={option.value}
-                            selected={formData.gradeLevel === option.value}
-                            onClick={() => setFormData({ ...formData, gradeLevel: option.value })}
-                            emoji={option.emoji}
-                            label={option.label}
-                        />
-                    ))}
-                </div>
-            );
-
-        case 'math':
-            return (
-                <div className="space-y-4">
-                    {[
-                        { value: 'beginner', label: 'Beginner', desc: 'I struggle with basic concepts', emoji: '🌱' },
-                        { value: 'intermediate', label: 'Intermediate', desc: 'I can handle most problems with some help', emoji: '📈' },
-                        { value: 'advanced', label: 'Advanced', desc: 'I excel and want challenges', emoji: '🚀' },
-                        { value: 'expert', label: 'Expert', desc: 'I can teach others', emoji: '🏆' }
-                    ].map(option => (
-                        <OptionCardHorizontal
-                            key={option.value}
-                            selected={formData.mathLevel === option.value}
-                            onClick={() => setFormData({ ...formData, mathLevel: option.value })}
-                            emoji={option.emoji}
-                            label={option.label}
-                            desc={option.desc}
-                        />
-                    ))}
-                </div>
-            );
-
-        case 'style':
-            return (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {[
-                        { value: 'visual', label: 'Visual', desc: 'I learn best with diagrams and videos', emoji: '👁️' },
-                        { value: 'auditory', label: 'Auditory', desc: 'I prefer listening and discussions', emoji: '👂' },
-                        { value: 'reading', label: 'Reading/Writing', desc: 'I like reading and taking notes', emoji: '📝' },
-                        { value: 'kinesthetic', label: 'Hands-on', desc: 'I learn by doing and practicing', emoji: '✋' }
-                    ].map(option => (
-                        <OptionCard
-                            key={option.value}
-                            selected={formData.learningStyle === option.value}
-                            onClick={() => setFormData({ ...formData, learningStyle: option.value })}
-                            emoji={option.emoji}
-                            label={option.label}
-                            desc={option.desc}
-                        />
-                    ))}
-                </div>
-            );
-
-        case 'goals':
-            return (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {[
-                        { value: 'grades', label: 'Improve Grades', emoji: '📈' },
-                        { value: 'exam', label: 'Prepare for Exam', emoji: '📝' },
-                        { value: 'understanding', label: 'Better Understanding', emoji: '💡' },
-                        { value: 'homework', label: 'Homework Help', emoji: '✏️' },
-                        { value: 'advanced', label: 'Advanced Topics', emoji: '🚀' },
-                        { value: 'fun', label: 'Learn for Fun', emoji: '🎉' }
-                    ].map(option => (
-                        <MultiSelectCard
-                            key={option.value}
-                            selected={formData.goals.includes(option.value)}
-                            onClick={() => toggleArrayItem('goals', option.value)}
-                            emoji={option.emoji}
-                            label={option.label}
-                        />
-                    ))}
-                </div>
-            );
-
-        case 'subjects':
-            return (
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    {[
-                        { value: 'math', label: 'Math', emoji: '🔢' },
-                        { value: 'science', label: 'Science', emoji: '🔬' },
-                        { value: 'english', label: 'English', emoji: '📖' },
-                        { value: 'history', label: 'History', emoji: '🏛️' },
-                        { value: 'languages', label: 'Languages', emoji: '🗣️' },
-                        { value: 'coding', label: 'Coding', emoji: '💻' }
-                    ].map(option => (
-                        <MultiSelectCard
-                            key={option.value}
-                            selected={formData.weakSubjects.includes(option.value)}
-                            onClick={() => toggleArrayItem('weakSubjects', option.value)}
-                            emoji={option.emoji}
-                            label={option.label}
-                            small
-                        />
-                    ))}
-                </div>
-            );
-
-        case 'schedule':
-            return (
-                <div className="space-y-4">
-                    {[
-                        { value: 'morning', label: 'Morning (6am - 12pm)', desc: 'Start the day fresh', emoji: '🌅' },
-                        { value: 'afternoon', label: 'Afternoon (12pm - 6pm)', desc: 'Mid-day focus', emoji: '☀️' },
-                        { value: 'evening', label: 'Evening (6pm - 10pm)', desc: 'After school/work', emoji: '🌆' },
-                        { value: 'night', label: 'Night (10pm - 12am)', desc: 'Quiet study time', emoji: '🌙' }
-                    ].map(option => (
-                        <OptionCardHorizontal
-                            key={option.value}
-                            selected={formData.preferredTime === option.value}
-                            onClick={() => setFormData({ ...formData, preferredTime: option.value })}
-                            emoji={option.emoji}
-                            label={option.label}
-                            desc={option.desc}
-                        />
-                    ))}
-                </div>
-            );
-
-        case 'motivation':
-            return (
-                <div className="space-y-4">
-                    {[
-                        { value: 'achievement', label: 'Achievements & Badges', emoji: '🏆' },
-                        { value: 'progress', label: 'Seeing My Progress', emoji: '📊' },
-                        { value: 'competition', label: 'Friendly Competition', emoji: '🎯' },
-                        { value: 'knowledge', label: 'Love of Learning', emoji: '❤️' }
-                    ].map(option => (
-                        <OptionCardHorizontal
-                            key={option.value}
-                            selected={formData.motivation === option.value}
-                            onClick={() => setFormData({ ...formData, motivation: option.value })}
-                            emoji={option.emoji}
-                            label={option.label}
-                        />
-                    ))}
-                </div>
-            );
-
-        default:
-            return null;
-    }
-}
-
-// ============================================
-// HELPER COMPONENTS
-// ============================================
-const FeatureCard = ({ icon, title, desc }) => (
-    <div className="bg-gray-800/50 rounded-xl p-6 text-center">
-        <div className="text-4xl mb-2">{icon}</div>
-        <h3 className="text-white font-semibold mb-1">{title}</h3>
-        <p className="text-gray-400 text-sm">{desc}</p>
-    </div>
-);
-
-const OptionCard = ({ selected, onClick, emoji, label, desc }) => (
-    <motion.button
-        whileHover={{ scale: 1.02 }}
-        whileTap={{ scale: 0.98 }}
-        onClick={onClick}
-        className={`p-6 rounded-xl border-2 transition-all text-left ${
-            selected
-                ? 'border-indigo-500 bg-indigo-500/20'
-                : 'border-gray-700 bg-gray-800/50 hover:border-gray-600'
-        }`}
-    >
-        <div className="text-4xl mb-3">{emoji}</div>
-        <h3 className="text-white font-semibold mb-1">{label}</h3>
-        {desc && <p className="text-gray-400 text-sm">{desc}</p>}
-    </motion.button>
-);
-
-const OptionCardHorizontal = ({ selected, onClick, emoji, label, desc }) => (
-    <motion.button
-        whileHover={{ scale: 1.02 }}
-        whileTap={{ scale: 0.98 }}
-        onClick={onClick}
-        className={`p-4 rounded-xl border-2 transition-all flex items-center space-x-4 ${
-            selected
-                ? 'border-indigo-500 bg-indigo-500/20'
-                : 'border-gray-700 bg-gray-800/50 hover:border-gray-600'
-        }`}
-    >
-        <div className="text-3xl">{emoji}</div>
-        <div className="flex-1 text-left">
-            <h3 className="text-white font-semibold">{label}</h3>
-            {desc && <p className="text-gray-400 text-sm">{desc}</p>}
-        </div>
-    </motion.button>
-);
-
-const MultiSelectCard = ({ selected, onClick, emoji, label, small }) => (
-    <motion.button
-        whileHover={{ scale: 1.02 }}
-        whileTap={{ scale: 0.98 }}
-        onClick={onClick}
-        className={`p-4 rounded-xl border-2 transition-all ${
-            selected
-                ? 'border-indigo-500 bg-indigo-500/20'
-                : 'border-gray-700 bg-gray-800/50 hover:border-gray-600'
-        } ${small ? 'text-center' : ''}`}
-    >
-        <div className={`${small ? 'text-2xl' : 'text-3xl'} mb-2`}>{emoji}</div>
-        <h3 className="text-white font-semibold text-sm">{label}</h3>
-    </motion.button>
-);
 
 export default OnboardingFlow;

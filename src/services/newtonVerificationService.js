@@ -1,4 +1,6 @@
 // src/services/newtonVerificationService.js
+import { mathComparison } from './mathComparisonService';
+
 class NewtonVerificationService {
     constructor() {
         this.baseURL = 'https://newton.now.sh/api/v2';
@@ -20,20 +22,13 @@ class NewtonVerificationService {
 
             if (this.cache.has(cacheKey)) {
                 result = this.cache.get(cacheKey);
-                console.log('📦 Using cached Newton result');
             } else {
                 const cleanExpr = expression.replace(/\s+/g, '');
                 const url = `${this.baseURL}/${operation}/${encodeURIComponent(cleanExpr)}`;
 
                 console.log('🔄 Newton verify:', url);
 
-                const response = await fetch(url, {
-                    method: 'GET',
-                    headers: {
-                        'Accept': 'application/json'
-                    }
-                });
-
+                const response = await fetch(url);
                 if (!response.ok) {
                     throw new Error(`Newton API error: ${response.status}`);
                 }
@@ -41,57 +36,20 @@ class NewtonVerificationService {
                 const data = await response.json();
                 result = data.result;
                 this.cache.set(cacheKey, result);
-
-                console.log('✅ Newton result:', result);
             }
 
-            // Normalize for comparison
-            const normalize = (str) => {
-                return String(str)
-                    .toLowerCase()
-                    .replace(/\s+/g, '')
-                    .replace(/\+c$/i, '')
-                    .replace(/\*/g, '')
-                    .replace(/\^/g, '')
-                    .replace(/\(/g, '')
-                    .replace(/\)/g, '')
-                    .replace(/\[/g, '')
-                    .replace(/\]/g, '');
-            };
+            const newtonAnswer = operation === 'integrate' ? `${result} + C` : result;
+            const verified = operation === 'integrate'
+                ? mathComparison.compareIntegrals(userAnswer, newtonAnswer)
+                : mathComparison.compare(userAnswer, newtonAnswer);
 
-            const newtonNorm = normalize(result);
-            const userNorm = normalize(userAnswer);
-
-            // Check exact match
-            let verified = newtonNorm === userNorm;
-
-            // Check partial match
-            if (!verified) {
-                verified = newtonNorm.includes(userNorm) || userNorm.includes(newtonNorm);
-            }
-
-            // For integrals, check without +C
-            if (!verified && operation === 'integrate') {
-                const newtonWithoutC = newtonNorm.replace(/c$/i, '');
-                const userWithoutC = userNorm.replace(/c$/i, '');
-                verified = newtonWithoutC === userWithoutC;
-            }
-
-            console.log('🔍 Newton verification:', {
-                operation,
-                expression,
-                newtonAnswer: result,
-                userAnswer,
-                newtonNorm,
-                userNorm,
-                verified
-            });
+            console.log('🔍 Verification:', { userAnswer, newtonAnswer, verified });
 
             return {
                 verified: verified,
-                newtonAnswer: result,
+                newtonAnswer: newtonAnswer,
                 userAnswer: userAnswer,
-                message: verified ? '✅ Newton API confirms!' : '❌ Check your answer',
+                message: verified ? '✅ Newton API confirms: Correct!' : '❌ Check your answer',
                 useLocal: false
             };
         } catch (error) {
@@ -105,16 +63,10 @@ class NewtonVerificationService {
         }
     }
 
-    // Clear cache
     clearCache() {
         this.cache.clear();
-        console.log('🗑️ Newton cache cleared');
-    }
-
-    // Get cache size
-    getCacheSize() {
-        return this.cache.size;
     }
 }
 
 export const newtonVerification = new NewtonVerificationService();
+export default NewtonVerificationService;

@@ -1,15 +1,70 @@
-// server/routes/problems.js - ES Module Version
+// server/routes/problems.js - COMPLETE ROUTES
 import express from 'express';
-import db from '../db.js';
+import { getDatabase } from '../db.js';
 
 const router = express.Router();
 
-// Get random problems
+// GET /api/problems/health
+router.get('/health', async (req, res) => {
+    try {
+        const db = getDatabase();
+        const result = await db.get('SELECT COUNT(*) as count FROM problems');
+        const topics = await db.all('SELECT DISTINCT topic FROM problems');
+
+        res.json({
+            status: 'ok',
+            database: 'connected',
+            totalProblems: result.count,
+            availableTopics: topics.map(t => t.topic)
+        });
+    } catch (error) {
+        res.status(500).json({
+            status: 'error',
+            database: 'disconnected',
+            error: error.message
+        });
+    }
+});
+
+// GET /api/problems/stats
+router.get('/stats', async (req, res) => {
+    try {
+        const db = getDatabase();
+
+        const total = await db.get('SELECT COUNT(*) as count FROM problems');
+        const byTopic = await db.all('SELECT topic, COUNT(*) as count FROM problems GROUP BY topic');
+        const byDifficulty = await db.all('SELECT difficulty, COUNT(*) as count FROM problems GROUP BY difficulty');
+
+        const stats = {
+            total: total.count,
+            byTopic: {},
+            byDifficulty: {}
+        };
+
+        byTopic.forEach(row => {
+            stats.byTopic[row.topic] = row.count;
+        });
+
+        byDifficulty.forEach(row => {
+            stats.byDifficulty[row.difficulty] = row.count;
+        });
+
+        console.log('📊 Stats:', stats);
+        res.json(stats);
+
+    } catch (error) {
+        console.error('❌ Stats error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// GET /api/problems/random
 router.get('/random', async (req, res) => {
     try {
-        const { topic, level, count = 1 } = req.query;
+        const db = getDatabase();
+        const { topic, difficulty, count = 1 } = req.query;
 
-        let query = 'SELECT * FROM math_problems WHERE 1=1';
+        let query = 'SELECT * FROM problems WHERE 1=1';
         const params = [];
 
         if (topic) {
@@ -17,116 +72,139 @@ router.get('/random', async (req, res) => {
             params.push(topic);
         }
 
-        if (level) {
-            query += ' AND level = ?';
-            params.push(level);
+        if (difficulty) {
+            query += ' AND difficulty = ?';
+            params.push(parseInt(difficulty));
         }
 
         query += ' ORDER BY RANDOM() LIMIT ?';
         params.push(parseInt(count));
 
+        console.log('🔍 Random query:', { topic, difficulty, count });
         const problems = await db.all(query, params);
-
-        // Get steps and hints for each problem
-        for (let problem of problems) {
-            const steps = await db.all(
-                'SELECT * FROM problem_steps WHERE problem_id = ? ORDER BY step_number',
-                [problem.id]
-            );
-
-            const hints = await db.all(
-                'SELECT * FROM problem_hints WHERE problem_id = ? ORDER BY hint_number',
-                [problem.id]
-            );
-
-            problem.steps = steps;
-            problem.hints = hints;
-
-            // Update usage count
-            await db.run(
-                'UPDATE math_problems SET times_used = times_used + 1 WHERE id = ?',
-                [problem.id]
-            );
-        }
+        console.log(`✅ Found ${problems.length} problems`);
 
         res.json(problems);
+
     } catch (error) {
-        console.error('Error fetching problems:', error);
-        res.status(500).json({ error: 'Failed to fetch problems' });
+        console.error('❌ Random error:', error);
+        res.status(500).json({ error: error.message });
     }
 });
 
-// Get problem by ID
-router.get('/:id', async (req, res) => {
+// GET /api/problems/progressive
+router.get('/progressive', async (req, res) => {
     try {
-        const { id } = req.params;
+        const db = getDatabase();
+        const { topic, difficulties, count = 1 } = req.query;
 
-        const problem = await db.get(
-            'SELECT * FROM math_problems WHERE id = ?',
-            [id]
-        );
+        let query = 'SELECT * FROM problems WHERE 1=1';
+        const params = [];
 
-        if (!problem) {
-            return res.status(404).json({ error: 'Problem not found' });
+        if (topic) {
+            query += ' AND topic = ?';
+            params.push(topic);
         }
 
-        const steps = await db.all(
-            'SELECT * FROM problem_steps WHERE problem_id = ? ORDER BY step_number',
-            [id]
-        );
+        if (difficulties) {
+            const diffArray = difficulties.split(',').map(d => parseInt(d));
+            const placeholders = diffArray.map(() => '?').join(',');
+            query += ` AND difficulty IN (${placeholders})`;
+            params.push(...diffArray);
+        }
 
-        const hints = await db.all(
-            'SELECT * FROM problem_hints WHERE problem_id = ? ORDER BY hint_number',
-            [id]
-        );
+        query += ' ORDER BY RANDOM() LIMIT ?';
+        params.push(parseInt(count));
 
-        problem.steps = steps;
-        problem.hints = hints;
+        console.log('🔍 Progressive query:', { topic, difficulties, count });
+        const problems = await db.all(query, params);
+        console.log(`✅ Found ${problems.length} problems`);
 
-        res.json(problem);
+        res.json(problems);
+
     } catch (error) {
-        console.error('Error fetching problem:', error);
-        res.status(500).json({ error: 'Failed to fetch problem' });
+        console.error('❌ Progressive error:', error);
+        res.status(500).json({ error: error.message });
     }
 });
 
-// Get statistics
-router.get('/stats/topics', async (req, res) => {
+// GET /api/problems (basic query)
+router.get('/', async (req, res) => {
     try {
-        const stats = await db.all(`
-            SELECT
-                topic,
-                level,
-                COUNT(*) as count,
-                AVG(difficulty_score) as avg_difficulty,
-                SUM(times_used) as total_uses
-            FROM math_problems
-            GROUP BY topic, level
-            ORDER BY topic, level
+        const db = getDatabase();
+        const { topic, difficulty, limit = 10, offset = 0 } = req.query;
+
+        let query = 'SELECT * FROM problems WHERE 1=1';
+        const params = [];
+
+        if (topic) {
+            query += ' AND topic = ?';
+            params.push(topic);
+        }
+
+        if (difficulty) {
+            query += ' AND difficulty = ?';
+            params.push(parseInt(difficulty));
+        }
+
+        query += ' LIMIT ? OFFSET ?';
+        params.push(parseInt(limit), parseInt(offset));
+
+        const problems = await db.all(query, params);
+        console.log(`✅ Query returned ${problems.length} problems`);
+
+        res.json(problems);
+
+    } catch (error) {
+        console.error('❌ Query error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// POST /api/problems/bulk
+router.post('/bulk', async (req, res) => {
+    try {
+        const db = getDatabase();
+        const { problems } = req.body;
+
+        if (!problems || !Array.isArray(problems)) {
+            return res.status(400).json({ error: 'Invalid problems array' });
+        }
+
+        const insertStmt = await db.prepare(`
+            INSERT INTO problems (
+                question, answer, steps, hints, difficulty, 
+                topic, category, subcategory, grade, tier
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
 
-        res.json(stats);
+        let inserted = 0;
+        for (const problem of problems) {
+            try {
+                await insertStmt.run(
+                    problem.question,
+                    problem.answer,
+                    JSON.stringify(problem.steps || []),
+                    JSON.stringify(problem.hints || []),
+                    problem.difficulty,
+                    problem.topic,
+                    problem.category,
+                    problem.subcategory,
+                    problem.grade || '7-12',
+                    problem.tier || problem.difficulty
+                );
+                inserted++;
+            } catch (error) {
+                console.error('Insert error:', error.message);
+            }
+        }
+
+        await insertStmt.finalize();
+        res.json({ count: inserted, total: problems.length });
+
     } catch (error) {
-        console.error('Error fetching stats:', error);
-        res.status(500).json({ error: 'Failed to fetch statistics' });
-    }
-});
-
-// Record user attempt
-router.post('/attempt', async (req, res) => {
-    try {
-        const { userId, problemId, isCorrect, timeSpent, hintsUsed } = req.body;
-
-        await db.run(`
-            INSERT INTO user_problem_history
-                (user_id, problem_id, is_correct, time_spent, hints_used)
-            VALUES (?, ?, ?, ?, ?)
-        `, [userId, problemId, isCorrect ? 1 : 0, timeSpent, hintsUsed]);
-
-        res.json({ success: true });
-    } catch (error) {
-        console.error('Error recording attempt:', error);
-        res.status(500).json({ error: 'Failed to record attempt' });
+        console.error('❌ Bulk insert error:', error);
+        res.status(500).json({ error: error.message });
     }
 });
 

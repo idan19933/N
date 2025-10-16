@@ -1,4 +1,4 @@
-﻿// server/server.js - COMPLETE WITH ALL ENDPOINTS
+﻿// server/server.js - COMPLETE SINGLE FILE BACKEND
 import express from 'express';
 import cors from 'cors';
 import sqlite3 from 'sqlite3';
@@ -10,62 +10,102 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = 3001;
+let db = null;
 
+// Middleware
 app.use(cors());
 app.use(express.json());
 
-let db;
+// Initialize database
+async function initDatabase() {
+    db = await open({
+        filename: path.join(__dirname, '../database/nexon.db'),
+        driver: sqlite3.Database
+    });
 
-async function initializeDatabase() {
-    try {
-        db = await open({
-            filename: path.join(__dirname, '../database/mathtutor.db'),
-            driver: sqlite3.Database
-        });
-        console.log('✅ Database connected');
-        await db.run('PRAGMA foreign_keys = ON');
-        return db;
-    } catch (error) {
-        console.error('❌ Database error:', error);
-        throw error;
-    }
+    const count = await db.get('SELECT COUNT(*) as count FROM problems');
+    console.log(`✅ Database connected: ${count.count} problems`);
+    return db;
 }
 
-initializeDatabase();
+// ============== ROUTES ==============
 
+// Health check
 app.get('/api/health', (req, res) => {
-    res.json({ status: 'OK', database: db ? 'Connected' : 'Disconnected' });
+    res.json({ status: 'ok', message: 'Server is running' });
 });
 
+// Problems health
+app.get('/api/problems/health', async (req, res) => {
+    try {
+        const result = await db.get('SELECT COUNT(*) as count FROM problems');
+        const topics = await db.all('SELECT DISTINCT topic FROM problems');
+
+        res.json({
+            status: 'ok',
+            database: 'connected',
+            totalProblems: result.count,
+            availableTopics: topics.map(t => t.topic)
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get stats
+app.get('/api/problems/stats', async (req, res) => {
+    try {
+        const total = await db.get('SELECT COUNT(*) as count FROM problems');
+        const byTopic = await db.all('SELECT topic, COUNT(*) as count FROM problems GROUP BY topic');
+        const byDifficulty = await db.all('SELECT difficulty, COUNT(*) as count FROM problems GROUP BY difficulty');
+
+        const stats = {
+            total: total.count,
+            byTopic: {},
+            byDifficulty: {}
+        };
+
+        byTopic.forEach(row => {
+            stats.byTopic[row.topic] = row.count;
+        });
+
+        byDifficulty.forEach(row => {
+            stats.byDifficulty[row.difficulty] = row.count;
+        });
+
+        console.log('📊 Stats requested:', stats);
+        res.json(stats);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get random problems
 app.get('/api/problems/random', async (req, res) => {
     try {
-        const { topic, level, count = 1 } = req.query;
+        const { topic, difficulty, count = 1 } = req.query;
 
-        let query = 'SELECT * FROM math_problems';
+        let query = 'SELECT * FROM problems WHERE 1=1';
         const params = [];
-        const conditions = [];
 
         if (topic) {
-            conditions.push('topic = ?');
+            query += ' AND topic = ?';
             params.push(topic);
         }
 
-        if (level) {
-            conditions.push('level = ?');
-            params.push(level);
-        }
-
-        if (conditions.length > 0) {
-            query += ' WHERE ' + conditions.join(' AND ');
+        if (difficulty) {
+            query += ' AND difficulty = ?';
+            params.push(parseInt(difficulty));
         }
 
         query += ' ORDER BY RANDOM() LIMIT ?';
         params.push(parseInt(count));
 
+        console.log('🔍 Random query:', { topic, difficulty, count });
         const problems = await db.all(query, params);
+        console.log(`✅ Found ${problems.length} problems`);
 
-        console.log(`✅ Returned ${problems.length} problems`);
         res.json(problems);
     } catch (error) {
         console.error('❌ Error:', error);
@@ -73,64 +113,148 @@ app.get('/api/problems/random', async (req, res) => {
     }
 });
 
-app.post('/api/attempts', async (req, res) => {
+// Get progressive problems
+app.get('/api/problems/progressive', async (req, res) => {
     try {
-        const { user_id, problem_id, is_correct, time_spent, hints_used, steps } = req.body;
+        const { topic, difficulties, count = 1 } = req.query;
 
-        const result = await db.run(`
-            INSERT INTO attempts (user_id, problem_id, is_correct, time_spent, hints_used, steps, timestamp)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        `, [user_id, problem_id, is_correct ? 1 : 0, time_spent || 0, hints_used || 0, steps, new Date().toISOString()]);
+        let query = 'SELECT * FROM problems WHERE 1=1';
+        const params = [];
 
-        res.json({ id: result.lastID, message: 'Attempt recorded' });
+        if (topic) {
+            query += ' AND topic = ?';
+            params.push(topic);
+        }
+
+        if (difficulties) {
+            const diffArray = difficulties.split(',').map(d => parseInt(d));
+            const placeholders = diffArray.map(() => '?').join(',');
+            query += ` AND difficulty IN (${placeholders})`;
+            params.push(...diffArray);
+        }
+
+        query += ' ORDER BY RANDOM() LIMIT ?';
+        params.push(parseInt(count));
+
+        console.log('🔍 Progressive:', { topic, difficulties, count });
+        const problems = await db.all(query, params);
+        console.log(`✅ Found ${problems.length} problems`);
+
+        res.json(problems);
     } catch (error) {
         console.error('❌ Error:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
-app.get('/api/analytics/user/:userId', async (req, res) => {
+// Get all problems (with filters)
+app.get('/api/problems', async (req, res) => {
     try {
-        const { userId } = req.params;
+        const { topic, difficulty, limit = 10, offset = 0 } = req.query;
 
-        const stats = await db.get(`
-            SELECT 
-                COUNT(*) as total_attempts,
-                SUM(CASE WHEN is_correct = 1 THEN 1 ELSE 0 END) as correct_attempts,
-                ROUND(AVG(time_spent), 2) as avg_time,
-                ROUND(AVG(hints_used), 2) as avg_hints
-            FROM attempts WHERE user_id = ?
-        `, [userId]);
+        let query = 'SELECT * FROM problems WHERE 1=1';
+        const params = [];
 
-        const byTopic = await db.all(`
-            SELECT 
-                p.topic,
-                COUNT(*) as attempts,
-                SUM(CASE WHEN a.is_correct = 1 THEN 1 ELSE 0 END) as correct
-            FROM attempts a
-            JOIN math_problems p ON CAST(a.problem_id AS INTEGER) = p.id
-            WHERE a.user_id = ?
-            GROUP BY p.topic
-        `, [userId]);
+        if (topic) {
+            query += ' AND topic = ?';
+            params.push(topic);
+        }
 
-        res.json({ stats, byTopic });
+        if (difficulty) {
+            query += ' AND difficulty = ?';
+            params.push(parseInt(difficulty));
+        }
+
+        query += ' LIMIT ? OFFSET ?';
+        params.push(parseInt(limit), parseInt(offset));
+
+        const problems = await db.all(query, params);
+        console.log(`✅ Query: ${problems.length} problems`);
+
+        res.json(problems);
     } catch (error) {
-        console.error('❌ Error:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
-app.listen(PORT, () => {
-    console.log('='.repeat(50));
-    console.log('🚀 Math Tutor API Server');
-    console.log('='.repeat(50));
-    console.log(`📡 Port: ${PORT}`);
-    console.log(`🌐 URL: http://localhost:${PORT}`);
-    console.log('='.repeat(50));
+// Bulk insert
+app.post('/api/problems/bulk', async (req, res) => {
+    try {
+        const { problems } = req.body;
+
+        if (!problems || !Array.isArray(problems)) {
+            return res.status(400).json({ error: 'Invalid problems array' });
+        }
+
+        const insertStmt = await db.prepare(`
+            INSERT INTO problems (
+                question, answer, steps, hints, difficulty, 
+                topic, category, subcategory, grade, tier
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+
+        let inserted = 0;
+        for (const problem of problems) {
+            try {
+                await insertStmt.run(
+                    problem.question,
+                    problem.answer,
+                    JSON.stringify(problem.steps || []),
+                    JSON.stringify(problem.hints || []),
+                    problem.difficulty,
+                    problem.topic,
+                    problem.category,
+                    problem.subcategory,
+                    problem.grade || '7-12',
+                    problem.tier || problem.difficulty
+                );
+                inserted++;
+            } catch (error) {
+                console.error('Insert error:', error.message);
+            }
+        }
+
+        await insertStmt.finalize();
+        res.json({ count: inserted, total: problems.length });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
 });
 
-process.on('SIGINT', async () => {
-    console.log('\n🛑 Shutting down...');
-    if (db) await db.close();
-    process.exit(0);
+// 404 handler
+app.use((req, res) => {
+    console.log(`❌ 404: ${req.method} ${req.path}`);
+    res.status(404).json({
+        error: 'Not Found',
+        path: req.path,
+        availableRoutes: [
+            'GET /api/health',
+            'GET /api/problems/health',
+            'GET /api/problems/stats',
+            'GET /api/problems/random',
+            'GET /api/problems/progressive',
+            'GET /api/problems'
+        ]
+    });
 });
+
+// Start server
+async function start() {
+    try {
+        await initDatabase();
+
+        app.listen(PORT, () => {
+            console.log('\n' + '='.repeat(60));
+            console.log('🚀 NEXON BACKEND RUNNING!');
+            console.log('='.repeat(60));
+            console.log(`📍 URL: http://localhost:${PORT}`);
+            console.log(`📊 Test: http://localhost:${PORT}/api/problems/health`);
+            console.log('='.repeat(60) + '\n');
+        });
+    } catch (error) {
+        console.error('❌ Failed to start:', error);
+        process.exit(1);
+    }
+}
+
+start();
