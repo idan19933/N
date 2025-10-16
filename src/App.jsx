@@ -1,4 +1,4 @@
-// src/App.jsx - COMPLETE WITH PRACTICE ROUTE AND PROBLEM UPLOADER
+// src/App.jsx - CLEAN VERSION WITH AI UPLOADER
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
@@ -37,13 +37,13 @@ import ManageCurriculum from './pages/ManageCurriculum';
 import AddLesson from './pages/AddLesson';
 import AdminNotifications from './pages/AdminNotifications';
 import AdminProblemUploader from './pages/AdminProblemUploader';
+import AdminAIUploader from './pages/AdminAIUploader';
 
 function App() {
     const initAuth = useAuthStore(state => state.initAuth);
     const loading = useAuthStore(state => state.loading);
 
     useEffect(() => {
-        console.log('🚀 App: Initializing auth...');
         initAuth();
     }, [initAuth]);
 
@@ -58,14 +58,12 @@ function App() {
         );
     }
 
-    console.log('🎯 App: Rendering routes');
-
     return (
         <Router>
             <Toaster position="top-center" />
 
             <Routes>
-                {/* ✅ ONBOARDING - Outside Layout (fullscreen) */}
+                {/* ONBOARDING - Fullscreen */}
                 <Route
                     path="/onboarding"
                     element={
@@ -75,8 +73,9 @@ function App() {
                     }
                 />
 
-                {/* Regular Routes with Layout */}
+                {/* Routes with Layout */}
                 <Route path="/" element={<Layout />}>
+                    {/* Public Routes */}
                     <Route index element={<Home />} />
                     <Route path="courses" element={<Courses />} />
                     <Route path="courses/:id" element={<CourseDetail />} />
@@ -85,7 +84,7 @@ function App() {
                     <Route path="payment-success" element={<PaymentSuccess />} />
                     <Route path="payment-cancel" element={<PaymentCancel />} />
 
-                    {/* ✅ PROTECTED ROUTES */}
+                    {/* Protected User Routes */}
                     <Route
                         path="notifications"
                         element={
@@ -104,7 +103,6 @@ function App() {
                         }
                     />
 
-                    {/* ✅ AI PRACTICE CENTER */}
                     <Route
                         path="practice"
                         element={
@@ -114,7 +112,6 @@ function App() {
                         }
                     />
 
-                    {/* ✅ SMART DASHBOARD */}
                     <Route
                         path="dashboard"
                         element={
@@ -124,7 +121,6 @@ function App() {
                         }
                     />
 
-                    {/* ✅ DIRECT ACCESS TO USER DASHBOARD (for backwards compatibility) */}
                     <Route
                         path="user-dashboard"
                         element={
@@ -134,7 +130,7 @@ function App() {
                         }
                     />
 
-                    {/* ✅ ADMIN ROUTES */}
+                    {/* Admin Routes */}
                     <Route
                         path="admin"
                         element={
@@ -180,12 +176,21 @@ function App() {
                         }
                     />
 
-                    {/* ✅ NEW: PROBLEM UPLOADER ROUTE */}
                     <Route
                         path="admin/problems"
                         element={
                             <AdminRoute>
                                 <AdminProblemUploader />
+                            </AdminRoute>
+                        }
+                    />
+
+                    {/* AI UPLOADER - Main feature */}
+                    <Route
+                        path="admin/ai-upload"
+                        element={
+                            <AdminRoute>
+                                <AdminAIUploader />
                             </AdminRoute>
                         }
                     />
@@ -213,50 +218,27 @@ function App() {
     );
 }
 
-// ============================================
-// ✅ SMART DASHBOARD - Routes to correct page
-// ============================================
+// Smart Dashboard Component
 function SmartDashboard() {
-    console.log('╔═══════════════════════════════════════╗');
-    console.log('║  🎯 SMARTDASHBOARD RENDERING!!!      ║');
-    console.log('╚═══════════════════════════════════════╝');
-
     const navigate = useNavigate();
     const user = useAuthStore(state => state.user);
     const needsOnboarding = useAuthStore(state => state.needsOnboarding);
     const studentProfile = useAuthStore(state => state.studentProfile);
     const isAdmin = useAuthStore(state => state.isAdmin);
 
-    console.log('📊 SmartDashboard state:', {
-        userEmail: user?.email,
-        isAdmin,
-        needsOnboarding,
-        hasProfile: !!studentProfile,
-        profileOnboardingComplete: studentProfile?.onboardingCompleted
-    });
-
-    // Handle redirects with useEffect
     useEffect(() => {
-        console.log('🔄 SmartDashboard useEffect triggered');
-
         if (isAdmin) {
-            console.log('👑 Admin detected - navigating to /admin');
             navigate('/admin', { replace: true });
             return;
         }
 
         if (needsOnboarding) {
-            console.log('🎓 Needs onboarding - navigating to /onboarding');
             navigate('/onboarding', { replace: true });
             return;
         }
-
-        console.log('📍 Staying on dashboard - no redirect needed');
     }, [isAdmin, needsOnboarding, navigate]);
 
-    // Show loading while redirect is happening
     if (needsOnboarding) {
-        console.log('⏳ Showing loading state (redirecting to onboarding)');
         return (
             <div className="min-h-screen bg-gray-900 flex items-center justify-center">
                 <div className="text-center">
@@ -268,7 +250,6 @@ function SmartDashboard() {
     }
 
     if (isAdmin) {
-        console.log('⏳ Showing loading state (redirecting to admin)');
         return (
             <div className="min-h-screen bg-gray-900 flex items-center justify-center">
                 <div className="text-center">
@@ -279,14 +260,10 @@ function SmartDashboard() {
         );
     }
 
-    // Show personalized dashboard if has profile
     if (studentProfile && studentProfile.onboardingCompleted) {
-        console.log('✨ Rendering PersonalizedDashboard');
         return <PersonalizedDashboard />;
     }
 
-    // Default: existing dashboard
-    console.log('📚 Rendering UserDashboard (default)');
     return <UserDashboard />;
 }
 

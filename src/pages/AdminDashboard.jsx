@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, where } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import useAuthStore from '../store/authStore';
-import { Plus, Edit2, Trash2, Users, BookOpen, DollarSign, TrendingUp, Bell, Target, Ticket, Menu, X, Clock, Upload } from 'lucide-react';
+import { Plus, Edit2, Trash2, Users, BookOpen, DollarSign, TrendingUp, Bell, Target, Ticket, Menu, X, Clock, Upload, Brain } from 'lucide-react';
 import { formatPrice } from '../utils/currency';
 import { getSections, getLessons } from '../services/curriculumService';
 import toast from 'react-hot-toast';
@@ -367,6 +367,14 @@ const AdminDashboard = () => {
                         <Upload size={18} />
                         <span className="hidden lg:inline">בעיות</span>
                     </button>
+                    {/* ✨ NEW: AI UPLOADER BUTTON */}
+                    <button
+                        onClick={() => navigate('/admin/ai-upload')}
+                        className="px-3 lg:px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 flex items-center gap-2 transition-all shadow-lg text-sm"
+                    >
+                        <Brain size={18} />
+                        <span className="hidden lg:inline">AI העלאה</span>
+                    </button>
                     <button
                         onClick={() => navigate('/admin/codes')}
                         className="px-3 lg:px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2 transition-colors text-sm"
@@ -412,6 +420,14 @@ const AdminDashboard = () => {
                     >
                         <Upload size={20} />
                         בעיות מתמטיקה
+                    </button>
+                    {/* ✨ NEW: AI UPLOADER BUTTON (MOBILE) */}
+                    <button
+                        onClick={() => { navigate('/admin/ai-upload'); setShowMobileMenu(false); }}
+                        className="w-full px-4 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 flex items-center gap-2 transition-all shadow-lg"
+                    >
+                        <Brain size={20} />
+                        🤖 AI העלאה חכמה
                     </button>
                     <button
                         onClick={() => { navigate('/admin/codes'); setShowMobileMenu(false); }}
