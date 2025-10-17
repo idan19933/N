@@ -1,14 +1,61 @@
-// src/services/aiAnswerVerification.js - USES BACKEND PROXY
+// src/services/aiAnswerVerification.js - WITH BUILT-IN PRE-CHECK
 class AIAnswerVerification {
     constructor() {
         this.backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
         console.log('✅ AI Verification initialized with backend:', this.backendUrl);
     }
 
+    /**
+     * Quick pre-check before calling AI
+     */
+    quickExactMatch(userAnswer, correctAnswer) {
+        // Clean both answers
+        const cleanUser = String(userAnswer).trim().replace(/\s+/g, '').toLowerCase();
+        const cleanCorrect = String(correctAnswer).trim().replace(/\s+/g, '').toLowerCase();
+
+        // Exact string match
+        if (cleanUser === cleanCorrect) {
+            return { isMatch: true, confidence: 100 };
+        }
+
+        // Try numeric comparison
+        const userNum = parseFloat(cleanUser);
+        const correctNum = parseFloat(cleanCorrect);
+
+        if (!isNaN(userNum) && !isNaN(correctNum)) {
+            const diff = Math.abs(userNum - correctNum);
+            if (diff < 0.01) { // Allow tiny floating point errors
+                return { isMatch: true, confidence: 100 };
+            }
+        }
+
+        return { isMatch: false, confidence: 0 };
+    }
+
     async verifyAnswer(userAnswer, correctAnswer, question, context = {}) {
         try {
-            console.log('🤖 AI Verification via Backend:', { userAnswer, correctAnswer, question });
+            console.log('🤖 AI Verification:', { userAnswer, correctAnswer, question });
 
+            // ✅ STEP 1: Quick pre-check
+            console.log('🔍 Running pre-check...');
+            const preCheck = this.quickExactMatch(userAnswer, correctAnswer);
+
+            if (preCheck.isMatch) {
+                console.log('✅ Pre-check: Exact match found! Skipping AI call.');
+                return {
+                    isCorrect: true,
+                    confidence: 100,
+                    explanation: 'תשובה נכונה מושלמת! 🎉',
+                    note: null,
+                    mathematicalReasoning: `התשובה שלך (${userAnswer}) זהה לתשובה הנכונה (${correctAnswer})`,
+                    usedAI: false,
+                    method: 'pre_check'
+                };
+            }
+
+            console.log('⚠️ Pre-check: No exact match, calling AI...');
+
+            // ✅ STEP 2: Call backend AI verification
             const response = await fetch(`${this.backendUrl}/api/verify-answer`, {
                 method: 'POST',
                 headers: {
@@ -66,10 +113,10 @@ class AIAnswerVerification {
 
     async verifyWithFallback(userAnswer, correctAnswer, question, fallbackVerifier, context = {}) {
         try {
-            // Try AI verification via backend
+            // Try AI verification (with pre-check)
             const aiResult = await this.verifyAnswer(userAnswer, correctAnswer, question, context);
 
-            if (aiResult.usedAI) {
+            if (aiResult.usedAI || aiResult.method === 'pre_check') {
                 return aiResult;
             }
 

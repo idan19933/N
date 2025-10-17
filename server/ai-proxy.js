@@ -166,60 +166,57 @@ ${userAnswer}
 
 <expected_answer>
 ${correctAnswer}
-(WARNING: This might be WRONG! Don't trust it - solve the problem yourself!)
 </expected_answer>
 
-CRITICAL INSTRUCTIONS:
-1. DO NOT trust the expected_answer - it might be wrong!
-2. SOLVE the problem yourself step by step
-3. COMPARE your solution to the student's answer
-4. For equations: SUBSTITUTE the student's answer into the original equation and verify both sides are equal
-5. For quadratic equations: Check if all solutions are provided
-6. For calculations: Calculate the result yourself and compare
+CRITICAL INSTRUCTIONS - READ CAREFULLY:
+
+1. FIRST: Check if student_answer and expected_answer are IDENTICAL or numerically equal
+   - If "${userAnswer}" == "${correctAnswer}" → IMMEDIATELY return isCorrect: true
+   - If both are numbers and equal → IMMEDIATELY return isCorrect: true
+   - Don't overthink this!
+
+2. If they're NOT identical, then solve the problem yourself step by step
+
+3. IMPORTANT: The expected_answer might be WRONG - don't trust it blindly!
+
+4. For equations: SUBSTITUTE the student's answer into the original equation
+
+5. Be EXTREMELY careful with basic arithmetic:
+   - 15 - 4 + 4 = 15 (NOT 1!)
+   - 10 + 5 = 15
+   - 3 × 5 = 15
+   Double-check your calculations!
 
 EXAMPLES:
 
-Example 1 - Simple calculation:
+Example 1 - IDENTICAL ANSWERS:
+Question: Calculate 2x + 3 when x = 8
+Student: "19"
+Expected: "19"
+STOP HERE! They're identical!
+Return: {"isCorrect": true, "confidence": 100, "explanation": "תשובה נכונה מושלמת!"}
+
+Example 2 - Numeric equivalence:
+Question: What is 10 + 9?
+Student: "19"
+Expected: "19.0"
+These are numerically equal!
+Return: {"isCorrect": true, "confidence": 100, "explanation": "נכון!"}
+
+Example 3 - Need to verify:
 Question: Calculate 5 × 3 + 2
-Student: 15
-Your solution: 5 × 3 = 15, then 15 + 2 = 17
-Comparison: 15 ≠ 17
-Conclusion: Student forgot the +2
+Student: "15"
+Expected: "17"
+They're different - now I need to solve:
+5 × 3 = 15
+15 + 2 = 17
+Student is wrong (forgot the +2)
 Return: {"isCorrect": false, "confidence": 100, "explanation": "חישבת 5×3 נכון אבל שכחת להוסיף 2", "alternativeAnswer": "17"}
 
-Example 2 - Equation:
-Question: Solve 3x + 5 = 2x - 7
-Student: x = -12
-Your solution: 3x - 2x = -7 - 5 → x = -12
-Verification: Substitute x = -12 into original equation
-  Left: 3(-12) + 5 = -36 + 5 = -31
-  Right: 2(-12) - 7 = -24 - 7 = -31
-  Check: -31 = -31 ✅ Equal!
-Conclusion: Student is correct!
-Return: {"isCorrect": true, "confidence": 100, "explanation": "מעולה! פתרת נכון"}
+RETURN FORMAT (JSON only):
+{"isCorrect": true/false, "confidence": 95-100, "explanation": "הסבר בעברית", "mathematicalReasoning": "החישוב המלא", "alternativeAnswer": "תשובה נכונה או null"}
 
-Example 3 - Substitution:
-Question: Calculate 2x + 3 when x = 5
-Student: 13
-Your solution: 2(5) + 3 = 10 + 3 = 13
-Comparison: 13 = 13 ✅
-Conclusion: Correct!
-Return: {"isCorrect": true, "confidence": 100, "explanation": "פתרת נכון"}
-
-Example 4 - Square root addition (IMPORTANT):
-Question: Calculate √8 + √5
-Student: 3
-Your solution: √8 = 2√2 ≈ 2.83, √5 ≈ 2.24
-  √8 + √5 ≈ 5.07
-  Cannot simplify further! √a + √b ≠ √(a+b)
-Comparison: 3 ≠ 5.07
-Conclusion: Student is wrong
-Return: {"isCorrect": false, "confidence": 100, "explanation": "לא ניתן לחבר שורשים ככה! √8 + √5 = 2√2 + √5 (לא ניתן לפשט יותר)", "alternativeAnswer": "2√2 + √5 או בערך 5.07"}
-
-RETURN ONLY VALID JSON:
-{"isCorrect": true/false, "confidence": 95-100, "explanation": "הסבר קצר בעברית", "mathematicalReasoning": "כל החישוב המלא", "hint": "רמז או null", "alternativeAnswer": "תשובה נכונה או null"}
-
-Now verify the student's answer:`;
+Now verify the answer above:`;
 
         const response = await fetch(CLAUDE_API_URL, {
             method: 'POST',

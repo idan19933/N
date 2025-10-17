@@ -1,7 +1,7 @@
-// src/components/ai/MathTutor.jsx - COMPLETE WITH FIXES
+// src/components/ai/MathTutor.jsx - COMPLETE FINAL VERSION
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Brain, Check, RefreshCw, Loader, Zap, Lightbulb, X, Sparkles, MessageCircle } from 'lucide-react';
+import { Brain, Check, RefreshCw, Loader, Zap, Lightbulb, X, Sparkles, MessageCircle, TrendingUp } from 'lucide-react';
 import toast from 'react-hot-toast';
 import useAuthStore from '../../store/authStore';
 import { getAllGrades, getTopicsForGrade } from '../../config/gradeLevelsConfig';
@@ -31,14 +31,12 @@ const MathTutor = () => {
     const [liveCompliment, setLiveCompliment] = useState(null);
     const [showChat, setShowChat] = useState(false);
     const [chatContext, setChatContext] = useState(null);
+    const [weakTopics, setWeakTopics] = useState([]);
 
     const inputRefs = useRef([]);
     const feedbackTimeout = useRef(null);
 
     const compliments = {
-        typing: ['כיוון טוב!', 'ממשיך מצוין!', 'אתה בדרך!'],
-        progress: ['מתקדם יפה!', 'יש לך את זה!', 'כיוון נכון!', 'עוד קצת!'],
-        almost: ['כמעט שם!', 'קרוב מאוד!', 'עוד צעד קטן!', 'כמעט מושלם!'],
         correct: ['מעולה!', 'פצצה!', '🎉 מושלם!', 'גאון!', 'יפה מאוד!', 'כל הכבוד!'],
         final_correct: [
             `🎉 מדהים ${studentName}!`,
@@ -50,6 +48,38 @@ const MathTutor = () => {
         streak: ['🔥 רצף מטורף!', '⚡ לא עוצר!', '🚀 טס גבוה!', '💯 פרפקט!']
     };
 
+    // ✅ AUTO-LOAD grade from nexonProfile
+    useEffect(() => {
+        if (nexonProfile?.grade && !selectedGrade) {
+            const allGrades = getAllGrades();
+            const userGrade = allGrades.find(g => g.id === nexonProfile.grade);
+            if (userGrade) {
+                console.log('🎯 Auto-loading grade from profile:', userGrade.name);
+                setSelectedGrade(userGrade);
+            }
+        }
+    }, [nexonProfile, selectedGrade]);
+
+    // ✅ Get weak topics from profile
+    useEffect(() => {
+        if (nexonProfile?.topicMastery) {
+            const weak = Object.entries(nexonProfile.topicMastery)
+                .filter(([_, level]) => level === 'struggle' || level === 'needs-work')
+                .map(([topic]) => topic);
+            setWeakTopics(weak);
+            console.log('📊 Weak topics:', weak);
+        }
+    }, [nexonProfile]);
+
+    // ✅ AUTO-LOAD question when topic selected
+    useEffect(() => {
+        if (selectedGrade && selectedTopic && !currentQuestion && !loading) {
+            console.log('🎯 Auto-loading question for topic:', selectedTopic.name);
+            loadNewQuestion();
+        }
+    }, [selectedGrade, selectedTopic]);
+
+    // ✅ Update chat context
     useEffect(() => {
         if (currentQuestion) {
             const context = {
@@ -87,17 +117,12 @@ const MathTutor = () => {
         } catch (error) {
             console.error('❌ Error loading question:', error);
             toast.error('שגיאה בטעינת שאלה');
-            setCurrentQuestion({
-                question: '5 + 3 = ?',
-                answer: '8',
-                hints: ['חבר 5 ו-3'],
-                steps: ['5 + 3', '= 8']
-            });
         } finally {
             setLoading(false);
         }
     };
 
+    // ✅ ENHANCED LIVE FEEDBACK
     const provideLiveFeedback = (value, stepIndex) => {
         if (!value.trim() || !currentQuestion) return;
 
@@ -110,31 +135,43 @@ const MathTutor = () => {
                 const isFinalAnswer = stepIndex === steps.length - 1;
 
                 if (isFinalAnswer) {
-                    const verification = smartVerification.verifyAnswer(value, currentQuestion.answer);
+                    const quickCheck = smartVerification.verifyAnswer(value, currentQuestion.answer);
                     const newSteps = [...steps];
 
-                    // ⚠️ אל תציג מחמאות חזקות - רק feedback עדין
-                    if (verification.confidence > 70) {
+                    if (quickCheck.confidence > 90) {
                         newSteps[stepIndex].feedback = {
-                            message: 'ממשיך...',
-                            type: 'progress',
-                            emoji: '✏️'
+                            message: '🎯 נראה מצוין!',
+                            type: 'almost',
+                            emoji: '✨'
                         };
-                    } else if (verification.confidence > 40) {
+                        setLiveCompliment('כמעט מושלם! 🌟');
+                        setTimeout(() => setLiveCompliment(null), 2000);
+                    } else if (quickCheck.confidence > 70) {
                         newSteps[stepIndex].feedback = {
-                            message: 'כותב...',
+                            message: 'ממשיך טוב...',
+                            type: 'progress',
+                            emoji: '💪'
+                        };
+                    } else if (quickCheck.confidence > 40) {
+                        newSteps[stepIndex].feedback = {
+                            message: 'בדוק שוב...',
                             type: 'info',
-                            emoji: '💭'
+                            emoji: '🤔'
+                        };
+                    } else {
+                        newSteps[stepIndex].feedback = {
+                            message: 'נראה שיש טעות קטנה',
+                            type: 'warning',
+                            emoji: '⚠️'
                         };
                     }
 
                     setSteps(newSteps);
-                    // ❌ לא מציג liveCompliment כאן!
                 }
             } catch (error) {
                 console.error('Feedback error:', error);
             }
-        }, 800);
+        }, 600);
     };
 
     const handleStepChange = (index, value) => {
@@ -175,9 +212,7 @@ const MathTutor = () => {
             return;
         }
 
-        // ✅ נקה מחמאות קודמות לפני בדיקה
         setLiveCompliment(null);
-
         toast.loading('בודק תשובה עם AI...', { id: 'checking' });
 
         try {
@@ -196,13 +231,6 @@ const MathTutor = () => {
             toast.dismiss('checking');
             const isCorrect = verification.isCorrect;
 
-            console.log('🎯 Verification result:', {
-                isCorrect,
-                confidence: verification.confidence,
-                userAnswer: finalAnswer,
-                expectedAnswer: currentQuestion.answer
-            });
-
             setFinalResult({
                 isCorrect,
                 message: isCorrect ? getRandomItem(compliments.final_correct) : '❌ לא נכון, אבל תנסה שוב!',
@@ -211,7 +239,8 @@ const MathTutor = () => {
                 explanation: verification.mathematicalReasoning || verification.explanation || (currentQuestion.steps ? currentQuestion.steps.join(' → ') : null),
                 note: verification.note,
                 usedAI: verification.usedAI,
-                aiConfidence: verification.confidence
+                aiConfidence: verification.confidence,
+                method: verification.method
             });
 
             setShowFinalResult(true);
@@ -224,7 +253,6 @@ const MathTutor = () => {
             setScore(newScore);
 
             if (isCorrect) {
-                // ✅ רק אם נכון - הצג מחמאה ועבור הלאה
                 if (newScore.streak >= 3) {
                     setTimeout(() => {
                         toast.success(getRandomItem(compliments.streak), {
@@ -237,9 +265,7 @@ const MathTutor = () => {
                 }
                 setTimeout(() => loadNewQuestion(), 2500);
             } else {
-                // ❌ אם לא נכון - אל תעבור הלאה!
                 toast.error('נסה שוב! אתה יכול!');
-                // לא קורא ל-loadNewQuestion()
             }
 
         } catch (error) {
@@ -327,9 +353,12 @@ const MathTutor = () => {
         );
     }
 
-    // בחירת נושא
+    // בחירת נושא עם המלצות
     if (!selectedTopic) {
         const topics = getTopicsForGrade(selectedGrade.id);
+        const recommendedTopics = topics.filter(t => weakTopics.includes(t.name));
+        const otherTopics = topics.filter(t => !weakTopics.includes(t.name));
+
         return (
             <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 dark:from-gray-900 dark:to-gray-800 p-8" dir="rtl">
                 <div className="max-w-6xl mx-auto">
@@ -350,27 +379,63 @@ const MathTutor = () => {
                         </p>
                     </div>
 
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-6 mb-8">
-                        {topics.map(topic => (
-                            <motion.button
-                                key={topic.id}
-                                whileHover={{ scale: 1.05, y: -5 }}
-                                whileTap={{ scale: 0.95 }}
-                                onClick={() => {
-                                    setSelectedTopic(topic);
-                                    setTimeout(() => loadNewQuestion(), 100);
-                                }}
-                                className="p-8 bg-white dark:bg-gray-800 rounded-3xl border-3 border-gray-200 dark:border-gray-700 hover:border-purple-500 hover:shadow-2xl transition-all"
-                            >
-                                <div className="text-7xl mb-4">{topic.icon}</div>
-                                <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
-                                    {topic.name}
-                                </h3>
-                            </motion.button>
-                        ))}
-                    </div>
+                    {/* ✅ RECOMMENDED TOPICS */}
+                    {recommendedTopics.length > 0 && (
+                        <div className="mb-12">
+                            <div className="flex items-center gap-3 mb-6">
+                                <TrendingUp className="w-8 h-8 text-orange-500" />
+                                <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
+                                    מומלץ לך לתרגל 🎯
+                                </h2>
+                            </div>
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+                                {recommendedTopics.map(topic => (
+                                    <motion.button
+                                        key={topic.id}
+                                        whileHover={{ scale: 1.05, y: -5 }}
+                                        whileTap={{ scale: 0.95 }}
+                                        onClick={() => setSelectedTopic(topic)}
+                                        className="p-8 bg-gradient-to-br from-orange-100 to-red-100 dark:from-orange-900/30 dark:to-red-900/30 rounded-3xl border-4 border-orange-400 dark:border-orange-600 hover:border-orange-500 hover:shadow-2xl transition-all relative"
+                                    >
+                                        <div className="absolute top-3 right-3 px-3 py-1 bg-orange-500 text-white text-xs font-bold rounded-full">
+                                            מומלץ!
+                                        </div>
+                                        <div className="text-7xl mb-4">{topic.icon}</div>
+                                        <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
+                                            {topic.name}
+                                        </h3>
+                                    </motion.button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
-                    <div className="text-center">
+                    {/* OTHER TOPICS */}
+                    {otherTopics.length > 0 && (
+                        <div>
+                            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
+                                {recommendedTopics.length > 0 ? 'נושאים נוספים' : 'כל הנושאים'}
+                            </h2>
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+                                {otherTopics.map(topic => (
+                                    <motion.button
+                                        key={topic.id}
+                                        whileHover={{ scale: 1.05, y: -5 }}
+                                        whileTap={{ scale: 0.95 }}
+                                        onClick={() => setSelectedTopic(topic)}
+                                        className="p-8 bg-white dark:bg-gray-800 rounded-3xl border-3 border-gray-200 dark:border-gray-700 hover:border-purple-500 hover:shadow-2xl transition-all"
+                                    >
+                                        <div className="text-7xl mb-4">{topic.icon}</div>
+                                        <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
+                                            {topic.name}
+                                        </h3>
+                                    </motion.button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="text-center mt-12">
                         <label className="inline-flex items-center gap-3 bg-white dark:bg-gray-800 px-8 py-4 rounded-2xl shadow-xl cursor-pointer hover:shadow-2xl transition">
                             <input
                                 type="checkbox"
@@ -389,6 +454,7 @@ const MathTutor = () => {
         );
     }
 
+    // טעינת שאלה
     if (loading) {
         return (
             <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center">
@@ -400,17 +466,13 @@ const MathTutor = () => {
         );
     }
 
+    // אין שאלה
     if (!currentQuestion) {
         return (
             <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center">
                 <div className="text-center">
-                    <p className="text-xl text-gray-600 dark:text-gray-400 mb-4">אין שאלה זמינה</p>
-                    <button
-                        onClick={loadNewQuestion}
-                        className="px-6 py-3 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition"
-                    >
-                        טען שאלה
-                    </button>
+                    <Loader className="w-12 h-12 text-purple-600 animate-spin mx-auto mb-4" />
+                    <p className="text-lg text-gray-600 dark:text-gray-400">טוען שאלה...</p>
                 </div>
             </div>
         );
@@ -447,6 +509,7 @@ const MathTutor = () => {
                                 </div>
                             )}
 
+                            {/* ✅ כפתור עזרה */}
                             <motion.button
                                 whileHover={{ scale: 1.05 }}
                                 whileTap={{ scale: 0.95 }}
@@ -516,9 +579,10 @@ const MathTutor = () => {
                             <div key={index} className="flex items-start gap-3">
                                 <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-white shadow-lg ${
                                     step.isCorrect ? 'bg-green-500 scale-110' :
-                                        step.feedback?.type === 'almost' ? 'bg-orange-500' :
+                                        step.feedback?.type === 'almost' ? 'bg-green-400' :
                                             step.feedback?.type === 'progress' ? 'bg-blue-500' :
-                                                'bg-gray-400'
+                                                step.feedback?.type === 'warning' ? 'bg-orange-500' :
+                                                    'bg-gray-400'
                                 }`}>
                                     {step.isCorrect ? <Check className="w-7 h-7" /> : index + 1}
                                 </div>
@@ -540,9 +604,19 @@ const MathTutor = () => {
                                         <motion.div
                                             initial={{ opacity: 0, y: -10 }}
                                             animate={{ opacity: 1, y: 0 }}
-                                            className="mt-2 p-3 bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-300 rounded-xl"
+                                            className={`mt-2 p-3 rounded-xl border-2 ${
+                                                step.feedback.type === 'almost' ? 'bg-green-50 dark:bg-green-900/20 border-green-300' :
+                                                    step.feedback.type === 'progress' ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-300' :
+                                                        step.feedback.type === 'warning' ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-300' :
+                                                            'bg-gray-50 dark:bg-gray-800 border-gray-300'
+                                            }`}
                                         >
-                                            <div className="flex items-center gap-2 text-blue-800 dark:text-blue-300">
+                                            <div className={`flex items-center gap-2 ${
+                                                step.feedback.type === 'almost' ? 'text-green-800 dark:text-green-300' :
+                                                    step.feedback.type === 'progress' ? 'text-blue-800 dark:text-blue-300' :
+                                                        step.feedback.type === 'warning' ? 'text-orange-800 dark:text-orange-300' :
+                                                            'text-gray-800 dark:text-gray-300'
+                                            }`}>
                                                 <span className="text-2xl">{step.feedback.emoji}</span>
                                                 <span className="font-bold">{step.feedback.message}</span>
                                             </div>
@@ -621,6 +695,15 @@ const MathTutor = () => {
                                         <div><strong>התשובה שלך:</strong> {finalResult.userAnswer}</div>
                                         <div><strong>תשובה נכונה:</strong> {finalResult.correctAnswer}</div>
 
+                                        {finalResult.method === 'pre_check' && (
+                                            <div className="flex items-center gap-2 text-sm bg-green-100 dark:bg-green-900/30 px-3 py-2 rounded-lg">
+                                                <Zap className="w-4 h-4 text-green-600" />
+                                                <span className="text-green-700 dark:text-green-300">
+                                                    בדיקה מהירה - תשובה מדויקת! ⚡
+                                                </span>
+                                            </div>
+                                        )}
+
                                         {finalResult.usedAI && (
                                             <div className="flex items-center gap-2 text-sm bg-purple-100 dark:bg-purple-900/30 px-3 py-2 rounded-lg">
                                                 <Brain className="w-4 h-4 text-purple-600" />
@@ -696,7 +779,7 @@ const MathTutor = () => {
                 </div>
             </div>
 
-            {/* AI Chat Assistant */}
+            {/* ✅ AI Chat Assistant */}
             <AnimatePresence>
                 {showChat && chatContext && (
                     <motion.div
