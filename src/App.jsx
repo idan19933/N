@@ -1,4 +1,4 @@
-// src/App.jsx - CLEAN VERSION WITH AI UPLOADER
+// src/App.jsx - FIXED IMPORT PATH FOR MATH TUTOR
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
@@ -23,6 +23,7 @@ import PaymentCancel from './pages/PaymentCancel';
 
 // AI & Practice
 import Practice from './pages/Practice';
+import MathTutor from './components/ai/MathTutor';  // ✅ CORRECT PATH
 
 // Onboarding & Personalized
 import OnboardingFlow from './pages/OnboardingFlow';
@@ -112,6 +113,16 @@ function App() {
                         }
                     />
 
+                    {/* ✅ MATH TUTOR ROUTE - FROM components/ai */}
+                    <Route
+                        path="math-tutor"
+                        element={
+                            <PrivateRoute>
+                                <MathTutor />
+                            </PrivateRoute>
+                        }
+                    />
+
                     <Route
                         path="dashboard"
                         element={
@@ -185,7 +196,6 @@ function App() {
                         }
                     />
 
-                    {/* AI UPLOADER - Main feature */}
                     <Route
                         path="admin/ai-upload"
                         element={

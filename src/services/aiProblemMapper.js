@@ -1,57 +1,116 @@
-// src/services/aiProblemMapper.js - AI-Powered Intelligent Problem Mapper
+// src/services/aiProblemMapper.js - COMPLETE AI-POWERED MAPPER
 import Anthropic from '@anthropic-ai/sdk';
 
 class AIProblemMapper {
     constructor() {
-        // Initialize Claude client
-        this.client = new Anthropic({
-            apiKey: import.meta.env.VITE_CLAUDE_API_KEY,
-            dangerouslyAllowBrowser: true // For client-side usage
-        });
-
-        // Nexon system topics
-        this.nexonTopics = [
-            'algebra',
-            'geometry',
-            'functions',
-            'powers',
-            'calculus',
-            'trigonometry',
-            'statistics'
-        ];
-
-        // Model to use
-        this.model = 'claude-sonnet-4-5-20250929';
+        this.apiKey = import.meta.env.VITE_CLAUDE_API_KEY;
+        if (!this.apiKey) {
+            console.warn('⚠️ No Claude API key found');
+        }
+        this.client = this.apiKey ? new Anthropic({ apiKey: this.apiKey, dangerouslyAllowBrowser: true }) : null;
     }
 
     /**
-     * Main AI mapping function - intelligently converts any problem
+     * Main mapping function - Converts ANY format to Nexon format
      */
-    async mapToNexonFormat(externalProblem) {
+    async mapProblemsWithAI(rawProblems, progressCallback = null) {
+        if (!this.client) {
+            throw new Error('Claude API key not configured');
+        }
+
+        console.log('🤖 Starting AI mapping for', rawProblems.length, 'problems');
+
+        const systemPrompt = `You are an expert mathematics problem converter. Your job is to convert math problems from ANY format into a structured JSON format for an educational platform.
+
+CRITICAL INSTRUCTIONS:
+1. EXTRACT problems from the provided text/data - don't make them up
+2. SOLVE each problem correctly - verify your math
+3. Map topics to these EXACT categories ONLY: algebra, geometry, powers, calculus, functions, trigonometry, statistics
+4. Classify difficulty 1-7 (1=easiest, 7=hardest) based on complexity
+5. Generate 2-4 solution steps in Hebrew
+6. Create 1-2 helpful hints in Hebrew
+7. Translate questions to Hebrew if needed (keep English as secondary)
+
+REQUIRED OUTPUT FORMAT (JSON array):
+[
+  {
+    "question": "Hebrew question text (or English if Hebrew not possible)",
+    "answer": "Correct numerical or algebraic answer",
+    "steps": ["Step 1 in Hebrew", "Step 2 in Hebrew", ...],
+    "hints": ["Hint 1 in Hebrew", "Hint 2 in Hebrew"],
+    "topic": "one of: algebra|geometry|powers|calculus|functions|trigonometry|statistics",
+    "difficulty": 1-7,
+    "grade": "7-8" or "9-10" or "11-12",
+    "category": "specific category like 'linear equations', 'circles', etc",
+    "subcategory": "more specific like 'one variable', 'area', etc"
+  }
+]
+
+IMPORTANT:
+- Verify all answers are mathematically correct
+- Steps should be clear and logical
+- Difficulty should match the actual complexity
+- Use Hebrew for Israeli students
+- Return ONLY the JSON array, no extra text`;
+
         try {
-            console.log('🤖 AI analyzing problem...');
+            // Convert problems to text for AI
+            const problemsText = typeof rawProblems === 'string'
+                ? rawProblems
+                : JSON.stringify(rawProblems, null, 2);
 
-            // Build the AI prompt
-            const prompt = this.buildMappingPrompt(externalProblem);
+            console.log('📤 Sending to Claude API...');
 
-            // Call Claude AI
-            const response = await this.client.messages.create({
-                model: this.model,
-                max_tokens: 2000,
+            const message = await this.client.messages.create({
+                model: 'claude-sonnet-4-20250514',
+                max_tokens: 8000,
+                temperature: 0.3,
+                system: systemPrompt,
                 messages: [{
                     role: 'user',
-                    content: prompt
+                    content: `Convert these problems to the required format. Extract and solve each problem correctly:\n\n${problemsText.substring(0, 50000)}`
                 }]
             });
 
-            // Parse AI response
-            const aiResponse = response.content[0].text;
-            console.log('✅ AI response received');
+            const responseText = message.content[0].text;
+            console.log('📥 Received AI response');
 
             // Extract JSON from response
-            const mappedProblem = this.parseAIResponse(aiResponse, externalProblem);
+            const jsonMatch = responseText.match(/\[[\s\S]*\]/);
+            if (!jsonMatch) {
+                throw new Error('AI did not return valid JSON array');
+            }
 
-            return mappedProblem;
+            const mappedProblems = JSON.parse(jsonMatch[0]);
+            console.log('✅ AI mapped', mappedProblems.length, 'problems');
+
+            // Validate and enhance each problem
+            const validatedProblems = mappedProblems.map((problem, index) => {
+                return {
+                    question: problem.question || `Problem ${index + 1}`,
+                    answer: problem.answer || 'Unknown',
+                    steps: Array.isArray(problem.steps) ? problem.steps : [],
+                    hints: Array.isArray(problem.hints) ? problem.hints : [],
+                    difficulty: Math.min(Math.max(parseInt(problem.difficulty) || 3, 1), 7),
+                    topic: this.validateTopic(problem.topic),
+                    category: problem.category || problem.topic || 'general',
+                    subcategory: problem.subcategory || 'basic',
+                    grade: problem.grade || '7-12',
+                    tier: parseInt(problem.difficulty) || 3,
+                    source: 'ai_imported',
+                    hasAISteps: true
+                };
+            });
+
+            return {
+                mapped: validatedProblems,
+                errors: [],
+                stats: {
+                    total: validatedProblems.length,
+                    successRate: 100
+                }
+            };
+
         } catch (error) {
             console.error('❌ AI mapping error:', error);
             throw error;
@@ -59,230 +118,42 @@ class AIProblemMapper {
     }
 
     /**
-     * Build intelligent prompt for Claude
+     * Batch mapping with progress tracking
      */
-    buildMappingPrompt(problem) {
-        return `You are an expert mathematics educator helping to organize a problem database. Analyze this math problem and convert it to a structured format.
-
-**Input Problem:**
-${JSON.stringify(problem, null, 2)}
-
-**Your Task:**
-Analyze this problem and provide a JSON response with the following fields. Use your mathematical understanding to:
-
-1. **question**: Clean, well-formatted question text (keep original language, remove HTML/formatting)
-2. **answer**: The correct answer (simplified form, with units if applicable)
-3. **topic**: Choose EXACTLY ONE from: ${this.nexonTopics.join(', ')}
-   - Analyze the mathematical content to determine the best fit
-   - Consider what skills/knowledge are being tested
-4. **difficulty**: Rate 1-7 based on:
-   - Level 1-2: Basic arithmetic, simple concepts
-   - Level 3-4: Single-variable algebra, basic geometry
-   - Level 5: Multiple steps, systems, quadratics
-   - Level 6: Advanced algebra, trigonometry, introductory calculus
-   - Level 7: Complex calculus, proofs, multi-concept integration
-5. **steps**: Array of solution steps (3-6 steps, clear and pedagogical)
-6. **hints**: Array of 2-4 helpful hints (not giving away the answer)
-7. **subcategory**: Specific sub-topic (e.g., "linear equations", "area", "derivatives")
-8. **grade**: Appropriate grade level (e.g., "7-8", "9-10", "11-12")
-9. **category**: Same as topic (for compatibility)
-
-**Important Guidelines:**
-- Choose topic based on PRIMARY skill being tested, not peripherals
-- If problem involves f(x) notation, it's "functions" not "algebra"
-- Calculus keywords: derivative, integral, limit → "calculus"
-- sin/cos/tan problems → "trigonometry"
-- Area/perimeter/volume → "geometry"
-- Powers/exponents/roots → "powers"
-- Probability/statistics → "statistics"
-- Everything else → "algebra"
-- Steps should be clear enough for a student to follow
-- Hints should guide thinking, not solve the problem
-- Be precise with difficulty - consider multiple factors
-
-**Output Format:**
-Respond ONLY with valid JSON, no other text:
-
-\`\`\`json
-{
-  "question": "...",
-  "answer": "...",
-  "topic": "algebra",
-  "difficulty": 3,
-  "steps": ["step 1", "step 2", "step 3"],
-  "hints": ["hint 1", "hint 2"],
-  "subcategory": "...",
-  "grade": "8-10",
-  "category": "algebra"
-}
-\`\`\``;
-    }
-
-    /**
-     * Parse AI response and extract JSON
-     */
-    parseAIResponse(aiResponse, originalProblem) {
-        try {
-            // Extract JSON from markdown code blocks if present
-            let jsonText = aiResponse;
-
-            // Remove markdown code blocks
-            const jsonMatch = aiResponse.match(/```json\s*([\s\S]*?)\s*```/);
-            if (jsonMatch) {
-                jsonText = jsonMatch[1];
-            }
-
-            // Parse JSON
-            const parsed = JSON.parse(jsonText);
-
-            // Validate and add metadata
-            const validated = {
-                question: parsed.question || originalProblem.question || 'Mathematical problem',
-                answer: String(parsed.answer || originalProblem.answer || '0'),
-                topic: this.validateTopic(parsed.topic),
-                difficulty: this.validateDifficulty(parsed.difficulty),
-                steps: Array.isArray(parsed.steps) ? parsed.steps : [],
-                hints: Array.isArray(parsed.hints) ? parsed.hints : [],
-                subcategory: parsed.subcategory || 'general',
-                grade: parsed.grade || '7-12',
-                category: parsed.category || parsed.topic,
-                tier: parsed.difficulty,
-                source: 'ai-mapped',
-                original: originalProblem
-            };
-
-            return validated;
-        } catch (error) {
-            console.error('❌ Error parsing AI response:', error);
-            console.log('Raw response:', aiResponse);
-            throw new Error('Failed to parse AI response as JSON');
+    async mapBatchSmart(problems, chunkSize = 20, progressCallback = null) {
+        const chunks = [];
+        for (let i = 0; i < problems.length; i += chunkSize) {
+            chunks.push(problems.slice(i, i + chunkSize));
         }
-    }
-
-    /**
-     * Validate topic is one of allowed topics
-     */
-    validateTopic(topic) {
-        const normalized = String(topic).toLowerCase().trim();
-
-        if (this.nexonTopics.includes(normalized)) {
-            return normalized;
-        }
-
-        // Try fuzzy matching
-        for (const validTopic of this.nexonTopics) {
-            if (normalized.includes(validTopic) || validTopic.includes(normalized)) {
-                return validTopic;
-            }
-        }
-
-        // Default fallback
-        console.warn(`⚠️ Unknown topic "${topic}", defaulting to algebra`);
-        return 'algebra';
-    }
-
-    /**
-     * Validate difficulty is 1-7
-     */
-    validateDifficulty(difficulty) {
-        const num = parseInt(difficulty);
-
-        if (isNaN(num) || num < 1 || num > 7) {
-            console.warn(`⚠️ Invalid difficulty "${difficulty}", defaulting to 3`);
-            return 3;
-        }
-
-        return num;
-    }
-
-    /**
-     * Batch map multiple problems with AI
-     */
-    async mapBatch(problems, onProgress = null) {
-        console.log(`🤖 AI mapping ${problems.length} problems...`);
-
-        const mapped = [];
-        const errors = [];
-
-        for (let i = 0; i < problems.length; i++) {
-            try {
-                // Progress callback
-                if (onProgress) {
-                    onProgress({
-                        current: i + 1,
-                        total: problems.length,
-                        percent: Math.round(((i + 1) / problems.length) * 100)
-                    });
-                }
-
-                // Map with AI
-                const result = await this.mapToNexonFormat(problems[i]);
-                mapped.push(result);
-
-                console.log(`✅ Mapped ${i + 1}/${problems.length}: ${result.question.substring(0, 50)}...`);
-
-                // Small delay to avoid rate limits
-                await this.delay(500);
-
-            } catch (error) {
-                console.error(`❌ Failed to map problem ${i + 1}:`, error);
-                errors.push({
-                    index: i,
-                    problem: problems[i],
-                    error: error.message
-                });
-            }
-        }
-
-        console.log(`✅ AI Mapping complete: ${mapped.length} success, ${errors.length} errors`);
-
-        return {
-            mapped,
-            errors,
-            stats: {
-                total: problems.length,
-                success: mapped.length,
-                failed: errors.length,
-                successRate: Math.round((mapped.length / problems.length) * 100)
-            }
-        };
-    }
-
-    /**
-     * Batch map with smart chunking for large datasets
-     */
-    async mapBatchSmart(problems, chunkSize = 10, onProgress = null) {
-        console.log(`🤖 Smart batch mapping: ${problems.length} problems in chunks of ${chunkSize}`);
 
         const allMapped = [];
         const allErrors = [];
-        const chunks = this.chunkArray(problems, chunkSize);
 
         for (let i = 0; i < chunks.length; i++) {
             const chunk = chunks[i];
-            console.log(`\n📦 Processing chunk ${i + 1}/${chunks.length} (${chunk.length} problems)`);
 
-            // Map chunk
-            const result = await this.mapBatch(chunk, (chunkProgress) => {
-                if (onProgress) {
-                    const overallProgress = {
-                        chunk: i + 1,
-                        totalChunks: chunks.length,
-                        current: (i * chunkSize) + chunkProgress.current,
-                        total: problems.length,
-                        percent: Math.round((((i * chunkSize) + chunkProgress.current) / problems.length) * 100)
-                    };
-                    onProgress(overallProgress);
-                }
-            });
+            if (progressCallback) {
+                progressCallback({
+                    current: i * chunkSize + chunk.length,
+                    total: problems.length,
+                    percent: Math.round(((i + 1) / chunks.length) * 100)
+                });
+            }
 
-            allMapped.push(...result.mapped);
-            allErrors.push(...result.errors);
+            try {
+                const result = await this.mapProblemsWithAI(chunk);
+                allMapped.push(...result.mapped);
+            } catch (error) {
+                console.error(`Error mapping chunk ${i}:`, error);
+                allErrors.push({
+                    chunk: i,
+                    error: error.message
+                });
+            }
 
-            // Longer delay between chunks
+            // Rate limiting - wait between chunks
             if (i < chunks.length - 1) {
-                console.log('⏳ Waiting before next chunk...');
-                await this.delay(2000);
+                await new Promise(resolve => setTimeout(resolve, 1000));
             }
         }
 
@@ -291,149 +162,47 @@ Respond ONLY with valid JSON, no other text:
             errors: allErrors,
             stats: {
                 total: problems.length,
-                success: allMapped.length,
+                successful: allMapped.length,
                 failed: allErrors.length,
                 successRate: Math.round((allMapped.length / problems.length) * 100)
             }
         };
     }
 
-    /**
-     * Analyze and improve existing problem
-     */
-    async improveProblem(problem) {
-        try {
-            console.log('🔍 AI analyzing problem for improvements...');
+    validateTopic(topic) {
+        const validTopics = ['algebra', 'geometry', 'powers', 'calculus', 'functions', 'trigonometry', 'statistics'];
+        const normalized = (topic || '').toLowerCase().trim();
 
-            const prompt = `You are a mathematics educator reviewing a problem for quality. Analyze this problem and suggest improvements.
+        // Direct match
+        if (validTopics.includes(normalized)) return normalized;
 
-**Current Problem:**
-${JSON.stringify(problem, null, 2)}
+        // Fuzzy matching
+        if (normalized.includes('alg')) return 'algebra';
+        if (normalized.includes('geo')) return 'geometry';
+        if (normalized.includes('pow') || normalized.includes('exp')) return 'powers';
+        if (normalized.includes('calc') || normalized.includes('deriv')) return 'calculus';
+        if (normalized.includes('func')) return 'functions';
+        if (normalized.includes('trig') || normalized.includes('sin') || normalized.includes('cos')) return 'trigonometry';
+        if (normalized.includes('stat') || normalized.includes('prob')) return 'statistics';
 
-**Your Task:**
-Review and improve:
-1. Question clarity - Is it clear and unambiguous?
-2. Answer format - Is it in the simplest form?
-3. Steps - Are they pedagogically sound and complete?
-4. Hints - Are they helpful without giving away the answer?
-5. Difficulty - Is it accurately rated?
-6. Topic - Is it correctly categorized?
-
-Provide an improved version in JSON format.`;
-
-            const response = await this.client.messages.create({
-                model: this.model,
-                max_tokens: 2000,
-                messages: [{
-                    role: 'user',
-                    content: prompt
-                }]
-            });
-
-            const improved = this.parseAIResponse(response.content[0].text, problem);
-            console.log('✅ Problem improved by AI');
-
-            return improved;
-        } catch (error) {
-            console.error('❌ Error improving problem:', error);
-            return problem; // Return original if improvement fails
-        }
+        return 'algebra'; // Default fallback
     }
 
-    /**
-     * Generate similar problems based on a template
-     */
-    async generateSimilarProblems(templateProblem, count = 5) {
-        try {
-            console.log(`🎲 AI generating ${count} similar problems...`);
-
-            const prompt = `You are a mathematics educator creating practice problems. Generate ${count} similar problems based on this template, varying the numbers and context but keeping the same difficulty and concept.
-
-**Template Problem:**
-${JSON.stringify(templateProblem, null, 2)}
-
-**Your Task:**
-Generate ${count} unique variations that:
-- Test the same mathematical concept
-- Have the same difficulty level
-- Use different numbers/values
-- Have different contexts where applicable
-- Include complete solutions (steps and hints)
-
-Respond with a JSON array of problems.`;
-
-            const response = await this.client.messages.create({
-                model: this.model,
-                max_tokens: 4000,
-                messages: [{
-                    role: 'user',
-                    content: prompt
-                }]
-            });
-
-            const aiResponse = response.content[0].text;
-            const jsonMatch = aiResponse.match(/```json\s*([\s\S]*?)\s*```/) ||
-                aiResponse.match(/\[[\s\S]*\]/);
-
-            if (jsonMatch) {
-                const problems = JSON.parse(jsonMatch[0].replace(/```json|```/g, ''));
-                console.log(`✅ Generated ${problems.length} similar problems`);
-                return problems;
-            }
-
-            throw new Error('Failed to parse generated problems');
-        } catch (error) {
-            console.error('❌ Error generating problems:', error);
-            return [];
-        }
-    }
-
-    /**
-     * Utility: Delay function
-     */
-    delay(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
-    }
-
-    /**
-     * Utility: Chunk array
-     */
-    chunkArray(array, size) {
-        const chunks = [];
-        for (let i = 0; i < array.length; i += size) {
-            chunks.push(array.slice(i, i + size));
-        }
-        return chunks;
-    }
-
-    /**
-     * Get difficulty distribution
-     */
     getDifficultyDistribution(problems) {
-        const dist = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0 };
-
+        const dist = {};
         problems.forEach(p => {
-            const diff = p.difficulty || 3;
-            dist[diff]++;
+            dist[p.difficulty] = (dist[p.difficulty] || 0) + 1;
         });
-
         return dist;
     }
 
-    /**
-     * Get topic distribution
-     */
     getTopicDistribution(problems) {
         const dist = {};
-
         problems.forEach(p => {
-            const topic = p.topic || 'unknown';
-            dist[topic] = (dist[topic] || 0) + 1;
+            dist[p.topic] = (dist[p.topic] || 0) + 1;
         });
-
         return dist;
     }
 }
 
 export const aiProblemMapper = new AIProblemMapper();
-export default AIProblemMapper;

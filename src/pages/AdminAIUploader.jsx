@@ -1,8 +1,8 @@
-// src/pages/AdminAIUploader.jsx - AI-Powered Intelligent Problem Importer
+// src/pages/AdminAIUploader.jsx - COMPLETE AI-POWERED UPLOADER
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Brain, Upload, Download, CheckCircle, AlertCircle, Sparkles, Loader, FileText, Github, Globe, Zap, TrendingUp, BarChart } from 'lucide-react';
-import { flexibleProblemFetcher } from '../services/flexibleProblemFetcher';
+import { motion } from 'framer-motion';
+import { Brain, Upload, Download, CheckCircle, AlertCircle, Sparkles, Loader, FileText, Globe, Zap, BarChart } from 'lucide-react';
+import { universalFetcher } from '../services/universalProblemFetcher';
 import { aiProblemMapper } from '../services/aiProblemMapper';
 import { problemDatabase } from '../services/problemDatabase';
 import toast from 'react-hot-toast';
@@ -11,9 +11,6 @@ const AdminAIUploader = () => {
     // Source configuration
     const [sourceType, setSourceType] = useState('url');
     const [sourceUrl, setSourceUrl] = useState('');
-    const [githubOwner, setGithubOwner] = useState('');
-    const [githubRepo, setGithubRepo] = useState('');
-    const [githubPath, setGithubPath] = useState('');
     const [textInput, setTextInput] = useState('');
 
     // Processing state
@@ -22,7 +19,7 @@ const AdminAIUploader = () => {
     const [uploading, setUploading] = useState(false);
 
     // Data state
-    const [fetchedProblems, setFetchedProblems] = useState([]);
+    const [fetchedData, setFetchedData] = useState(null);
     const [mappedProblems, setMappedProblems] = useState([]);
     const [uploadResult, setUploadResult] = useState(null);
 
@@ -32,28 +29,19 @@ const AdminAIUploader = () => {
     const [stats, setStats] = useState(null);
     const [errors, setErrors] = useState([]);
 
-    // Step 1: Fetch problems
+    // Check if API key is configured
+    const hasAPIKey = !!import.meta.env.VITE_CLAUDE_API_KEY;
+
+    // Step 1: Fetch raw data
     const handleFetch = async () => {
         setFetching(true);
-        setFetchedProblems([]);
+        setFetchedData(null);
         setErrors([]);
 
         try {
             let source = {};
 
-            if (sourceType === 'github') {
-                if (!githubOwner || !githubRepo || !githubPath) {
-                    toast.error('Please fill all GitHub fields');
-                    setFetching(false);
-                    return;
-                }
-                source = {
-                    type: 'github',
-                    owner: githubOwner,
-                    repo: githubRepo,
-                    path: githubPath
-                };
-            } else if (sourceType === 'text') {
+            if (sourceType === 'text') {
                 if (!textInput.trim()) {
                     toast.error('Please enter some text');
                     setFetching(false);
@@ -76,15 +64,12 @@ const AdminAIUploader = () => {
             }
 
             console.log('🌐 Fetching from source:', source);
-            const problems = await flexibleProblemFetcher.fetch(source);
+            const data = await universalFetcher.fetch(source);
 
-            if (problems.length === 0) {
-                toast.error('No problems found');
-            } else {
-                setFetchedProblems(problems);
-                setPreview(problems[0]);
-                toast.success(`✅ Fetched ${problems.length} problems!`);
-            }
+            setFetchedData(data);
+            setPreview({ raw: JSON.stringify(data[0], null, 2).substring(0, 500) });
+            toast.success(`✅ Fetched data successfully!`);
+
         } catch (error) {
             console.error('❌ Fetch error:', error);
             toast.error('Failed to fetch: ' + error.message);
@@ -103,10 +88,8 @@ const AdminAIUploader = () => {
         try {
             console.log('🤖 Starting AI mapping...');
 
-            // Use smart batch mapping
-            const result = await aiProblemMapper.mapBatchSmart(
-                fetchedProblems,
-                10, // Chunk size
+            const result = await aiProblemMapper.mapProblemsWithAI(
+                fetchedData,
                 (progressInfo) => {
                     setProgress(progressInfo);
                 }
@@ -147,10 +130,25 @@ const AdminAIUploader = () => {
 
         try {
             console.log('⬆️ Uploading to database...');
-            const result = await problemDatabase.bulkAddProblems(mappedProblems);
 
+            // Format for database
+            const formattedProblems = mappedProblems.map(p => ({
+                question: p.question,
+                answer: p.answer,
+                steps: JSON.stringify(p.steps),
+                hints: JSON.stringify(p.hints),
+                difficulty: p.difficulty,
+                topic: p.topic,
+                category: p.category,
+                subcategory: p.subcategory,
+                grade: p.grade,
+                tier: p.tier
+            }));
+
+            const result = await problemDatabase.bulkAddProblems(formattedProblems);
             setUploadResult(result);
-            toast.success(`🎉 Uploaded ${result.count} problems!`);
+            toast.success(`🎉 Uploaded ${result.count || mappedProblems.length} problems!`);
+
         } catch (error) {
             console.error('❌ Upload error:', error);
             toast.error('Failed to upload: ' + error.message);
@@ -159,9 +157,6 @@ const AdminAIUploader = () => {
             setUploading(false);
         }
     };
-
-    // Check if API key is configured
-    const hasAPIKey = !!import.meta.env.VITE_CLAUDE_API_KEY;
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 dark:from-gray-900 dark:via-purple-900 dark:to-gray-900 p-6">
@@ -182,7 +177,7 @@ const AdminAIUploader = () => {
                                 AI Problem Importer
                             </h1>
                             <p className="text-gray-600 dark:text-gray-400 text-lg">
-                                Powered by Claude AI • Understands Any Format • Smart Mapping
+                                Powered by Claude AI • Understands Any Format • Zero Hardcoding
                             </p>
                         </div>
                         <div className="flex items-center gap-3">
@@ -206,14 +201,8 @@ const AdminAIUploader = () => {
                                     API Key Required
                                 </h3>
                                 <p className="text-red-800 dark:text-red-200 mb-3">
-                                    To use AI-powered mapping, you need a Claude API key.
+                                    Add VITE_CLAUDE_API_KEY to your .env file and restart the server.
                                 </p>
-                                <ol className="list-decimal list-inside space-y-2 text-sm text-red-700 dark:text-red-300">
-                                    <li>Go to <a href="https://console.anthropic.com" target="_blank" className="underline">console.anthropic.com</a></li>
-                                    <li>Get your API key</li>
-                                    <li>Add to <code className="bg-red-100 dark:bg-red-900 px-2 py-1 rounded">.env</code> file: <code className="bg-red-100 dark:bg-red-900 px-2 py-1 rounded">VITE_CLAUDE_API_KEY=your_key_here</code></li>
-                                    <li>Restart your development server</li>
-                                </ol>
                             </div>
                         </div>
                     </motion.div>
@@ -234,10 +223,9 @@ const AdminAIUploader = () => {
                                 1. Select Source
                             </h2>
 
-                            <div className="grid grid-cols-3 gap-3">
+                            <div className="grid grid-cols-2 gap-3">
                                 {[
                                     { value: 'url', icon: Globe, label: 'URL' },
-                                    { value: 'github', icon: Github, label: 'GitHub' },
                                     { value: 'text', icon: FileText, label: 'Text' }
                                 ].map((type) => (
                                     <button
@@ -265,39 +253,15 @@ const AdminAIUploader = () => {
                         >
                             <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
                                 <Download className="w-6 h-6 text-blue-500" />
-                                2. Configure & Fetch
+                                2. Fetch Data
                             </h2>
 
-                            {sourceType === 'github' ? (
-                                <div className="space-y-4">
-                                    <input
-                                        type="text"
-                                        value={githubOwner}
-                                        onChange={(e) => setGithubOwner(e.target.value)}
-                                        placeholder="Repository Owner (e.g., openstax)"
-                                        className="w-full px-4 py-3 border-2 rounded-xl dark:bg-gray-700 dark:border-gray-600"
-                                    />
-                                    <input
-                                        type="text"
-                                        value={githubRepo}
-                                        onChange={(e) => setGithubRepo(e.target.value)}
-                                        placeholder="Repository Name (e.g., math-exercises)"
-                                        className="w-full px-4 py-3 border-2 rounded-xl dark:bg-gray-700 dark:border-gray-600"
-                                    />
-                                    <input
-                                        type="text"
-                                        value={githubPath}
-                                        onChange={(e) => setGithubPath(e.target.value)}
-                                        placeholder="File Path (e.g., problems.json)"
-                                        className="w-full px-4 py-3 border-2 rounded-xl dark:bg-gray-700 dark:border-gray-600"
-                                    />
-                                </div>
-                            ) : sourceType === 'text' ? (
+                            {sourceType === 'text' ? (
                                 <textarea
                                     value={textInput}
                                     onChange={(e) => setTextInput(e.target.value)}
-                                    placeholder="Paste problems here in any format... AI will extract them!"
-                                    rows={8}
+                                    placeholder="Paste math problems here in ANY format... AI will extract and solve them!"
+                                    rows={10}
                                     className="w-full px-4 py-3 border-2 rounded-xl dark:bg-gray-700 dark:border-gray-600 font-mono text-sm"
                                 />
                             ) : (
@@ -305,7 +269,7 @@ const AdminAIUploader = () => {
                                     type="text"
                                     value={sourceUrl}
                                     onChange={(e) => setSourceUrl(e.target.value)}
-                                    placeholder="https://example.com/problems.json (any format!)"
+                                    placeholder="https://example.com/problems.json or .txt or .csv"
                                     className="w-full px-4 py-3 border-2 rounded-xl dark:bg-gray-700 dark:border-gray-600"
                                 />
                             )}
@@ -323,14 +287,14 @@ const AdminAIUploader = () => {
                                 ) : (
                                     <>
                                         <Download className="w-6 h-6" />
-                                        Fetch Problems
+                                        Fetch Data
                                     </>
                                 )}
                             </button>
                         </motion.div>
 
                         {/* AI Mapping */}
-                        {fetchedProblems.length > 0 && (
+                        {fetchedData && (
                             <motion.div
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
@@ -340,6 +304,20 @@ const AdminAIUploader = () => {
                                     <Brain className="w-6 h-6 text-purple-600" />
                                     3. AI Mapping
                                 </h2>
+
+                                <div className="mb-4 p-4 bg-white dark:bg-gray-800 rounded-xl">
+                                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                                        <strong>What AI will do:</strong>
+                                    </p>
+                                    <ul className="text-xs space-y-1 text-gray-600 dark:text-gray-400 list-disc list-inside">
+                                        <li>Extract all math problems from the data</li>
+                                        <li>Solve each problem and verify answers</li>
+                                        <li>Generate solution steps in Hebrew</li>
+                                        <li>Create helpful hints</li>
+                                        <li>Classify difficulty (1-7)</li>
+                                        <li>Map to topics: algebra, geometry, calculus, etc.</li>
+                                    </ul>
+                                </div>
 
                                 <button
                                     onClick={handleAIMap}
@@ -354,7 +332,7 @@ const AdminAIUploader = () => {
                                     ) : (
                                         <>
                                             <Sparkles className="w-6 h-6" />
-                                            Map with AI ({fetchedProblems.length} problems)
+                                            Map with AI
                                         </>
                                     )}
                                 </button>
@@ -419,7 +397,7 @@ const AdminAIUploader = () => {
                             className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6"
                         >
                             <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-                                <TrendingUp className="w-6 h-6" />
+                                <BarChart className="w-6 h-6" />
                                 Status
                             </h3>
 
@@ -427,7 +405,7 @@ const AdminAIUploader = () => {
                                 <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl">
                                     <span className="font-medium">Fetched</span>
                                     <span className="text-2xl font-bold text-blue-600">
-                                        {fetchedProblems.length}
+                                        {fetchedData ? '✓' : '—'}
                                     </span>
                                 </div>
                                 <div className="flex items-center justify-between p-3 bg-purple-50 dark:bg-purple-900/20 rounded-xl">
@@ -440,7 +418,7 @@ const AdminAIUploader = () => {
                                     <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-900/20 rounded-xl">
                                         <span className="font-medium">Uploaded</span>
                                         <span className="text-2xl font-bold text-green-600">
-                                            {uploadResult.count}
+                                            {uploadResult.count || mappedProblems.length}
                                         </span>
                                     </div>
                                 )}
@@ -466,32 +444,44 @@ const AdminAIUploader = () => {
                                 <h3 className="text-xl font-bold mb-4">Preview</h3>
 
                                 <div className="space-y-3 text-sm">
-                                    <div>
-                                        <div className="font-semibold text-gray-600 dark:text-gray-400 mb-1">Question:</div>
-                                        <div className="p-2 bg-gray-50 dark:bg-gray-700 rounded">
-                                            {preview.question?.substring(0, 150)}...
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <div className="font-semibold text-gray-600 dark:text-gray-400 mb-1">Answer:</div>
-                                        <div className="p-2 bg-gray-50 dark:bg-gray-700 rounded">
-                                            {preview.answer}
-                                        </div>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <div>
-                                            <div className="font-semibold text-gray-600 dark:text-gray-400 mb-1">Topic:</div>
-                                            <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded">
-                                                {preview.topic}
+                                    {preview.question && (
+                                        <>
+                                            <div>
+                                                <div className="font-semibold text-gray-600 dark:text-gray-400 mb-1">Question:</div>
+                                                <div className="p-2 bg-gray-50 dark:bg-gray-700 rounded">
+                                                    {preview.question?.substring(0, 150)}
+                                                </div>
                                             </div>
-                                        </div>
-                                        <div>
-                                            <div className="font-semibold text-gray-600 dark:text-gray-400 mb-1">Difficulty:</div>
-                                            <div className="p-2 bg-purple-50 dark:bg-purple-900/20 rounded">
-                                                Level {preview.difficulty || '?'}
+                                            <div>
+                                                <div className="font-semibold text-gray-600 dark:text-gray-400 mb-1">Answer:</div>
+                                                <div className="p-2 bg-gray-50 dark:bg-gray-700 rounded">
+                                                    {preview.answer}
+                                                </div>
                                             </div>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div>
+                                                    <div className="font-semibold text-gray-600 dark:text-gray-400 mb-1">Topic:</div>
+                                                    <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded">
+                                                        {preview.topic}
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <div className="font-semibold text-gray-600 dark:text-gray-400 mb-1">Difficulty:</div>
+                                                    <div className="p-2 bg-purple-50 dark:bg-purple-900/20 rounded">
+                                                        Level {preview.difficulty || '?'}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+                                    {preview.raw && (
+                                        <div>
+                                            <div className="font-semibold text-gray-600 dark:text-gray-400 mb-1">Raw Data:</div>
+                                            <pre className="p-2 bg-gray-50 dark:bg-gray-700 rounded text-xs overflow-auto max-h-48">
+                                                {preview.raw}
+                                            </pre>
                                         </div>
-                                    </div>
+                                    )}
                                 </div>
                             </motion.div>
                         )}

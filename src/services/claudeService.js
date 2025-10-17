@@ -1,134 +1,178 @@
-// src/services/claudeService.js - CLAUDE AI INTEGRATION
+// src/services/claudeService.js - Using Backend Proxy
 class ClaudeService {
     constructor() {
-        this.apiKey = import.meta.env.VITE_CLAUDE_API_KEY;
-        this.apiURL = 'https://api.anthropic.com/v1/messages';
-        this.model = 'claude-3-5-sonnet-20241022';
+        // ✅ השתמש ב-Backend Proxy במקום קריאה ישירה
+        this.proxyURL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+        console.log('🤖 Claude Service initialized (via proxy):', this.proxyURL);
     }
 
-    // Generate intelligent hint
+    // ✨ Chat method for conversation (via backend proxy)
+    async chat(messages, options = {}) {
+        try {
+            console.log('📤 Sending chat to backend proxy...');
+
+            // שליחה ל-/api/ai-help endpoint
+            const lastUserMessage = messages.findLast(m => m.role === 'user');
+            const systemMessage = messages.find(m => m.role === 'system');
+
+            if (!lastUserMessage) {
+                throw new Error('No user message found');
+            }
+
+            // בניית הפרמטרים ל-backend
+            const requestBody = {
+                userMessage: lastUserMessage.content,
+                question: options.question || {},
+                studentSteps: options.studentSteps || [],
+                context: systemMessage?.content || ''
+            };
+
+            const response = await fetch(`${this.proxyURL}/api/ai-help`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestBody)
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || `HTTP error ${response.status}`);
+            }
+
+            const data = await response.json();
+
+            if (!data.success) {
+                throw new Error(data.error || 'Backend error');
+            }
+
+            console.log('📥 Received response from backend');
+            return data.response;
+
+        } catch (error) {
+            console.error('❌ Chat error:', error);
+
+            // טיפול בשגיאות
+            if (error.message.includes('fetch') || error.message.includes('network')) {
+                throw new Error('לא ניתן להתחבר לשרת. וודא שהשרת רץ על http://localhost:3001');
+            }
+
+            throw error;
+        }
+    }
+
+    // Generate intelligent hint (via backend)
     async generateHint(problem, userAttempt, attemptCount) {
         try {
-            const prompt = `You are a helpful math tutor. A student is working on this problem:
+            const response = await fetch(`${this.proxyURL}/api/generate-hint`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    question: problem,
+                    studentAnswer: userAttempt
+                })
+            });
 
-Problem: ${problem.question}
-Topic: ${problem.topic}
-Level: ${problem.level}
+            const data = await response.json();
 
-Their attempt so far: ${userAttempt || 'No attempt yet'}
-Number of attempts: ${attemptCount}
+            if (data.success && data.hint) {
+                return data.hint;
+            }
 
-Provide a helpful hint in Hebrew (RTL) that guides them without giving away the answer. 
-${attemptCount === 1 ? 'Start with a gentle hint.' : 'Provide a more detailed hint since they\'ve tried multiple times.'}
-
-Keep it short (2-3 sentences max) and encouraging.`;
-
-            const response = await this.callClaude(prompt, 200);
-            return response;
+            return this.getFallbackHint(problem.topic);
         } catch (error) {
-            console.error('Claude hint generation failed:', error);
+            console.error('Generate hint error:', error);
             return this.getFallbackHint(problem.topic);
         }
     }
 
-    // Generate step-by-step explanation
+    // Generate step-by-step explanation (via backend)
     async generateExplanation(problem, correctAnswer) {
         try {
-            const prompt = `Explain how to solve this math problem step-by-step in Hebrew (RTL):
+            const response = await this.chat([
+                {
+                    role: 'user',
+                    content: `Explain how to solve this problem step-by-step in Hebrew:\n\nQuestion: ${problem.question}\nAnswer: ${correctAnswer}\n\nProvide 3-5 clear steps.`
+                }
+            ]);
 
-Problem: ${problem.question}
-Topic: ${problem.topic}
-Correct Answer: ${correctAnswer}
-
-Provide a clear, educational explanation with 3-5 steps. Be concise and use mathematical notation.`;
-
-            const response = await this.callClaude(prompt, 500);
             return response;
         } catch (error) {
-            console.error('Claude explanation failed:', error);
+            console.error('Generate explanation error:', error);
             return 'הסבר לא זמין כרגע';
         }
     }
 
-    // Analyze student's mistake
+    // Analyze student's mistake (via backend)
     async analyzeError(problem, userAnswer, correctAnswer) {
         try {
-            const prompt = `Analyze this student's mistake:
+            const response = await fetch(`${this.proxyURL}/api/verify-answer`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    question: problem,
+                    userAnswer: userAnswer
+                })
+            });
 
-Problem: ${problem.question}
-Student's Answer: ${userAnswer}
-Correct Answer: ${correctAnswer}
+            const data = await response.json();
 
-In Hebrew (RTL), briefly explain:
-1. What mistake was made
-2. How to correct it
+            if (data.success && data.verification) {
+                return data.verification.message || 'נסה שוב';
+            }
 
-Keep it to 2-3 sentences and be encouraging.`;
-
-            const response = await this.callClaude(prompt, 200);
-            return response;
+            return 'נסה שוב ובדוק את החישוב בקפידה';
         } catch (error) {
-            console.error('Claude error analysis failed:', error);
+            console.error('Analyze error:', error);
             return 'נסה שוב ובדוק את החישוב בקפידה';
         }
     }
 
-    // Generate personalized practice problems
+    // Generate personalized practice problems (via backend)
     async generateSimilarProblem(problem) {
         try {
-            const prompt = `Create a similar math problem based on this one:
+            const response = await fetch(`${this.proxyURL}/api/generate-question`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    topic: { name: problem.topic },
+                    gradeConfig: { name: problem.level }
+                })
+            });
 
-Original: ${problem.question}
-Topic: ${problem.topic}
-Level: ${problem.level}
+            const data = await response.json();
 
-Generate ONE similar problem with:
-- Same difficulty level
-- Same mathematical concept
-- Different numbers
-- Include the answer
+            if (data.success && data.question) {
+                return {
+                    question: data.question.question,
+                    answer: data.question.answer
+                };
+            }
 
-Format:
-Question: [your question]
-Answer: [answer]`;
-
-            const response = await this.callClaude(prompt, 300);
-            return this.parseProblemResponse(response);
+            return null;
         } catch (error) {
-            console.error('Claude problem generation failed:', error);
+            console.error('Generate similar problem error:', error);
             return null;
         }
     }
 
-    // Call Claude API
-    async callClaude(prompt, maxTokens = 300) {
-        if (!this.apiKey) {
-            throw new Error('Claude API key not configured');
-        }
-
-        const response = await fetch(this.apiURL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-api-key': this.apiKey,
-                'anthropic-version': '2023-06-01'
-            },
-            body: JSON.stringify({
-                model: this.model,
-                max_tokens: maxTokens,
-                messages: [{
-                    role: 'user',
-                    content: prompt
-                }]
-            })
-        });
-
-        if (!response.ok) {
-            throw new Error(`Claude API error: ${response.status}`);
-        }
-
-        const data = await response.json();
-        return data.content[0].text;
+    // Fallback hints by topic
+    getFallbackHint(topic) {
+        const fallbacks = {
+            calculus: 'זכור את חוקי האינטגרל והנגזרת הבסיסיים',
+            algebra: 'נסה לפרק את המשוואה או להעביר איברים בין האגפים',
+            geometry: 'שרטט את הבעיה ובדוק אילו נוסחאות רלוונטיות',
+            arithmetic: 'עבוד צעד אחר צעד לפי סדר הפעולות',
+            fractions: 'מצא מכנה משותף או פשט את השברים',
+            percentages: 'זכור: אחוז פירושו חלק מ-100'
+        };
+        return fallbacks[topic] || 'חשוב על הבעיה צעד אחר צעד';
     }
 
     // Parse problem response
@@ -148,19 +192,10 @@ Answer: [answer]`;
             return null;
         }
     }
-
-    // Fallback hints by topic
-    getFallbackHint(topic) {
-        const fallbacks = {
-            calculus: 'זכור את חוקי האינטגרל והנגזרת הבסיסיים',
-            algebra: 'נסה לפרק את המשוואה או להעביר איברים בין האגפים',
-            geometry: 'שרטט את הבעיה ובדוק אילו נוסחאות רלוונטיות',
-            arithmetic: 'עבוד צעד אחר צעד לפי סדר הפעולות',
-            fractions: 'מצא מכנה משותף או פשט את השברים',
-            percentages: 'זכור: אחוז פירושו חלק מ-100'
-        };
-        return fallbacks[topic] || 'חשוב על הבעיה צעד אחר צעד';
-    }
 }
 
-export const claudeService = new ClaudeService();
+// ייצוא instance יחיד
+const claudeServiceInstance = new ClaudeService();
+
+export const claudeService = claudeServiceInstance;
+export default claudeServiceInstance;
