@@ -1,23 +1,17 @@
 {
-  "name": "nexon-education",
+  "name": "nexon-backend",
   "version": "1.0.0",
-  "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "framer-motion": "^10.16.4",
-    "lucide-react": "^0.263.1",
-    "react-hot-toast": "^2.4.1",
-    "@anthropic-ai/sdk": "^0.30.1",
-    "zustand": "^4.4.1",
-    "firebase": "^10.7.0"
-  },
-  "devDependencies": {
-    "@vitejs/plugin-react": "^4.2.0",
-    "vite": "^5.0.0"
-  },
+  "type": "module",
+  "main": "server.js",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "cors": "^2.8.5",
+    "sqlite3": "^5.1.7",
+    "sqlite": "^5.1.1",
+    "@anthropic-ai/sdk": "^0.65.0",
+    "dotenv": "^17.2.3"
   }
 }
