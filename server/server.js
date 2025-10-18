@@ -10,8 +10,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = 3001;
-let db = null;
+const PORT = process.env.PORT || 3001;let db = null;
 
 // Middleware
 app.use(cors());
