@@ -1,11 +1,11 @@
-// src/components/ai/MathTutor.jsx - LIVE AI FEEDBACK SYSTEM (COMPLETE & FIXED)
+// src/components/ai/MathTutor.jsx - WITH INTEGRATED AI CHAT
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Brain, Send, BookOpen, Target, Sparkles, ChevronRight,
     Loader2, Lightbulb, CheckCircle2, XCircle, ArrowLeft,
     Trophy, Star, Zap, Flame, Clock, BarChart3, Award, Play,
-    AlertCircle, RefreshCw, TrendingUp
+    AlertCircle, RefreshCw, TrendingUp, MessageCircle, X
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import { getUserGradeId, getGradeConfig, getSubtopics } from '../../config/israeliCurriculum';
@@ -13,6 +13,192 @@ import toast from 'react-hot-toast';
 import { aiVerification } from '../../services/aiAnswerVerification';
 
 const API_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+
+// ==================== AI CHAT SIDEBAR ====================
+const AIChatSidebar = ({ question, studentProfile, isOpen, onToggle, currentAnswer }) => {
+    const [messages, setMessages] = useState([]);
+    const [input, setInput] = useState('');
+    const [loading, setLoading] = useState(false);
+    const messagesEndRef = useRef(null);
+
+    useEffect(() => {
+        if (question && messages.length === 0) {
+            const welcomeMessage = {
+                role: 'assistant',
+                content: `היי ${studentProfile.name}! 👋
+
+אני כאן לעזור לך עם השאלה:
+**${question.question}**
+
+איך אני יכול לעזור?
+- 💡 רמז קטן
+- 🤔 מה הצעד הבא?
+- ✅ בדוק את הכיוון שלי
+- 📖 הסבר מלא
+
+פשוט שאל! 😊`
+            };
+            setMessages([welcomeMessage]);
+        }
+    }, [question]);
+
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [messages]);
+
+    const quickActions = [
+        { label: '💡 רמז', prompt: 'תן לי רמז קטן' },
+        { label: '🤔 צעד הבא', prompt: 'מה הצעד הבא?' },
+        { label: '✅ בדוק כיוון', prompt: 'האם אני בכיוון הנכון?' },
+        { label: '📖 הסבר מלא', prompt: 'הראה לי פתרון מלא' }
+    ];
+
+    const sendMessage = async (messageText = input) => {
+        if (!messageText.trim() || loading) return;
+
+        setMessages(prev => [...prev, { role: 'user', content: messageText }]);
+        setInput('');
+        setLoading(true);
+
+        try {
+            const response = await fetch(`${API_URL}/api/ai/chat`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: messageText,
+                    context: {
+                        question: question.question,
+                        answer: question.correctAnswer,
+                        currentAnswer: currentAnswer,
+                        hints: question.hints || [],
+                        steps: question.steps || [],
+                        studentName: studentProfile.name,
+                        topic: studentProfile.topic,
+                        grade: studentProfile.grade,
+                        personality: studentProfile.personality || 'nexon',
+                        mathFeeling: studentProfile.mathFeeling,
+                        learningStyle: studentProfile.learningStyle
+                    }
+                })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                setMessages(prev => [...prev, { role: 'assistant', content: data.response }]);
+            } else {
+                throw new Error(data.error);
+            }
+        } catch (error) {
+            console.error('Chat error:', error);
+            setMessages(prev => [...prev, {
+                role: 'assistant',
+                content: '😔 מצטער, נתקלתי בבעיה. נסה שוב!'
+            }]);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    if (!isOpen) {
+        return (
+            <motion.button
+                initial={{ x: -100 }}
+                animate={{ x: 0 }}
+                onClick={onToggle}
+                className="fixed right-4 top-1/2 -translate-y-1/2 bg-gradient-to-r from-purple-600 to-pink-600 text-white p-4 rounded-full shadow-2xl hover:shadow-3xl transition-all z-50"
+            >
+                <MessageCircle className="w-6 h-6" />
+            </motion.button>
+        );
+    }
+
+    return (
+        <motion.div
+            initial={{ x: '100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '100%' }}
+            className="fixed right-0 top-0 h-full w-96 bg-white shadow-2xl z-50 flex flex-col"
+            dir="rtl"
+        >
+            <div className="bg-gradient-to-r from-purple-600 to-pink-600 text-white p-4 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                    <Brain className="w-6 h-6" />
+                    <span className="font-bold">עוזר AI - נקסון</span>
+                </div>
+                <button onClick={onToggle} className="hover:bg-white/20 p-2 rounded-lg">
+                    <X className="w-5 h-5" />
+                </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gradient-to-b from-purple-50 to-pink-50">
+                {messages.map((message, index) => (
+                    <motion.div
+                        key={index}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className={`flex ${message.role === 'user' ? 'justify-start' : 'justify-end'}`}
+                    >
+                        <div className={`max-w-[85%] rounded-2xl p-4 ${
+                            message.role === 'user'
+                                ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white'
+                                : 'bg-white shadow-lg text-gray-900'
+                        }`}>
+                            <div className="whitespace-pre-wrap text-sm">{message.content}</div>
+                        </div>
+                    </motion.div>
+                ))}
+
+                {loading && (
+                    <div className="flex justify-end">
+                        <div className="bg-white rounded-2xl p-4 shadow-lg">
+                            <div className="flex items-center gap-2">
+                                <Loader2 className="w-4 h-4 animate-spin text-purple-600" />
+                                <span className="text-sm text-gray-600">נקסון חושב...</span>
+                            </div>
+                        </div>
+                    </div>
+                )}
+                <div ref={messagesEndRef} />
+            </div>
+
+            {messages.length <= 1 && (
+                <div className="p-3 grid grid-cols-2 gap-2 bg-white border-t">
+                    {quickActions.map((action, index) => (
+                        <button
+                            key={index}
+                            onClick={() => sendMessage(action.prompt)}
+                            className="p-2 rounded-xl bg-purple-50 hover:bg-purple-100 transition-all border border-purple-200 text-xs font-bold text-gray-700"
+                        >
+                            {action.label}
+                        </button>
+                    ))}
+                </div>
+            )}
+
+            <div className="p-4 bg-white border-t">
+                <div className="flex gap-2">
+                    <input
+                        type="text"
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                        placeholder="שאל אותי..."
+                        disabled={loading}
+                        className="flex-1 px-3 py-2 rounded-xl bg-gray-100 border border-gray-300 focus:border-purple-500 focus:outline-none text-sm"
+                    />
+                    <button
+                        onClick={() => sendMessage()}
+                        disabled={!input.trim() || loading}
+                        className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl disabled:opacity-50"
+                    >
+                        <Send className="w-4 h-4" />
+                    </button>
+                </div>
+            </div>
+        </motion.div>
+    );
+};
 
 // ==================== LOADING ANIMATION ====================
 const ThinkingAnimation = ({ message = "נקסון חושב..." }) => {
@@ -139,6 +325,7 @@ const LiveFeedbackIndicator = ({ status }) => {
     );
 };
 
+// ==================== MAIN MATH TUTOR ====================
 const MathTutor = () => {
     const user = useAuthStore(state => state.user);
     const nexonProfile = useAuthStore(state => state.nexonProfile);
@@ -161,6 +348,9 @@ const MathTutor = () => {
     const [finalFeedback, setFinalFeedback] = useState(null);
     const [attemptCount, setAttemptCount] = useState(0);
 
+    // Chat state
+    const [chatOpen, setChatOpen] = useState(false);
+
     const autoCheckTimerRef = useRef(null);
     const lastCheckedAnswerRef = useRef('');
 
@@ -182,14 +372,13 @@ const MathTutor = () => {
     const timerRef = useRef(null);
     const inputRef = useRef(null);
 
-    // Get curriculum - prioritize nexonProfile over user
+    // Get curriculum
     const currentGrade = nexonProfile?.grade || user?.grade || '8';
     const currentTrack = nexonProfile?.track || user?.track;
     const gradeId = getUserGradeId(currentGrade, currentTrack);
     const gradeConfig = getGradeConfig(gradeId);
     const availableTopics = gradeConfig?.topics || [];
 
-    // Log curriculum info only once when it changes
     useEffect(() => {
         console.log('📚 Curriculum loaded:', { currentGrade, currentTrack, gradeId, topicsCount: availableTopics.length });
     }, [currentGrade, currentTrack, gradeId]);
@@ -206,7 +395,7 @@ const MathTutor = () => {
         };
     }, [isTimerRunning]);
 
-    // Live feedback effect - auto-check after 3 seconds
+    // Live feedback effect
     useEffect(() => {
         if (!userAnswer.trim() || finalFeedback?.isCorrect) {
             if (autoCheckTimerRef.current) {
@@ -217,22 +406,18 @@ const MathTutor = () => {
             return;
         }
 
-        // Don't re-check the same answer
         if (userAnswer === lastCheckedAnswerRef.current) {
             return;
         }
 
-        // Clear previous timer
         if (autoCheckTimerRef.current) {
             clearTimeout(autoCheckTimerRef.current);
         }
 
-        // Show "checking..." after typing stops
         const checkTimer = setTimeout(() => {
             setFeedbackStatus('checking');
         }, 2500);
 
-        // Auto-check after 3 seconds
         autoCheckTimerRef.current = setTimeout(() => {
             checkAnswerLive();
         }, 3000);
@@ -279,6 +464,7 @@ const MathTutor = () => {
         setFeedbackStatus('idle');
         setCurrentQuestion(null);
         setAttemptCount(0);
+        setChatOpen(false);
         lastCheckedAnswerRef.current = '';
 
         try {
@@ -331,15 +517,12 @@ const MathTutor = () => {
         } catch (error) {
             console.error('❌ Question generation error:', error);
             toast.error(`שגיאה ביצירת שאלה: ${error.message}`);
-
-            // Return to topic selection
             setView('topic-select');
         } finally {
             setIsGeneratingQuestion(false);
         }
     };
 
-    // Live check - shows status but doesn't finalize
     const checkAnswerLive = async () => {
         if (!userAnswer.trim() || !currentQuestion) return;
 
@@ -374,7 +557,6 @@ const MathTutor = () => {
         }
     };
 
-    // Final submit - locks answer and allows next question
     const submitAnswer = async () => {
         if (!userAnswer.trim() || !currentQuestion) return;
         if (finalFeedback?.isCorrect) {
@@ -384,10 +566,8 @@ const MathTutor = () => {
 
         setIsTimerRunning(false);
 
-        // If we already have live feedback, use it
         let result = liveFeedback;
 
-        // Otherwise check now
         if (!result || lastCheckedAnswerRef.current !== userAnswer) {
             try {
                 result = await aiVerification.verifyAnswer(
@@ -409,9 +589,7 @@ const MathTutor = () => {
         }
 
         const isCorrect = result.isCorrect;
-        const isPartial = result.isPartial || false;
 
-        // Calculate points
         let pointsEarned = 0;
         if (isCorrect) {
             if (attemptCount === 0) {
@@ -433,7 +611,6 @@ const MathTutor = () => {
             attemptNumber: attemptCount + 1
         });
 
-        // Update stats if correct
         if (isCorrect) {
             setSessionStats(prev => {
                 const newStreak = prev.streak + 1;
@@ -449,7 +626,6 @@ const MathTutor = () => {
                 };
             });
         } else {
-            // Wrong - increment attempt
             setAttemptCount(prev => prev + 1);
             setSessionStats(prev => ({
                 ...prev,
@@ -651,7 +827,7 @@ const MathTutor = () => {
         );
     }
 
-    // PRACTICE VIEW - WITH LIVE FEEDBACK
+    // PRACTICE VIEW
     if (view === 'practice') {
         return (
             <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 p-4" dir="rtl">
@@ -704,7 +880,6 @@ const MathTutor = () => {
                                     animate={{ opacity: 1, y: 0 }}
                                     exit={{ opacity: 0, y: -20 }}
                                 >
-                                    {/* Topic Badge */}
                                     <div className="flex items-center justify-between mb-6">
                                         <div className="flex items-center gap-2">
                                             <span className="text-3xl">{selectedTopic?.icon}</span>
@@ -726,14 +901,12 @@ const MathTutor = () => {
                                         )}
                                     </div>
 
-                                    {/* Question */}
                                     <div className="mb-8">
                                         <h3 className="text-2xl font-bold text-gray-800 mb-4 leading-relaxed">
                                             {currentQuestion.question}
                                         </h3>
                                     </div>
 
-                                    {/* Hints */}
                                     {currentHints.length > 0 && (
                                         <div className="mb-6 space-y-2">
                                             {currentHints.map((hint, index) => (
@@ -752,7 +925,6 @@ const MathTutor = () => {
                                         </div>
                                     )}
 
-                                    {/* Live Feedback Panel */}
                                     {liveFeedback && !finalFeedback && (
                                         <motion.div
                                             initial={{ opacity: 0, y: 10 }}
@@ -774,7 +946,6 @@ const MathTutor = () => {
                                         </motion.div>
                                     )}
 
-                                    {/* Final Feedback (after submit) */}
                                     {finalFeedback && (
                                         <motion.div
                                             initial={{ opacity: 0, y: 10 }}
@@ -819,7 +990,6 @@ const MathTutor = () => {
                                         </motion.div>
                                     )}
 
-                                    {/* Input Area */}
                                     {!finalFeedback && (
                                         <div className="space-y-4">
                                             <div className="relative">
@@ -835,11 +1005,19 @@ const MathTutor = () => {
                                                 <LiveFeedbackIndicator status={feedbackStatus} />
                                             </div>
 
-                                            <div className="flex gap-3">
+                                            <div className="grid grid-cols-3 gap-3">
+                                                <button
+                                                    onClick={() => setChatOpen(true)}
+                                                    className="flex items-center justify-center gap-2 px-4 py-4 bg-blue-500 text-white rounded-2xl font-bold hover:bg-blue-600 transition-all"
+                                                >
+                                                    <MessageCircle className="w-5 h-5" />
+                                                    שוחח עם נקסון
+                                                </button>
+
                                                 <button
                                                     onClick={getHint}
                                                     disabled={hintCount >= 3}
-                                                    className="flex-1 flex items-center justify-center gap-2 px-6 py-4 bg-yellow-500 text-white rounded-2xl font-bold hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                                                    className="flex items-center justify-center gap-2 px-4 py-4 bg-yellow-500 text-white rounded-2xl font-bold hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                                                 >
                                                     <Lightbulb className="w-5 h-5" />
                                                     רמז ({3 - hintCount})
@@ -848,7 +1026,7 @@ const MathTutor = () => {
                                                 <button
                                                     onClick={submitAnswer}
                                                     disabled={!userAnswer.trim()}
-                                                    className="flex-1 flex items-center justify-center gap-2 px-6 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-2xl font-bold hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                                                    className="flex items-center justify-center gap-2 px-4 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-2xl font-bold hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                                                 >
                                                     <CheckCircle2 className="w-5 h-5" />
                                                     שלח תשובה
@@ -857,7 +1035,6 @@ const MathTutor = () => {
                                         </div>
                                     )}
 
-                                    {/* Action Buttons After Feedback */}
                                     {finalFeedback && (
                                         <div className="flex gap-3">
                                             {!finalFeedback.isCorrect && (
@@ -887,6 +1064,26 @@ const MathTutor = () => {
                         </AnimatePresence>
                     </motion.div>
                 </div>
+
+                {/* AI Chat Sidebar */}
+                <AnimatePresence>
+                    {currentQuestion && (
+                        <AIChatSidebar
+                            question={currentQuestion}
+                            studentProfile={{
+                                name: nexonProfile?.name || user?.name || 'תלמיד',
+                                grade: nexonProfile?.grade || user?.grade || '8',
+                                topic: selectedTopic?.name,
+                                personality: nexonProfile?.personality || 'nexon',
+                                mathFeeling: nexonProfile?.mathFeeling,
+                                learningStyle: nexonProfile?.learningStyle
+                            }}
+                            currentAnswer={userAnswer}
+                            isOpen={chatOpen}
+                            onToggle={() => setChatOpen(!chatOpen)}
+                        />
+                    )}
+                </AnimatePresence>
             </div>
         );
     }
