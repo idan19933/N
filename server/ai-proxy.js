@@ -1,410 +1,754 @@
-// server/ai-proxy.js - UPGRADED WITH BETTER VERIFICATION
-const express = require('express');
-const cors = require('cors');
-require('dotenv').config();
+// server/ai-proxy.js - COMPLETE AI PROXY WITH PERSONALITY SYSTEM
+import express from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import multer from 'multer';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import personalitySystem from './services/personalityLoader.js';
+dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 
-const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY;
-const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
-const CLAUDE_MODEL = 'claude-3-haiku-20240307';
+// ==================== MULTER CONFIGURATION ====================
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        const uploadDir = path.join(__dirname, '../uploads');
+        if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        cb(null, uploadDir);
+    },
+    filename: (req, file, cb) => {
+        cb(null, 'personality-system.xlsx');
+    }
+});
 
-function buildQuestionPrompt(topic, gradeConfig) {
-    return `You are a math teacher for Israeli students.
+const upload = multer({
+    storage,
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+            file.mimetype === 'application/vnd.ms-excel') {
+            cb(null, true);
+        } else {
+            cb(new Error('Only Excel files allowed!'), false);
+        }
+    }
+});
 
-Topic: ${topic.name}
-Grade: ${gradeConfig?.name || 'Unknown'}
-
-Generate ONE question DIRECTLY about "${topic.name}".
-
-Examples:
-- "גרפים של פונקציות" → "בגרף y = 2x + 3, מה נקודת החיתוך עם ציר Y?"
-- "משוואות ריבועיות" → "פתור: x² - 5x + 6 = 0"
-- "נגזרות" → "מה הנגזרת של f(x) = 3x²?"
-
-Return ONLY JSON (no markdown):
-{
-    "question": "השאלה בעברית",
-    "answer": "התשובה",
-    "hints": ["רמז 1", "רמז 2"],
-    "steps": ["שלב 1", "שלב 2"],
-    "explanation": "הסבר"
-}`;
-}
-
+// ==================== HEALTH CHECK ====================
 app.get('/health', (req, res) => {
     res.json({
         status: 'ok',
-        apiKey: CLAUDE_API_KEY ? '✅ Ready' : '❌ Missing',
-        model: CLAUDE_MODEL
+        message: 'Nexon AI Server Running',
+        personalityLoaded: personalitySystem.loaded
     });
 });
 
-app.post('/api/generate-question', async (req, res) => {
+// ==================== ADMIN: UPLOAD PERSONALITY EXCEL ====================
+app.post('/api/admin/upload-personality', upload.single('file'), (req, res) => {
     try {
-        const { topic, gradeConfig } = req.body;
-
-        console.log('📝 Request:', topic?.name);
-
-        if (!topic?.name) {
-            return res.status(400).json({ success: false, error: 'Topic required' });
+        if (!req.file) {
+            return res.status(400).json({ success: false, error: 'No file uploaded' });
         }
 
-        if (!CLAUDE_API_KEY) {
-            console.error('❌ No API key');
-            return res.status(503).json({ success: false, error: 'AI not configured' });
-        }
+        console.log('📁 Uploaded file:', req.file.filename);
 
-        const prompt = buildQuestionPrompt(topic, gradeConfig);
+        // Load the personality system
+        const loaded = personalitySystem.loadFromExcel(req.file.path);
 
-        console.log('🤖 Calling Claude with model:', CLAUDE_MODEL);
-
-        const response = await fetch(CLAUDE_API_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-api-key': CLAUDE_API_KEY,
-                'anthropic-version': '2023-06-01'
-            },
-            body: JSON.stringify({
-                model: CLAUDE_MODEL,
-                max_tokens: 1024,
-                messages: [{ role: 'user', content: prompt }]
-            })
-        });
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error('❌ Claude Error:', response.status, errorText);
-
-            return res.json({
+        if (loaded) {
+            res.json({
                 success: true,
-                question: {
-                    question: `שאלה לדוגמה על ${topic.name}: 5 + 3 = ?`,
-                    answer: '8',
-                    hints: ['חבר את המספרים'],
-                    steps: ['5 + 3', '= 8'],
-                    explanation: 'חיבור פשוט',
-                    topic: topic.name,
-                    generatedByAI: false,
-                    fallback: true
+                message: 'Personality system uploaded and loaded successfully!',
+                stats: {
+                    examples: personalitySystem.data.examplesBank.length,
+                    topics: personalitySystem.data.topicGuidelines.length,
+                    hints: personalitySystem.data.hintSystem.length,
+                    errors: personalitySystem.data.errorPatterns.length,
+                    encouragements: personalitySystem.data.encouragementLibrary.length,
+                    templates: personalitySystem.data.questionTemplates.length
                 }
             });
+        } else {
+            res.status(500).json({ success: false, error: 'Failed to load personality system' });
         }
-
-        const data = await response.json();
-        const text = data.content[0].text;
-
-        console.log('📥 Claude Response:', text.substring(0, 100));
-
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-
-        if (!jsonMatch) {
-            console.error('❌ No JSON in response');
-            throw new Error('Invalid response format');
-        }
-
-        const questionData = JSON.parse(jsonMatch[0]);
-
-        console.log('✅ Generated:', questionData.question.substring(0, 50) + '...');
-
-        res.json({
-            success: true,
-            question: {
-                ...questionData,
-                topic: topic.name,
-                topicId: topic.id,
-                generatedByAI: true,
-                timestamp: new Date().toISOString()
-            }
-        });
-
     } catch (error) {
-        console.error('❌ Full Error:', error);
-
-        const { topic } = req.body;
-        res.json({
-            success: true,
-            question: {
-                question: `שאלה לדוגמה: 10 + 5 = ?`,
-                answer: '15',
-                hints: ['חבר את המספרים'],
-                steps: ['10 + 5', '= 15'],
-                explanation: 'חיבור פשוט',
-                topic: topic?.name || 'מתמטיקה',
-                generatedByAI: false,
-                fallback: true
-            }
-        });
-    }
-});
-
-// ✅ IMPROVED VERIFICATION ENDPOINT
-app.post('/api/verify-answer', async (req, res) => {
-    try {
-        const { userAnswer, correctAnswer, question, context } = req.body;
-
-        console.log('🔍 Verify Request:', { userAnswer, correctAnswer, question });
-
-        if (!CLAUDE_API_KEY) {
-            return res.status(503).json({ success: false, error: 'AI not configured' });
-        }
-
-        const prompt = `You are an expert math teacher. Verify if the student's answer is mathematically correct.
-
-<question>
-${question}
-</question>
-
-<student_answer>
-${userAnswer}
-</student_answer>
-
-<expected_answer>
-${correctAnswer}
-</expected_answer>
-
-CRITICAL INSTRUCTIONS - READ CAREFULLY:
-
-1. FIRST: Check if student_answer and expected_answer are IDENTICAL or numerically equal
-   - If "${userAnswer}" == "${correctAnswer}" → IMMEDIATELY return isCorrect: true
-   - If both are numbers and equal → IMMEDIATELY return isCorrect: true
-   - Don't overthink this!
-
-2. If they're NOT identical, then solve the problem yourself step by step
-
-3. IMPORTANT: The expected_answer might be WRONG - don't trust it blindly!
-
-4. For equations: SUBSTITUTE the student's answer into the original equation
-
-5. Be EXTREMELY careful with basic arithmetic:
-   - 15 - 4 + 4 = 15 (NOT 1!)
-   - 10 + 5 = 15
-   - 3 × 5 = 15
-   Double-check your calculations!
-
-EXAMPLES:
-
-Example 1 - IDENTICAL ANSWERS:
-Question: Calculate 2x + 3 when x = 8
-Student: "19"
-Expected: "19"
-STOP HERE! They're identical!
-Return: {"isCorrect": true, "confidence": 100, "explanation": "תשובה נכונה מושלמת!"}
-
-Example 2 - Numeric equivalence:
-Question: What is 10 + 9?
-Student: "19"
-Expected: "19.0"
-These are numerically equal!
-Return: {"isCorrect": true, "confidence": 100, "explanation": "נכון!"}
-
-Example 3 - Need to verify:
-Question: Calculate 5 × 3 + 2
-Student: "15"
-Expected: "17"
-They're different - now I need to solve:
-5 × 3 = 15
-15 + 2 = 17
-Student is wrong (forgot the +2)
-Return: {"isCorrect": false, "confidence": 100, "explanation": "חישבת 5×3 נכון אבל שכחת להוסיף 2", "alternativeAnswer": "17"}
-
-RETURN FORMAT (JSON only):
-{"isCorrect": true/false, "confidence": 95-100, "explanation": "הסבר בעברית", "mathematicalReasoning": "החישוב המלא", "alternativeAnswer": "תשובה נכונה או null"}
-
-Now verify the answer above:`;
-
-        const response = await fetch(CLAUDE_API_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-api-key': CLAUDE_API_KEY,
-                'anthropic-version': '2023-06-01'
-            },
-            body: JSON.stringify({
-                model: CLAUDE_MODEL,
-                max_tokens: 2000,
-                temperature: 0, // Zero for maximum accuracy
-                messages: [{ role: 'user', content: prompt }]
-            })
-        });
-
-        if (!response.ok) {
-            throw new Error(`Claude API error: ${response.status}`);
-        }
-
-        const data = await response.json();
-        const text = data.content[0].text;
-
-        console.log('📥 AI Response:', text.substring(0, 200));
-
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-
-        if (!jsonMatch) {
-            console.error('❌ No JSON found');
-            throw new Error('No JSON in response');
-        }
-
-        const verification = JSON.parse(jsonMatch[0]);
-
-        console.log('✅ Verification:', verification.isCorrect, '-', verification.confidence);
-
-        res.json({
-            success: true,
-            isCorrect: verification.isCorrect,
-            confidence: verification.confidence || (verification.isCorrect ? 100 : 0),
-            explanation: verification.explanation || 'בדיקת AI',
-            mathematicalReasoning: verification.mathematicalReasoning || null,
-            note: verification.hint || verification.alternativeAnswer || null,
-            usedAI: true
-        });
-
-    } catch (error) {
-        console.error('❌ Verification Error:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message,
-            usedAI: false
-        });
-    }
-});
-
-app.post('/api/generate-hint', async (req, res) => {
-    try {
-        const { question, studentAnswer } = req.body;
-
-        if (!CLAUDE_API_KEY) {
-            return res.status(503).json({ success: false, error: 'AI not configured' });
-        }
-
-        const prompt = `Question: ${question.question}
-Answer: ${question.answer}
-Student tried: ${studentAnswer || 'nothing'}
-
-Give 1-2 sentence hint in Hebrew.`;
-
-        const response = await fetch(CLAUDE_API_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-api-key': CLAUDE_API_KEY,
-                'anthropic-version': '2023-06-01'
-            },
-            body: JSON.stringify({
-                model: CLAUDE_MODEL,
-                max_tokens: 256,
-                messages: [{ role: 'user', content: prompt }]
-            })
-        });
-
-        const data = await response.json();
-        const hint = data.content[0].text.trim();
-
-        res.json({ success: true, hint });
-
-    } catch (error) {
+        console.error('Upload error:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
 
-app.post('/api/live-feedback', async (req, res) => {
-    res.json({ success: true, feedback: null });
+// ==================== ADMIN: GET PERSONALITY STATUS ====================
+app.get('/api/admin/personality-status', (req, res) => {
+    res.json({
+        loaded: personalitySystem.loaded,
+        stats: personalitySystem.loaded ? {
+            examples: personalitySystem.data.examplesBank.length,
+            topics: personalitySystem.data.topicGuidelines.length,
+            hints: personalitySystem.data.hintSystem.length,
+            errors: personalitySystem.data.errorPatterns.length,
+            encouragements: personalitySystem.data.encouragementLibrary.length,
+            templates: personalitySystem.data.questionTemplates.length,
+            corePersonality: personalitySystem.data.corePersonality
+        } : null
+    });
 });
 
-// ✅ AI HELP
-app.post('/api/ai-help', async (req, res) => {
+// ==================== DYNAMIC QUESTION GENERATION ====================
+app.post('/api/ai/generate-question', async (req, res) => {
     try {
-        const { question, studentSteps, userMessage } = req.body;
+        const { topic, subtopic, difficulty, studentProfile } = req.body;
 
-        console.log('💬 AI Help Request:', userMessage);
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log('📝 PERSONALITY-BASED QUESTION GENERATION');
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log('   Student:', studentProfile.name);
+        console.log('   Grade:', studentProfile.grade);
+        console.log('   Topic:', topic.name);
+        console.log('   Subtopic:', subtopic?.name || 'General');
+        console.log('   Difficulty:', difficulty);
+        console.log('   Personality System:', personalitySystem.loaded ? '✅ Active' : '❌ Not Loaded');
 
-        if (!CLAUDE_API_KEY) {
+        // Build prompts using personality system
+        const systemPrompt = personalitySystem.loaded
+            ? personalitySystem.buildSystemPrompt(studentProfile)
+            : buildSystemPrompt(studentProfile);
+
+        const prompt = personalitySystem.loaded
+            ? personalitySystem.buildQuestionPrompt(topic, subtopic, difficulty, studentProfile)
+            : buildDynamicQuestionPrompt(topic, subtopic, difficulty, studentProfile);
+
+        if (personalitySystem.loaded) {
+            const examples = personalitySystem.getExamplesForTopic(topic.name, difficulty);
+            console.log(`   📚 Using ${examples.length} example(s) from personality system`);
+        }
+
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+        // Try Claude first (best for Hebrew)
+        if (process.env.ANTHROPIC_API_KEY) {
+            console.log('🤖 Using Claude 3.5 Haiku for question generation...');
+
+            const response = await fetch('https://api.anthropic.com/v1/messages', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': process.env.ANTHROPIC_API_KEY,
+                    'anthropic-version': '2023-06-01'
+                },
+                body: JSON.stringify({
+                    model: 'claude-3-5-haiku-20241022',
+                    max_tokens: 3000,
+                    temperature: 0.8,
+                    system: systemPrompt,
+                    messages: [{ role: 'user', content: prompt }]
+                })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                console.error('❌ Claude API error:', data.error);
+                throw new Error(data.error?.message || 'Claude API error');
+            }
+
+            try {
+                const rawText = data.content[0].text;
+                console.log('📥 Claude raw response (first 200 chars):', rawText.substring(0, 200));
+
+                // Extract JSON from response
+                let jsonText = rawText.trim();
+
+                if (jsonText.startsWith('```json')) {
+                    jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?$/g, '');
+                } else if (jsonText.startsWith('```')) {
+                    jsonText = jsonText.replace(/```\n?/g, '');
+                }
+
+                const jsonStart = jsonText.indexOf('{');
+                const jsonEnd = jsonText.lastIndexOf('}') + 1;
+
+                if (jsonStart !== -1 && jsonEnd > jsonStart) {
+                    jsonText = jsonText.substring(jsonStart, jsonEnd);
+                }
+
+                const parsed = JSON.parse(jsonText);
+
+                console.log('✅ Question generated with personality system!');
+                console.log('   Question:', parsed.question.substring(0, 60) + '...');
+                console.log('   Answer:', parsed.correctAnswer);
+                console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+                return res.json({
+                    success: true,
+                    question: {
+                        question: parsed.question,
+                        correctAnswer: parsed.correctAnswer,
+                        hints: parsed.hints || [],
+                        explanation: parsed.explanation || '',
+                        topic: topic.name,
+                        subtopic: subtopic?.name,
+                        difficulty: parsed.difficulty || difficulty,
+                        gradeLevel: studentProfile.grade
+                    },
+                    model: 'claude-3.5-haiku',
+                    generatedDynamically: true,
+                    personalityActive: personalitySystem.loaded
+                });
+            } catch (parseError) {
+                console.error('❌ Parse error:', parseError);
+                console.error('Raw response:', data.content[0].text);
+                throw parseError;
+            }
+        }
+
+        // OpenAI fallback
+        if (process.env.OPENAI_API_KEY) {
+            console.log('🤖 Using GPT-4 for question generation...');
+
+            const response = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+                },
+                body: JSON.stringify({
+                    model: 'gpt-4',
+                    messages: [
+                        { role: 'system', content: systemPrompt },
+                        { role: 'user', content: prompt }
+                    ],
+                    temperature: 0.8,
+                    max_tokens: 2000
+                })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error?.message || 'OpenAI error');
+            }
+
+            try {
+                const parsed = JSON.parse(data.choices[0].message.content);
+
+                return res.json({
+                    success: true,
+                    question: {
+                        question: parsed.question,
+                        correctAnswer: parsed.correctAnswer,
+                        hints: parsed.hints || [],
+                        explanation: parsed.explanation || '',
+                        topic: topic.name,
+                        subtopic: subtopic?.name
+                    },
+                    model: 'gpt-4',
+                    generatedDynamically: true,
+                    personalityActive: personalitySystem.loaded
+                });
+            } catch (parseError) {
+                console.error('❌ Parse error:', parseError);
+                throw parseError;
+            }
+        }
+
+        throw new Error('No AI API configured');
+
+    } catch (error) {
+        console.error('❌ Question generation error:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// ==================== DYNAMIC ANSWER VERIFICATION ====================
+app.post('/api/ai/verify-answer', async (req, res) => {
+    try {
+        const { question, userAnswer, correctAnswer, studentName, grade, topic, subtopic } = req.body;
+
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log('🔍 SMART ANSWER VERIFICATION');
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log('   Student:', studentName);
+        console.log('   Question:', question.substring(0, 60) + '...');
+        console.log('   User Answer:', userAnswer);
+        console.log('   Expected:', correctAnswer);
+        console.log('   Topic:', topic);
+        console.log('   Subtopic:', subtopic);
+        console.log('   Personality System:', personalitySystem.loaded ? '✅ Active' : '❌ Not Loaded');
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+        // Build prompt using personality system
+        const prompt = personalitySystem.loaded
+            ? personalitySystem.buildVerificationPrompt(question, userAnswer, correctAnswer, topic)
+            : buildVerificationPrompt(question, userAnswer, correctAnswer, topic, subtopic, grade);
+
+        // Try Claude for verification
+        if (process.env.ANTHROPIC_API_KEY) {
+            console.log('🤖 Using Claude 3.5 Haiku for smart verification...');
+
+            const systemPromptText = personalitySystem.loaded
+                ? `אתה ${personalitySystem.data.corePersonality.teacher_name}, מורה מתמטיקה מומחה. אתה בודק תשובות בצורה מדויקת, מזהה שקילות מתמטית, ומספק משוב מעודד ומדויק. החזר תמיד JSON תקין בלבד, ללא טקסט נוסף לפני או אחרי ה-JSON.`
+                : `אתה נקסון, מורה מתמטיקה מומחה. אתה בודק תשובות בצורה מדויקת, מזהה שקילות מתמטית, ומספק משוב מעודד ומדויק. החזר תמיד JSON תקין בלבד, ללא טקסט נוסף לפני או אחרי ה-JSON.`;
+
+            const response = await fetch('https://api.anthropic.com/v1/messages', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': process.env.ANTHROPIC_API_KEY,
+                    'anthropic-version': '2023-06-01'
+                },
+                body: JSON.stringify({
+                    model: 'claude-3-5-haiku-20241022',
+                    max_tokens: 1500,
+                    temperature: 0.3,
+                    system: systemPromptText,
+                    messages: [{ role: 'user', content: prompt }]
+                })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                console.error('❌ Claude API error:', data.error);
+                throw new Error(data.error?.message || 'Claude API error');
+            }
+
+            try {
+                const rawText = data.content[0].text;
+                console.log('📥 Claude raw response (first 200 chars):', rawText.substring(0, 200));
+
+                let jsonText = rawText.trim();
+
+                if (jsonText.startsWith('```json')) {
+                    jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?$/g, '');
+                } else if (jsonText.startsWith('```')) {
+                    jsonText = jsonText.replace(/```\n?/g, '');
+                }
+
+                const jsonStart = jsonText.indexOf('{');
+                const jsonEnd = jsonText.lastIndexOf('}') + 1;
+
+                if (jsonStart !== -1 && jsonEnd > jsonStart) {
+                    jsonText = jsonText.substring(jsonStart, jsonEnd);
+                }
+
+                const parsed = JSON.parse(jsonText);
+
+                if (typeof parsed.isCorrect !== 'boolean') {
+                    throw new Error('Missing or invalid isCorrect field');
+                }
+
+                console.log('✅ Verification complete:', parsed.isCorrect ? 'CORRECT' : 'INCORRECT');
+                if (parsed.isPartial) console.log('   Partial credit detected');
+                console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+                // Get encouragement from personality system if loaded
+                let feedback = parsed.feedback;
+                if (personalitySystem.loaded) {
+                    let situation = 'correct_first_try';
+                    if (!parsed.isCorrect) {
+                        situation = 'wrong_answer_first';
+                    } else if (parsed.isPartial) {
+                        situation = 'partially_correct';
+                    }
+
+                    const personalizedFeedback = personalitySystem.getEncouragement(situation);
+                    if (personalizedFeedback) {
+                        feedback = personalizedFeedback.replace('תלמיד', studentName);
+                    }
+                }
+
+                return res.json({
+                    success: true,
+                    isCorrect: parsed.isCorrect,
+                    isPartial: parsed.isPartial || false,
+                    confidence: parsed.confidence || 95,
+                    feedback: feedback || (parsed.isCorrect ? 'נכון!' : 'לא נכון'),
+                    explanation: parsed.explanation || '',
+                    whatCorrect: parsed.whatCorrect || null,
+                    whatMissing: parsed.whatMissing || null,
+                    model: 'claude-3.5-haiku-20241022',
+                    personalityActive: personalitySystem.loaded
+                });
+            } catch (parseError) {
+                console.error('❌ JSON Parse error:', parseError.message);
+                console.error('Raw response:', data.content[0].text);
+
+                const rawText = data.content[0].text;
+                const lowerText = rawText.toLowerCase();
+                const seemsCorrect = lowerText.includes('נכון') || lowerText.includes('correct');
+
+                console.log('⚠️ Using fallback interpretation:', seemsCorrect ? 'CORRECT' : 'INCORRECT');
+
+                return res.json({
+                    success: true,
+                    isCorrect: seemsCorrect,
+                    isPartial: false,
+                    confidence: 60,
+                    feedback: seemsCorrect ? 'נכון!' : 'נסה שוב',
+                    explanation: rawText.substring(0, 200),
+                    model: 'claude-3-5-haiku-20241022',
+                    fallback: true,
+                    personalityActive: personalitySystem.loaded
+                });
+            }
+        }
+
+        // OpenAI fallback
+        if (process.env.OPENAI_API_KEY) {
+            console.log('🤖 Using GPT-4 for verification...');
+
+            const response = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+                },
+                body: JSON.stringify({
+                    model: 'gpt-4',
+                    messages: [
+                        { role: 'system', content: 'אתה מורה מתמטיקה מומחה. בדוק תשובות בדיוק. החזר JSON תקין בלבד.' },
+                        { role: 'user', content: prompt }
+                    ],
+                    temperature: 0.3,
+                    max_tokens: 1000
+                })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error?.message || 'OpenAI error');
+            }
+
+            const parsed = JSON.parse(data.choices[0].message.content);
             return res.json({
                 success: true,
-                response: 'אני כאן לעזור! מה אתה רוצה לדעת על השאלה?'
+                ...parsed,
+                model: 'gpt-4',
+                personalityActive: personalitySystem.loaded
             });
         }
 
-        const wantsFullSolution =
-            userMessage.includes('הראה') ||
-            userMessage.includes('פתרון') ||
-            userMessage.includes('דרך') ||
-            userMessage.includes('מלא') ||
-            userMessage.includes('שלבים');
-
-        let prompt;
-
-        if (wantsFullSolution) {
-            prompt = `You are a helpful math tutor. The student asked for the COMPLETE SOLUTION.
-
-Question: ${question.question || question}
-Correct Answer: ${question.answer || 'unknown'}
-Student's work so far: ${studentSteps?.join(', ') || 'none'}
-
-Give the FULL solution in Hebrew with numbered steps.`;
-
-        } else {
-            prompt = `You are a helpful math tutor.
-
-Question: ${question.question || question}
-Student asks: ${userMessage}
-
-Give a helpful hint in Hebrew (2-4 sentences). Don't give the full answer yet.`;
-        }
-
-        const response = await fetch(CLAUDE_API_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-api-key': CLAUDE_API_KEY,
-                'anthropic-version': '2023-06-01'
-            },
-            body: JSON.stringify({
-                model: CLAUDE_MODEL,
-                max_tokens: wantsFullSolution ? 800 : 300,
-                messages: [{ role: 'user', content: prompt }]
-            })
-        });
-
-        if (!response.ok) {
-            throw new Error('Claude API error');
-        }
-
-        const data = await response.json();
-        const aiResponse = data.content[0].text.trim();
-
-        console.log('✅ AI Response sent');
-
-        res.json({
-            success: true,
-            response: aiResponse
-        });
+        throw new Error('No AI API configured');
 
     } catch (error) {
-        console.error('❌ AI Help Error:', error);
-        res.json({
-            success: true,
-            response: 'אני כאן לעזור! נסה לשאול שאלה יותר ספציפית.'
+        console.error('❌ Verification error:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
         });
     }
 });
 
-app.listen(PORT, () => {
-    console.log('\n' + '='.repeat(50));
-    console.log('🚀 AI Proxy Server');
-    console.log('='.repeat(50));
-    console.log(`📍 Running: http://localhost:${PORT}`);
-    console.log(`🔑 API Key: ${CLAUDE_API_KEY ? '✅ Ready' : '❌ Missing'}`);
-    console.log(`🤖 Model: ${CLAUDE_MODEL}`);
-    console.log(`🌐 Health: http://localhost:${PORT}/health`);
-    console.log('='.repeat(50) + '\n');
+// ==================== GET HINT ====================
+app.post('/api/ai/get-hint', async (req, res) => {
+    try {
+        const { question, hintIndex, studentProfile } = req.body;
 
-    if (!CLAUDE_API_KEY) {
-        console.warn('⚠️  Create server/.env with:\n');
-        console.warn('CLAUDE_API_KEY=sk-ant-api03-YOUR-KEY\n');
+        console.log(`💡 Generating hint ${hintIndex + 1} for:`, studentProfile?.name);
+
+        // Get hint style from personality system if loaded
+        let hintStyle = null;
+        if (personalitySystem.loaded) {
+            const difficulty = hintIndex === 0 ? 'easy' : hintIndex === 1 ? 'medium' : 'hard';
+            hintStyle = personalitySystem.getHintStyle(difficulty, 0);
+        }
+
+        const prompt = buildHintPrompt(question, hintIndex, studentProfile, hintStyle);
+        const systemPrompt = personalitySystem.loaded
+            ? personalitySystem.buildSystemPrompt(studentProfile)
+            : buildSystemPrompt(studentProfile || {});
+
+        if (process.env.ANTHROPIC_API_KEY) {
+            const response = await fetch('https://api.anthropic.com/v1/messages', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': process.env.ANTHROPIC_API_KEY,
+                    'anthropic-version': '2023-06-01'
+                },
+                body: JSON.stringify({
+                    model: 'claude-3-5-haiku-20241022',
+                    max_tokens: 500,
+                    temperature: 0.7,
+                    system: systemPrompt,
+                    messages: [{ role: 'user', content: prompt }]
+                })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error?.message || 'Claude API error');
+            }
+
+            console.log('✅ Hint generated');
+
+            return res.json({
+                success: true,
+                hint: data.content[0].text,
+                personalityActive: personalitySystem.loaded
+            });
+        }
+
+        if (process.env.OPENAI_API_KEY) {
+            const response = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+                },
+                body: JSON.stringify({
+                    model: 'gpt-3.5-turbo',
+                    messages: [
+                        { role: 'system', content: systemPrompt },
+                        { role: 'user', content: prompt }
+                    ],
+                    temperature: 0.7,
+                    max_tokens: 500
+                })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error?.message || 'OpenAI error');
+            }
+
+            return res.json({
+                success: true,
+                hint: data.choices[0].message.content,
+                personalityActive: personalitySystem.loaded
+            });
+        }
+
+        throw new Error('No AI API configured');
+
+    } catch (error) {
+        console.error('❌ Hint error:', error);
+        res.json({
+            success: true,
+            hint: 'נסה לפרק את השאלה לשלבים קטנים יותר 🤔'
+        });
     }
+});
+
+// ==================== HELPER FUNCTIONS ====================
+
+function buildSystemPrompt(studentProfile) {
+    const { grade, mathFeeling, learningStyle, goalFocus, weakTopics } = studentProfile;
+
+    let prompt = `אתה נקסון, מורה דיגיטלי למתמטיקה מומחה בתכנית הלימודים הישראלית.\n\n`;
+
+    if (grade) {
+        prompt += `התלמיד לומד בכיתה ${grade}.\n`;
+    }
+
+    if (weakTopics && weakTopics.length > 0) {
+        prompt += `נושאים שהתלמיד מתקשה בהם: ${weakTopics.join(', ')}.\n`;
+        prompt += `שים דגש מיוחד על נושאים אלה והסבר בצורה מפורטת יותר.\n\n`;
+    }
+
+    if (mathFeeling === 'struggle') {
+        prompt += `התלמיד מתקשה במתמטיקה - היה סבלני, מעודד ותן הסברים פשוטים צעד אחר צעד.\n`;
+    } else if (mathFeeling === 'love') {
+        prompt += `התלמיד אוהב מתמטיקה - תן אתגרים מעניינים ושאלות מתקדמות.\n`;
+    } else {
+        prompt += `התלמיד בסדר עם מתמטיקה - עזור לו להשתפר בהדרגה.\n`;
+    }
+
+    if (learningStyle === 'independent') {
+        prompt += `התלמיד אוהב לפתור בעצמו - תן רמזים עדינים.\n`;
+    } else if (learningStyle === 'ask') {
+        prompt += `התלמיד מוכן לבקש עזרה - תן הסברים מפורטים כשצריך.\n`;
+    } else {
+        prompt += `התלמיד מתייאש מהר - היה מאוד מעודד וחיובי.\n`;
+    }
+
+    if (goalFocus === 'understanding') {
+        prompt += `התמקד בהבנה מעמיקה של המושגים.\n`;
+    } else if (goalFocus === 'speed') {
+        prompt += `עזור לפתח מהירות בפתרון תרגילים.\n`;
+    } else if (goalFocus === 'accuracy') {
+        prompt += `שים דגש על דיוק ובדיקת תשובות.\n`;
+    } else {
+        prompt += `בנה ביטחון עצמי והראה שמתמטיקה זה כיף!\n`;
+    }
+
+    prompt += `\nסגנון התקשורת שלך: ידידותי, מעודד, עם הסברים ברורים ודוגמאות מהחיים.`;
+
+    return prompt;
+}
+
+function buildDynamicQuestionPrompt(topic, subtopic, difficulty, studentProfile) {
+    let prompt = `צור שאלה דינמית במתמטיקה בעברית עבור תכנית הלימודים הישראלית.\n\n`;
+
+    prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    prompt += `פרטי התלמיד:\n`;
+    prompt += `• כיתה: ${studentProfile.grade}\n`;
+    prompt += `• רמת הבנה: ${studentProfile.mathFeeling || 'בינוני'}\n`;
+    prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+    prompt += `דרישות השאלה:\n`;
+    prompt += `• נושא ראשי: ${topic.name} (${topic.nameEn})\n`;
+
+    if (subtopic) {
+        prompt += `• תת-נושא: ${subtopic.name} (${subtopic.nameEn})\n`;
+        prompt += `• ⚠️ חשוב! השאלה חייבת להתאים בדיוק לתת-הנושא הזה!\n`;
+    }
+
+    prompt += `• רמת קושי: ${difficulty}\n`;
+    prompt += `• התאם לתכנית הלימודים של כיתה ${studentProfile.grade}\n\n`;
+
+    prompt += `חוקים קריטיים:\n`;
+    prompt += `1. השאלה חייבת להיות ספציפית ומלאה עם כל הנתונים הדרושים\n`;
+    prompt += `2. התחל בפועל ברור: "חשב:", "פתור:", "מצא:", "הוכח:"\n`;
+    prompt += `3. התשובה חייבת להיות מספרית או אלגברית מדויקת\n`;
+    prompt += `4. כלול 3 רמזים מדורגים (קל → בינוני → חזק)\n`;
+    prompt += `5. ודא שהשאלה מתאימה לרמת כיתה ${studentProfile.grade}\n`;
+    prompt += `6. בדוק את התשובה מתמטית לפני שמחזיר אותה!\n\n`;
+
+    prompt += `פורמט תשובה (JSON בלבד!):\n`;
+    prompt += `{\n`;
+    prompt += `  "question": "השאלה המלאה בעברית עם כל הנתונים",\n`;
+    prompt += `  "correctAnswer": "התשובה המדויקת - בדוק אותה!",\n`;
+    prompt += `  "hints": [\n`;
+    prompt += `    "רמז קל שמכוון לכיוון",\n`;
+    prompt += `    "רמז בינוני עם הצעד הראשון",\n`;
+    prompt += `    "רמז חזק עם דוגמה דומה"\n`;
+    prompt += `  ],\n`;
+    prompt += `  "explanation": "הסבר מפורט של הפתרון עם כל הצעדים",\n`;
+    prompt += `  "difficulty": "basic|intermediate|advanced"\n`;
+    prompt += `}\n\n`;
+
+    prompt += `⚠️ חשוב מאוד: החזר רק JSON תקין, ללא טקסט נוסף לפני או אחרי!`;
+
+    return prompt;
+}
+
+function buildVerificationPrompt(question, userAnswer, correctAnswer, topic, subtopic, grade) {
+    let prompt = `בדוק תשובה מתמטית בצורה חכמה ומדויקת.\n\n`;
+
+    prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    prompt += `שאלה: ${question}\n`;
+    prompt += `תשובת תלמיד: ${userAnswer}\n`;
+    prompt += `תשובה נכונה: ${correctAnswer}\n`;
+    prompt += `נושא: ${topic}\n`;
+    if (subtopic) prompt += `תת-נושא: ${subtopic}\n`;
+    prompt += `כיתה: ${grade}\n`;
+    prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+    prompt += `בדיקות שעליך לבצע:\n`;
+    prompt += `1. שקילות מתמטית (למשל: 0.5 = 1/2, 3x+6 = 3(x+2))\n`;
+    prompt += `2. פורמטים שונים של אותה תשובה\n`;
+    prompt += `3. דיוק מספרי (עיגולים, שברים)\n`;
+    prompt += `4. תשובות חלקיות (למשל: מצא רק פתרון אחד במשוואה ריבועית)\n`;
+    prompt += `5. סימנים מתמטיים (±, √, ², וכו')\n\n`;
+
+    prompt += `דוגמאות לשקילות:\n`;
+    prompt += `• "2" = "2.0" = "2/1"\n`;
+    prompt += `• "±3" = "3 או -3" = "x=3 או x=-3"\n`;
+    prompt += `• "6x+12" = "6(x+2)"\n`;
+    prompt += `• "√16" = "4" = "±4" (תלוי בהקשר)\n\n`;
+
+    prompt += `פורמט תשובה (JSON בלבד!):\n`;
+    prompt += `{\n`;
+    prompt += `  "isCorrect": true/false,\n`;
+    prompt += `  "isPartial": true/false,\n`;
+    prompt += `  "confidence": 0-100,\n`;
+    prompt += `  "feedback": "משוב קצר ומעודד בעברית",\n`;
+    prompt += `  "explanation": "הסבר מפורט למה התשובה נכונה/לא נכונה",\n`;
+    prompt += `  "whatCorrect": "מה התלמיד עשה נכון (אם יש)",\n`;
+    prompt += `  "whatMissing": "מה חסר או שגוי (אם יש)"\n`;
+    prompt += `}\n\n`;
+
+    prompt += `⚠️ חשוב מאוד: החזר רק JSON תקין, ללא טקסט נוסף לפני או אחרי!`;
+
+    return prompt;
+}
+
+function buildHintPrompt(question, hintIndex, studentProfile, hintStyle) {
+    const hintLevels = [
+        'רמז עדין מאוד שמכוון לכיוון הנכון',
+        'רמז ישיר יותר עם הצעד הראשון בפתרון',
+        'רמז ספציפי עם דוגמה דומה או הנוסחה הרלוונטית',
+        'כמעט הפתרון המלא, רק בלי לתת את התשובה הסופית'
+    ];
+
+    let prompt = `תן ${hintLevels[hintIndex] || hintLevels[3]} לשאלה הבאה:\n\n`;
+    prompt += `${question}\n\n`;
+    prompt += `התלמיד לומד בכיתה ${studentProfile.grade || '8'}.\n`;
+
+    // Add hint style from personality system if available
+    if (hintStyle) {
+        prompt += `\nסגנון הרמז: ${hintStyle.hint_style}\n`;
+        prompt += `דוגמה: ${hintStyle.example_hint}\n\n`;
+    }
+
+    if (studentProfile.learningStyle === 'independent') {
+        prompt += `התלמיד אוהב לפתור בעצמו, אז הרמז צריך להיות עדין.\n`;
+    } else if (studentProfile.learningStyle === 'give-up') {
+        prompt += `התלמיד מתייאש מהר, אז הרמז צריך להיות מעודד ומפורט.\n`;
+    }
+
+    prompt += `\nהחזר רק את הרמז כטקסט ברור בעברית, ללא JSON.`;
+
+    return prompt;
+}
+
+// ==================== START SERVER ====================
+
+// Load personality system on startup if file exists
+const personalityPath = path.join(__dirname, '../uploads/personality-system.xlsx');
+if (fs.existsSync(personalityPath)) {
+    console.log('🔄 Loading personality system from existing file...');
+    personalitySystem.loadFromExcel(personalityPath);
+}
+
+app.listen(PORT, () => {
+    console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('🚀 NEXON AI SERVER WITH PERSONALITY SYSTEM');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log(`📡 Server: http://localhost:${PORT}`);
+    console.log('');
+    console.log('🤖 AI Models:');
+    console.log('   Primary: Claude 3.5 Haiku (Fast & Efficient)');
+    console.log('   Fallback: GPT-4');
+    console.log('');
+    console.log('🎭 Personality System:', personalitySystem.loaded ? '✅ LOADED' : '❌ Not Loaded');
+    if (personalitySystem.loaded) {
+        console.log('   📚 Examples:', personalitySystem.data.examplesBank.length);
+        console.log('   🎯 Topics:', personalitySystem.data.topicGuidelines.length);
+        console.log('   💡 Hints:', personalitySystem.data.hintSystem.length);
+        console.log('   ❌ Errors:', personalitySystem.data.errorPatterns.length);
+        console.log('   🌟 Encouragements:', personalitySystem.data.encouragementLibrary.length);
+    }
+    console.log('');
+    console.log('🔑 API Keys:');
+    console.log('   Anthropic:', process.env.ANTHROPIC_API_KEY ? '✅ Active' : '❌ Missing');
+    console.log('   OpenAI:', process.env.OPENAI_API_KEY ? '✅ Active' : '❌ Missing');
+    console.log('');
+    console.log('✨ Features:');
+    console.log('   • Dynamic question generation with personality');
+    console.log('   • Student profile-based adaptation');
+    console.log('   • Israeli curriculum alignment');
+    console.log('   • Smart answer verification');
+    console.log('   • Excel-based personality system');
+    console.log('   • Error pattern detection');
+    console.log('   • Cultural context integration');
+    console.log('   • Enhanced error handling & JSON parsing');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 });

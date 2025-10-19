@@ -1,322 +1,142 @@
-// src/services/smartAnswerVerification.js - FALLBACK SYSTEM
+// src/services/smartAnswerVerification.js - WITH ± HANDLING
 class SmartAnswerVerification {
+    constructor() {
+        this.confidence = 0;
+    }
 
-    verifyAnswer(userAnswer, correctAnswer, options = {}) {
-        try {
-            console.log('🔍 Verifying:', { userAnswer, correctAnswer });
+    normalizeAnswer(str) {
+        if (!str) return '';
 
-            const normalizedUser = this.normalize(userAnswer);
-            const normalizedCorrect = this.normalize(correctAnswer);
+        return str.toString()
+            .trim()
+            .toLowerCase()
+            // Handle plus-minus variations
+            .replace(/\+\/-/g, '±')
+            .replace(/\+-/g, '±')
+            .replace(/-\+/g, '±')
+            .replace(/\+\s*-/g, '±')
+            .replace(/-\s*\+/g, '±')
+            .replace(/plus-minus/g, '±')
+            .replace(/plus\/minus/g, '±')
+            // Remove all spaces
+            .replace(/\s+/g, '')
+            // Normalize x variable
+            .replace(/x\s*=/g, 'x=')
+            // Remove extra equals
+            .replace(/=+/g, '=')
+            // Handle fractions
+            .replace(/(\d+)\/(\d+)/g, (match, num, den) => {
+                const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
+                const divisor = gcd(parseInt(num), parseInt(den));
+                return `${parseInt(num) / divisor}/${parseInt(den) / divisor}`;
+            });
+    }
 
-            if (normalizedUser === normalizedCorrect) {
-                return {
-                    isCorrect: true,
-                    confidence: 100,
-                    explanation: 'התשובה נכונה!',
-                    note: null
-                };
-            }
+    extractNumbers(str) {
+        const normalized = this.normalizeAnswer(str);
+        const matches = normalized.match(/-?\d+\.?\d*/g);
+        return matches ? matches.map(n => parseFloat(n)).sort((a, b) => a - b) : [];
+    }
 
-            const numericResult = this.verifyNumeric(normalizedUser, normalizedCorrect);
-            if (numericResult) return numericResult;
-
-            const pointResult = this.verifyPoint(userAnswer, correctAnswer);
-            if (pointResult) return pointResult;
-
-            const equationResult = this.verifyEquation(normalizedUser, normalizedCorrect);
-            if (equationResult) return equationResult;
-
-            const fractionResult = this.verifyFraction(normalizedUser, normalizedCorrect);
-            if (fractionResult) return fractionResult;
-
-            const algebraResult = this.verifyAlgebra(normalizedUser, normalizedCorrect);
-            if (algebraResult) return algebraResult;
-
-            if (normalizedCorrect.includes(normalizedUser)) {
-                return {
-                    isCorrect: true,
-                    confidence: 95,
-                    explanation: 'התשובה נכונה!',
-                    note: 'התשובה שלך נכונה, אפשר גם לכתוב אותה בפירוט יותר'
-                };
-            }
-
-            if (normalizedUser.includes(normalizedCorrect)) {
-                return {
-                    isCorrect: true,
-                    confidence: 90,
-                    explanation: 'התשובה נכונה!',
-                    note: 'ניתן לכתוב בצורה קצרה יותר: ' + correctAnswer
-                };
-            }
-
-            const similarity = this.calculateSimilarity(normalizedUser, normalizedCorrect);
-            if (similarity > 0.85) {
-                return {
-                    isCorrect: true,
-                    confidence: Math.round(similarity * 100),
-                    explanation: 'התשובה נכונה (עם הבדל קטן בניסוח)',
-                    note: 'ניסוח מדויק: ' + correctAnswer
-                };
-            }
-
-            return {
-                isCorrect: false,
-                confidence: Math.round(similarity * 100),
-                explanation: 'התשובה לא נכונה',
-                note: similarity > 0.5 ? 'קרוב, אבל לא מדויק' : null
-            };
-
-        } catch (error) {
-            console.error('❌ Verification error:', error);
+    verifyAnswer(userAnswer, correctAnswer) {
+        if (!userAnswer || !correctAnswer) {
             return {
                 isCorrect: false,
                 confidence: 0,
-                explanation: 'לא הצלחתי לבדוק את התשובה',
-                note: null
+                method: 'empty-input',
+                feedback: 'נא להזין תשובה'
             };
         }
-    }
 
-    normalize(text) {
-        if (!text) return '';
+        const user = this.normalizeAnswer(userAnswer);
+        const correct = this.normalizeAnswer(correctAnswer);
 
-        return String(text)
-            .trim()
-            .toLowerCase()
-            .replace(/\s+/g, '')
-            .replace(/[,;:.!?]/g, '')
-            .replace(/[״"'`]/g, '')
-            .replace(/×/g, '*')
-            .replace(/÷/g, '/')
-            .replace(/−/g, '-')
-            .replace(/\u200f/g, '');
-    }
-
-    verifyNumeric(user, correct) {
-        const userNum = this.extractNumber(user);
-        const correctNum = this.extractNumber(correct);
-
-        if (userNum === null || correctNum === null) return null;
-
-        const diff = Math.abs(userNum - correctNum);
-        const tolerance = Math.abs(correctNum * 0.001);
-
-        if (diff <= tolerance) {
+        // Direct match
+        if (user === correct) {
+            this.confidence = 100;
             return {
                 isCorrect: true,
                 confidence: 100,
-                explanation: 'התשובה נכונה!',
-                note: null
+                method: 'exact-match',
+                feedback: 'תשובה מדויקת!'
             };
         }
 
-        if (diff <= Math.abs(correctNum * 0.05)) {
-            return {
-                isCorrect: false,
-                confidence: 80,
-                explanation: 'קרוב מאוד, אבל לא מדויק',
-                note: `התשובה הנכונה: ${correctNum}`
-            };
-        }
-
-        return null;
-    }
-
-    extractNumber(text) {
-        const match = text.match(/-?\d+\.?\d*/);
-        if (match) {
-            return parseFloat(match[0]);
-        }
-
-        try {
-            const cleaned = text.replace(/[^0-9+\-*/.()√]/g, '');
-            const withSqrt = cleaned.replace(/√(\d+)/g, 'Math.sqrt($1)');
-            const result = Function('"use strict"; return (' + withSqrt + ')')();
-
-            if (!isNaN(result) && isFinite(result)) {
-                return result;
-            }
-        } catch (e) {
-            // Silently fail
-        }
-
-        return null;
-    }
-
-    verifyPoint(user, correct) {
-        const userPoint = this.extractPoint(user);
-        const correctPoint = this.extractPoint(correct);
-
-        if (!userPoint || !correctPoint) return null;
-
-        if (userPoint.x === correctPoint.x && userPoint.y === correctPoint.y) {
-            return {
-                isCorrect: true,
-                confidence: 100,
-                explanation: 'התשובה נכונה!',
-                note: null
-            };
-        }
-
-        return null;
-    }
-
-    extractPoint(text) {
-        const patterns = [
-            /\(?\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*\)?/,
-            /x\s*=\s*(-?\d+\.?\d*).*?y\s*=\s*(-?\d+\.?\d*)/i,
-            /\(\s*(-?\d+\.?\d*)\s*;\s*(-?\d+\.?\d*)\s*\)/
+        // Handle ± solutions (quadratic equations)
+        const plusMinusPatterns = [
+            // x=±4 variations
+            /x=±(\d+\.?\d*)/,
+            /±(\d+\.?\d*)/,
+            // x=4 or x=-4
+            /x=(-?\d+\.?\d*)orx=(-?\d+\.?\d*)/,
+            /x=(-?\d+\.?\d*),x=(-?\d+\.?\d*)/
         ];
 
-        for (const pattern of patterns) {
-            const match = text.match(pattern);
-            if (match) {
-                return {
-                    x: parseFloat(match[1]),
-                    y: parseFloat(match[2])
-                };
-            }
-        }
+        for (const pattern of plusMinusPatterns) {
+            const userMatch = user.match(pattern);
+            const correctMatch = correct.match(pattern);
 
-        return null;
-    }
-
-    verifyEquation(user, correct) {
-        const cleanUser = user.replace(/\s/g, '');
-        const cleanCorrect = correct.replace(/\s/g, '');
-
-        const userMatch = cleanUser.match(/x=(-?\d+\.?\d*)/);
-        const correctMatch = cleanCorrect.match(/x=(-?\d+\.?\d*)/);
-
-        if (userMatch && correctMatch) {
-            const userVal = parseFloat(userMatch[1]);
-            const correctVal = parseFloat(correctMatch[1]);
-
-            if (Math.abs(userVal - correctVal) < 0.001) {
-                return {
-                    isCorrect: true,
-                    confidence: 100,
-                    explanation: 'התשובה נכונה!',
-                    note: null
-                };
-            }
-        }
-
-        return null;
-    }
-
-    verifyFraction(user, correct) {
-        const userFrac = this.parseFraction(user);
-        const correctFrac = this.parseFraction(correct);
-
-        if (!userFrac || !correctFrac) return null;
-
-        const userVal = userFrac.num / userFrac.den;
-        const correctVal = correctFrac.num / correctFrac.den;
-
-        if (Math.abs(userVal - correctVal) < 0.001) {
-            return {
-                isCorrect: true,
-                confidence: 100,
-                explanation: 'התשובה נכונה!',
-                note: userFrac.num !== correctFrac.num ?
-                    `אפשר גם לפשט ל-${correctFrac.num}/${correctFrac.den}` : null
-            };
-        }
-
-        return null;
-    }
-
-    parseFraction(text) {
-        const match = text.match(/(-?\d+)\/(-?\d+)/);
-        if (match) {
-            return {
-                num: parseInt(match[1]),
-                den: parseInt(match[2])
-            };
-        }
-        return null;
-    }
-
-    verifyAlgebra(user, correct) {
-        const cleanUser = user.replace(/\s/g, '');
-        const cleanCorrect = correct.replace(/\s/g, '');
-
-        if (cleanUser === cleanCorrect) {
-            return {
-                isCorrect: true,
-                confidence: 100,
-                explanation: 'התשובה נכונה!',
-                note: null
-            };
-        }
-
-        const userTerms = this.extractTerms(cleanUser);
-        const correctTerms = this.extractTerms(cleanCorrect);
-
-        if (this.areEquivalentTerms(userTerms, correctTerms)) {
-            return {
-                isCorrect: true,
-                confidence: 95,
-                explanation: 'התשובה נכונה!',
-                note: 'ניתן לכתוב גם: ' + correct
-            };
-        }
-
-        return null;
-    }
-
-    extractTerms(expr) {
-        return expr.split(/([+-])/).filter(t => t.trim());
-    }
-
-    areEquivalentTerms(terms1, terms2) {
-        if (terms1.length !== terms2.length) return false;
-
-        const sorted1 = [...terms1].sort().join('');
-        const sorted2 = [...terms2].sort().join('');
-
-        return sorted1 === sorted2;
-    }
-
-    calculateSimilarity(str1, str2) {
-        const len1 = str1.length;
-        const len2 = str2.length;
-
-        if (len1 === 0) return len2 === 0 ? 1 : 0;
-        if (len2 === 0) return 0;
-
-        const matrix = [];
-
-        for (let i = 0; i <= len2; i++) {
-            matrix[i] = [i];
-        }
-
-        for (let j = 0; j <= len1; j++) {
-            matrix[0][j] = j;
-        }
-
-        for (let i = 1; i <= len2; i++) {
-            for (let j = 1; j <= len1; j++) {
-                if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
-                    matrix[i][j] = matrix[i - 1][j - 1];
-                } else {
-                    matrix[i][j] = Math.min(
-                        matrix[i - 1][j - 1] + 1,
-                        matrix[i][j - 1] + 1,
-                        matrix[i - 1][j] + 1
-                    );
+            if (userMatch && correctMatch) {
+                if (userMatch[1] === correctMatch[1]) {
+                    this.confidence = 95;
+                    return {
+                        isCorrect: true,
+                        confidence: 95,
+                        method: 'plus-minus-match',
+                        feedback: 'נכון! זיהיתי פתרון עם ±'
+                    };
                 }
             }
         }
 
-        const distance = matrix[len2][len1];
-        const maxLen = Math.max(len1, len2);
+        // Numeric comparison
+        const userNums = this.extractNumbers(user);
+        const correctNums = this.extractNumbers(correct);
 
-        return 1 - (distance / maxLen);
+        if (userNums.length > 0 && correctNums.length > 0) {
+            const arraysEqual = userNums.length === correctNums.length &&
+                userNums.every((val, idx) => Math.abs(val - correctNums[idx]) < 0.01);
+
+            if (arraysEqual) {
+                this.confidence = 85;
+                return {
+                    isCorrect: true,
+                    confidence: 85,
+                    method: 'numeric-match',
+                    feedback: 'נכון מספרית!'
+                };
+            }
+
+            // Partial match
+            const commonNumbers = userNums.filter(n =>
+                correctNums.some(cn => Math.abs(n - cn) < 0.01)
+            );
+
+            if (commonNumbers.length > 0 && commonNumbers.length < correctNums.length) {
+                this.confidence = 50;
+                return {
+                    isCorrect: false,
+                    isPartial: true,
+                    confidence: 50,
+                    method: 'partial-numeric',
+                    feedback: `מצאת ${commonNumbers.length} מתוך ${correctNums.length} פתרונות`
+                };
+            }
+        }
+
+        // Not correct
+        this.confidence = 20;
+        return {
+            isCorrect: false,
+            confidence: 20,
+            method: 'no-match',
+            feedback: 'התשובה שונה מהתשובה הנכונה'
+        };
     }
 }
 
-export const smartVerification = new SmartAnswerVerification();
+// Create and export instance
+const smartVerification = new SmartAnswerVerification();
+
+export { smartVerification };
 export default smartVerification;

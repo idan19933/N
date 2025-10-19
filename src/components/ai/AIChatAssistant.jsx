@@ -1,9 +1,10 @@
-// src/components/ai/AIChatAssistant.jsx - ENHANCED WITH CONTEXT AWARENESS
+// src/components/ai/AIChatAssistant.jsx - COMPLETE WORKING VERSION
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, Loader, Lightbulb, BookOpen, Calculator, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { claudeService } from '../../services/claudeService';
+
+const API_BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 
 const AIChatAssistant = ({ context }) => {
     const [messages, setMessages] = useState([]);
@@ -12,7 +13,6 @@ const AIChatAssistant = ({ context }) => {
     const messagesEndRef = useRef(null);
     const inputRef = useRef(null);
 
-    // הודעת ברכה אוטומטית בהתאם לשאלה
     useEffect(() => {
         if (context && messages.length === 0) {
             const welcomeMessage = {
@@ -33,12 +33,10 @@ const AIChatAssistant = ({ context }) => {
         }
     }, [context]);
 
-    // גלילה אוטומטית
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
 
-    // כפתורים מהירים חכמים
     const quickActions = [
         {
             label: '💡 תן לי רמז',
@@ -53,14 +51,14 @@ const AIChatAssistant = ({ context }) => {
             color: 'orange'
         },
         {
-            label: '✅ בדוק את התשובה שלי',
-            prompt: `האם אני בכיוון הנכון? השלבים שלי: ${context?.currentSteps.join(', ') || 'עדיין לא כתבתי'}`,
+            label: '✅ בדוק כיוון',
+            prompt: `האם אני בכיוון הנכון?`,
             icon: Calculator,
             color: 'blue'
         },
         {
-            label: '📖 הראה פתרון מלא',
-            prompt: 'הראה לי את הפתרון המלא עם כל השלבים בבקשה',
+            label: '📖 הראה פתרון',
+            prompt: 'הראה לי את הפתרון המלא בבקשה',
             icon: BookOpen,
             color: 'purple'
         }
@@ -79,35 +77,45 @@ const AIChatAssistant = ({ context }) => {
         setLoading(true);
 
         try {
-            const conversationHistory = messages.map(m => ({
-                role: m.role,
-                content: m.content
-            }));
-
-            const response = await claudeService.chat([
-                ...conversationHistory,
-                userMessage
-            ], {
-                // העברת context ל-backend
-                question: {
-                    question: context.question,
-                    answer: context.answer,
-                    hints: context.hints,
-                    steps: context.steps,
-                    context: context.context
+            const response = await fetch(`${API_BASE_URL}/api/ai/chat`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
                 },
-                studentSteps: context.currentSteps || []
+                body: JSON.stringify({
+                    message: messageText,
+                    context: {
+                        question: context.question,
+                        answer: context.answer,
+                        hints: context.hints,
+                        steps: context.steps,
+                        currentSteps: context.currentSteps || [],
+                        studentName: context.studentName,
+                        topic: context.topic,
+                        grade: context.grade
+                    }
+                })
             });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+
+            if (!data.success) {
+                throw new Error(data.error || 'Unknown error');
+            }
 
             const assistantMessage = {
                 role: 'assistant',
-                content: response
+                content: data.response
             };
 
             setMessages(prev => [...prev, assistantMessage]);
 
         } catch (error) {
-            console.error('Chat error:', error);
+            console.error('💥 Chat error:', error);
             toast.error('שגיאה בתקשורת עם העוזר');
 
             const errorMessage = {
@@ -128,7 +136,6 @@ const AIChatAssistant = ({ context }) => {
     return (
         <div className="h-full flex flex-col bg-gradient-to-b from-purple-50 to-pink-50 dark:from-gray-800 dark:to-gray-900" dir="rtl">
 
-            {/* Messages Area */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
                 <AnimatePresence>
                     {messages.map((message, index) => (
@@ -168,7 +175,6 @@ const AIChatAssistant = ({ context }) => {
                 <div ref={messagesEndRef} />
             </div>
 
-            {/* Quick Actions */}
             {messages.length <= 1 && (
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
@@ -182,10 +188,10 @@ const AIChatAssistant = ({ context }) => {
                                 whileHover={{ scale: 1.05 }}
                                 whileTap={{ scale: 0.95 }}
                                 onClick={() => handleQuickAction(action)}
-                                className={`p-3 rounded-xl bg-white dark:bg-gray-800 shadow-lg hover:shadow-xl transition-all border-2 border-${action.color}-300 dark:border-${action.color}-700`}
+                                className="p-3 rounded-xl bg-white dark:bg-gray-800 shadow-lg hover:shadow-xl transition-all border-2 border-purple-200 dark:border-purple-700"
                             >
                                 <div className="flex items-center gap-2 text-sm font-bold text-gray-700 dark:text-gray-300">
-                                    <action.icon className={`w-4 h-4 text-${action.color}-600`} />
+                                    <action.icon className="w-4 h-4 text-purple-600" />
                                     <span>{action.label}</span>
                                 </div>
                             </motion.button>
@@ -194,7 +200,6 @@ const AIChatAssistant = ({ context }) => {
                 </motion.div>
             )}
 
-            {/* Input Area */}
             <div className="p-4 bg-white dark:bg-gray-900 border-t-2 border-gray-200 dark:border-gray-700">
                 <div className="flex gap-2">
                     <input

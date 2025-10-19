@@ -1,4 +1,4 @@
-// src/App.jsx - FIXED IMPORT PATH FOR MATH TUTOR
+// src/App.jsx - UPDATED WITH PERSONALITY UPLOADER
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
@@ -23,7 +23,7 @@ import PaymentCancel from './pages/PaymentCancel';
 
 // AI & Practice
 import Practice from './pages/Practice';
-import MathTutor from './components/ai/MathTutor';  // ✅ CORRECT PATH
+import MathTutor from './components/ai/MathTutor';
 
 // Onboarding & Personalized
 import OnboardingFlow from './pages/OnboardingFlow';
@@ -38,7 +38,7 @@ import ManageCurriculum from './pages/ManageCurriculum';
 import AddLesson from './pages/AddLesson';
 import AdminNotifications from './pages/AdminNotifications';
 import AdminProblemUploader from './pages/AdminProblemUploader';
-import AdminAIUploader from './pages/AdminAIUploader';
+import PersonalityUploader from './pages/PersonalityUploader';  // ✅ NEW: AI Personality Uploader
 
 function App() {
     const initAuth = useAuthStore(state => state.initAuth);
@@ -113,7 +113,6 @@ function App() {
                         }
                     />
 
-                    {/* ✅ MATH TUTOR ROUTE - FROM components/ai */}
                     <Route
                         path="math-tutor"
                         element={
@@ -196,11 +195,12 @@ function App() {
                         }
                     />
 
+                    {/* ✅ NEW: AI PERSONALITY UPLOADER ROUTE */}
                     <Route
                         path="admin/ai-upload"
                         element={
                             <AdminRoute>
-                                <AdminAIUploader />
+                                <PersonalityUploader />
                             </AdminRoute>
                         }
                     />

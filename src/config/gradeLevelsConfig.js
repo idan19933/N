@@ -1,179 +1,134 @@
-// src/config/gradeLevelsConfig.js - Israeli Curriculum
-/**
- * ✅ תצורת כיתות ונושאים - תכנית לימודים ישראלית
- */
+// src/config/gradeLevelsConfig.js - COMPLETE GRADE & TOPIC CONFIGURATION
 
-const topicsByGrade = {
-    '7': ['מספרים טבעיים ושלמים', 'חזקות ושורשים', 'ביטויים אלגבריים', 'משוואות פשוטות', 'אחוזים ויחסים', 'גאומטריה בסיסית'],
-    '8': ['משוואות ואי-שוויונות', 'ביטויים אלגבריים מורכבים', 'פרופורציה ויחסים', 'דמיון ומשולשים', 'מעגל', 'גרפים של פונקציות'],
-    '9': ['חזקות ושורשים ריבועיים', 'משוואות ריבועיות', 'גאומטריה מתקדמת', 'פונקציות קוויות וריבועיות', 'הסתברות'],
-    '10-3': ['אלגברה בסיסית', 'משוואות ריבועיות', 'פונקציות', 'גאומטריה אנליטית', 'טריגונומטריה בסיסית'],
-    '10-4': ['משוואות מעריכיות', 'פונקציות מעריכיות ולוגריתמיות', 'טריגונומטריה', 'גאומטריה אנליטית', 'סדרות'],
-    '10-5': ['פונקציות מתקדמות', 'טריגונומטריה מתקדמת', 'גאומטריה אנליטית', 'סדרות', 'נגזרות בסיסיות'],
-    '11-3': ['פונקציות ריבועיות ומעריכיות', 'בעיות קיצון', 'טריגונומטריה במרחב', 'הסתברות'],
-    '11-4': ['חשבון דיפרנציאלי', 'פונקציות מעריכיות', 'גאומטריה במרחב', 'טריגונומטריה מתקדמת', 'הסתברות מותנית'],
-    '11-5': ['חשבון דיפרנציאלי מתקדם', 'גאומטריה במרחב', 'פונקציות מתקדמות', 'טריגונומטריה במרחב', 'הסתברות בינומית'],
-    '12-3': ['חזרה כללית', 'פונקציות מעריכיות בסיסיות', 'גרפים', 'הכנה לבגרות'],
-    '12-4': ['אינטגרלים', 'נגזרות ואופטימיזציה', 'בעיות קיצון', 'הסתברות מתקדמת'],
-    '12-5': ['אינטגרלים מתקדמים', 'אופטימיזציה', 'סדרות אינסופיות', 'הסתברות רציפה']
+export const GRADES = {
+    GRADE_1: 'grade_1',
+    GRADE_2: 'grade_2',
+    GRADE_3: 'grade_3',
+    GRADE_4: 'grade_4',
+    GRADE_5: 'grade_5',
+    GRADE_6: 'grade_6',
+    GRADE_7: 'grade_7',
+    GRADE_8: 'grade_8',
+    GRADE_9: 'grade_9'
 };
 
-const topicIcons = {
-    // Grade 7-9
-    'מספרים טבעיים ושלמים': '🔢',
-    'חזקות ושורשים': '📐',
-    'ביטויים אלגבריים': '🧮',
-    'משוואות פשוטות': '⚖️',
-    'אחוזים ויחסים': '💯',
-    'גאומטריה בסיסית': '📏',
-    'משוואות ואי-שוויונות': '⚖️',
-    'ביטויים אלגבריים מורכבים': '🧮',
-    'פרופורציה ויחסים': '📊',
-    'דמיון ומשולשים': '🔺',
-    'מעגל': '⭕',
-    'גרפים של פונקציות': '📈',
-    'חזקות ושורשים ריבועיים': '√',
-    'משוואות ריבועיות': 'x²',
-    'גאומטריה מתקדמת': '📐',
-    'פונקציות קוויות וריבועיות': '📈',
-    'הסתברות': '🎲',
-
-    // High School
-    'אלגברה בסיסית': '🧮',
-    'משוואות ריבועיות': 'x²',
-    'פונקציות': '📈',
-    'גאומטריה אנליטית': '📐',
-    'טריגונומטריה בסיסית': '📐',
-    'משוואות מעריכיות': 'eˣ',
-    'פונקציות מעריכיות ולוגריתמיות': 'log',
-    'טריגונומטריה': 'sin',
-    'סדרות': '∑',
-    'פונקציות מתקדמות': '∫',
-    'טריגונומטריה מתקדמת': 'cos',
-    'נגזרות בסיסיות': "f'",
-    'פונקציות ריבועיות ומעריכיות': '📊',
-    'בעיות קיצון': '⛰️',
-    'טריגונומטריה במרחב': '🌐',
-    'חשבון דיפרנציאלי': "∂",
-    'גאומטריה במרחב': '📦',
-    'הסתברות מותנית': 'P(A|B)',
-    'חשבון דיפרנציאלי מתקדם': '∇',
-    'הסתברות בינומית': '🎲',
-    'חזרה כללית': '📚',
-    'פונקציות מעריכיות בסיסיות': 'eˣ',
-    'גרפים': '📈',
-    'הכנה לבגרות': '🎓',
-    'אינטגרלים': '∫',
-    'נגזרות ואופטימיזציה': "f'",
-    'אינטגרלים מתקדמים': '∫∫',
-    'אופטימיזציה': '📊',
-    'סדרות אינסופיות': '∞',
-    'הסתברות רציפה': '📈'
-};
-
-// Question templates by topic
-const topicTemplates = {
-    'משוואות פשוטות': [
-        { type: 'equation', difficulty: 'easy', maxCoef: 5 },
-        { type: 'equation', difficulty: 'medium', maxCoef: 10 }
-    ],
-    'אחוזים ויחסים': [
-        { type: 'percentage', difficulty: 'easy' }
-    ],
-    'משוואות ריבועיות': [
-        { type: 'quadratic', difficulty: 'medium' }
-    ],
-    // Default template for all topics
-    'default': [
-        { type: 'equation', difficulty: 'easy', maxCoef: 10 }
-    ]
-};
-
-/**
- * Get grade configuration for a student
- */
-export const getGradeConfig = (nexonProfile) => {
-    if (!nexonProfile || !nexonProfile.grade) {
-        return null;
+const gradeData = {
+    [GRADES.GRADE_1]: {
+        id: GRADES.GRADE_1,
+        name: 'כיתה א׳',
+        emoji: '🎈',
+        topics: [
+            { id: 'counting', name: 'ספירה עד 20', icon: '🔢' },
+            { id: 'addition', name: 'חיבור בסיסי', icon: '➕' },
+            { id: 'subtraction', name: 'חיסור בסיסי', icon: '➖' },
+            { id: 'shapes', name: 'צורות', icon: '🔺' }
+        ]
+    },
+    [GRADES.GRADE_2]: {
+        id: GRADES.GRADE_2,
+        name: 'כיתה ב׳',
+        emoji: '🎨',
+        topics: [
+            { id: 'addition_subtraction', name: 'חיבור וחיסור עד 100', icon: '🧮' },
+            { id: 'multiplication_intro', name: 'הכרת הכפל', icon: '✖️' },
+            { id: 'measurement', name: 'מדידה', icon: '📏' },
+            { id: 'time', name: 'שעון', icon: '🕐' }
+        ]
+    },
+    [GRADES.GRADE_3]: {
+        id: GRADES.GRADE_3,
+        name: 'כיתה ג׳',
+        emoji: '🚀',
+        topics: [
+            { id: 'multiplication', name: 'לוח הכפל', icon: '✖️' },
+            { id: 'division', name: 'חילוק', icon: '➗' },
+            { id: 'fractions_intro', name: 'שברים פשוטים', icon: '½' },
+            { id: 'area_perimeter', name: 'היקף ושטח', icon: '📐' }
+        ]
+    },
+    [GRADES.GRADE_4]: {
+        id: GRADES.GRADE_4,
+        name: 'כיתה ד׳',
+        emoji: '🎯',
+        topics: [
+            { id: 'fractions', name: 'שברים', icon: '¾' },
+            { id: 'decimals', name: 'מספרים עשרוניים', icon: '0.5' },
+            { id: 'geometry', name: 'גאומטריה', icon: '📊' },
+            { id: 'word_problems', name: 'בעיות מילוליות', icon: '📝' }
+        ]
+    },
+    [GRADES.GRADE_5]: {
+        id: GRADES.GRADE_5,
+        name: 'כיתה ה׳',
+        emoji: '🏆',
+        topics: [
+            { id: 'fractions_advanced', name: 'פעולות בשברים', icon: '🔢' },
+            { id: 'percentages', name: 'אחוזים', icon: '%' },
+            { id: 'ratios', name: 'יחסים ופרופורציות', icon: '⚖️' },
+            { id: 'algebra_intro', name: 'הכרת האלגברה', icon: 'x' }
+        ]
+    },
+    [GRADES.GRADE_6]: {
+        id: GRADES.GRADE_6,
+        name: 'כיתה ו׳',
+        emoji: '🎓',
+        topics: [
+            { id: 'negative_numbers', name: 'מספרים שליליים', icon: '➖' },
+            { id: 'equations', name: 'משוואות פשוטות', icon: 'x=5' },
+            { id: 'statistics', name: 'סטטיסטיקה', icon: '📊' },
+            { id: 'volume', name: 'נפח', icon: '🧊' }
+        ]
+    },
+    [GRADES.GRADE_7]: {
+        id: GRADES.GRADE_7,
+        name: 'כיתה ז׳',
+        emoji: '🔬',
+        topics: [
+            { id: 'linear_equations', name: 'משוואות לינאריות', icon: '📈' },
+            { id: 'inequalities', name: 'אי שוויונות', icon: '≠' },
+            { id: 'pythagoras', name: 'משפט פיתגורס', icon: '△' },
+            { id: 'probability', name: 'הסתברות', icon: '🎲' }
+        ]
+    },
+    [GRADES.GRADE_8]: {
+        id: GRADES.GRADE_8,
+        name: 'כיתה ח׳',
+        emoji: '🧪',
+        topics: [
+            { id: 'proportions', name: 'פרופורציה ויחסים', icon: '⚖️' },
+            { id: 'linear_functions', name: 'פונקציות קוויות', icon: '📊' },
+            { id: 'similarity', name: 'דמיון ומשולשים', icon: '△' },
+            { id: 'graphs', name: 'גרפים של פונקציות', icon: '📈' }
+        ]
+    },
+    [GRADES.GRADE_9]: {
+        id: GRADES.GRADE_9,
+        name: 'כיתה ט׳',
+        emoji: '🎯',
+        topics: [
+            { id: 'quadratic_equations', name: 'משוואות ריבועיות', icon: 'x²' },
+            { id: 'quadratic_functions', name: 'פונקציות ריבועיות', icon: '📉' },
+            { id: 'trigonometry', name: 'טריגונומטריה', icon: '∠' },
+            { id: 'circles', name: 'מעגלים', icon: '⭕' }
+        ]
     }
-
-    const grade = nexonProfile.grade;
-    const track = nexonProfile.track;
-
-    // Build grade key
-    let gradeKey = grade;
-    if (parseInt(grade) >= 10 && track) {
-        const trackNum = track.includes('3') ? '3' : track.includes('4') ? '4' : track.includes('5') ? '5' : '';
-        gradeKey = `${grade}-${trackNum}`;
-    }
-
-    const topics = topicsByGrade[gradeKey] || [];
-
-    return {
-        id: gradeKey,
-        name: `כיתה ${grade}` + (track ? ` (${track})` : ''),
-        emoji: grade === '7' ? '7️⃣' : grade === '8' ? '8️⃣' : grade === '9' ? '9️⃣' :
-            grade === '10' ? '🔟' : grade === '11' ? '1️⃣1️⃣' : '1️⃣2️⃣',
-        range: [1, 100],
-        topics: topics.map(topicName => ({
-            id: topicName.replace(/\s+/g, '-'),
-            name: topicName,
-            icon: topicIcons[topicName] || '📚',
-            mastery: nexonProfile.topicMastery?.[topicName] || 'unknown',
-            templates: topicTemplates[topicName] || topicTemplates.default
-        }))
-    };
 };
 
-/**
- * Get prioritized topics (weak topics first)
- */
-export const getPrioritizedTopics = (nexonProfile) => {
-    const gradeConfig = getGradeConfig(nexonProfile);
-    if (!gradeConfig) return [];
+export function getAllGrades() {
+    return Object.values(gradeData);
+}
 
-    const topics = gradeConfig.topics;
+export function getGradeById(gradeId) {
+    return gradeData[gradeId] || null;
+}
 
-    // Sort by mastery level: struggle -> needs-work -> good -> unknown
-    const priorityOrder = { 'struggle': 0, 'needs-work': 1, 'unknown': 2, 'good': 3 };
+export function getTopicsForGrade(gradeId) {
+    const grade = gradeData[gradeId];
+    return grade ? grade.topics : [];
+}
 
-    return topics.sort((a, b) => {
-        const aPriority = priorityOrder[a.mastery] ?? 2;
-        const bPriority = priorityOrder[b.mastery] ?? 2;
-        return aPriority - bPriority;
-    });
-};
-
-/**
- * Get all grades (for selection screen)
- */
-export const getAllGrades = () => {
-    return [
-        { id: '7', name: 'כיתה ז׳', emoji: '7️⃣', range: [1, 100] },
-        { id: '8', name: 'כיתה ח׳', emoji: '8️⃣', range: [1, 100] },
-        { id: '9', name: 'כיתה ט׳', emoji: '9️⃣', range: [1, 100] },
-        { id: '10', name: 'כיתה י׳', emoji: '🔟', range: [1, 100] },
-        { id: '11', name: 'כיתה יא׳', emoji: '1️⃣1️⃣', range: [1, 100] },
-        { id: '12', name: 'כיתה יב׳', emoji: '1️⃣2️⃣', range: [1, 100] }
-    ];
-};
-
-/**
- * Get topics for a specific grade
- */
-export const getTopicsForGrade = (gradeId) => {
-    const topics = topicsByGrade[gradeId] || [];
-    return topics.map(topicName => ({
-        id: topicName.replace(/\s+/g, '-'),
-        name: topicName,
-        icon: topicIcons[topicName] || '📚',
-        templates: topicTemplates[topicName] || topicTemplates.default
-    }));
-};
-
-export default {
-    getAllGrades,
-    getTopicsForGrade,
-    getGradeConfig,
-    getPrioritizedTopics
-};
+export function getTopicById(gradeId, topicId) {
+    const grade = gradeData[gradeId];
+    if (!grade) return null;
+    return grade.topics.find(t => t.id === topicId) || null;
+}
