@@ -29,6 +29,7 @@
     "react-hot-toast": "^2.6.0",
     "react-infinite-scroll-component": "^6.1.0",
     "react-router-dom": "^7.9.4",
+    "recharts": "^3.3.0",
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7",
     "stripe": "^19.1.0",

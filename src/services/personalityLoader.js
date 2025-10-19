@@ -1,5 +1,7 @@
-// server/services/personalityLoader.js - EXCEL PERSONALITY SYSTEM LOADER
+// server/services/personalityLoader.js - FIXED EXCEL PERSONALITY SYSTEM LOADER
 import xlsx from 'xlsx';
+import fs from 'fs';
+import path from 'path';
 
 class PersonalitySystem {
     constructor() {
@@ -23,97 +25,133 @@ class PersonalitySystem {
     loadFromExcel(filePath) {
         try {
             console.log('📚 Loading personality system from Excel...');
+            console.log('   File path:', filePath);
 
             const workbook = xlsx.readFile(filePath);
+            console.log('   📑 Available sheets:', workbook.SheetNames.join(', '));
 
             // Sheet 1: CORE_PERSONALITY
-            const coreSheet = workbook.Sheets['CORE_PERSONALITY'];
-            if (coreSheet) {
+            if (workbook.SheetNames.includes('CORE_PERSONALITY')) {
+                const coreSheet = workbook.Sheets['CORE_PERSONALITY'];
                 const coreData = xlsx.utils.sheet_to_json(coreSheet);
+                console.log('   📋 CORE_PERSONALITY rows:', coreData.length);
+
                 coreData.forEach(row => {
-                    this.data.corePersonality[row.Field] = row.Value;
+                    if (row.Field && row.Value !== undefined) {
+                        this.data.corePersonality[row.Field] = row.Value;
+                    }
                 });
+
+                console.log('   ✅ Core personality loaded:', Object.keys(this.data.corePersonality).length, 'fields');
+                console.log('   👤 Teacher name:', this.data.corePersonality.teacher_name);
+            } else {
+                console.log('   ⚠️ CORE_PERSONALITY sheet not found');
             }
 
             // Sheet 2: LANGUAGE_STYLE
-            const langSheet = workbook.Sheets['LANGUAGE_STYLE'];
-            if (langSheet) {
+            if (workbook.SheetNames.includes('LANGUAGE_STYLE')) {
+                const langSheet = workbook.Sheets['LANGUAGE_STYLE'];
                 const langData = xlsx.utils.sheet_to_json(langSheet);
+                console.log('   📋 LANGUAGE_STYLE rows:', langData.length);
+
                 langData.forEach(row => {
-                    this.data.languageStyle[row.Field] = row.Value;
+                    if (row.Field && row.Value !== undefined) {
+                        this.data.languageStyle[row.Field] = row.Value;
+                    }
                 });
+
+                console.log('   ✅ Language style loaded:', Object.keys(this.data.languageStyle).length, 'fields');
+            } else {
+                console.log('   ⚠️ LANGUAGE_STYLE sheet not found');
             }
 
             // Sheet 3: TOPIC_GUIDELINES
-            const topicSheet = workbook.Sheets['TOPIC_GUIDELINES'];
-            if (topicSheet) {
+            if (workbook.SheetNames.includes('TOPIC_GUIDELINES')) {
+                const topicSheet = workbook.Sheets['TOPIC_GUIDELINES'];
                 this.data.topicGuidelines = xlsx.utils.sheet_to_json(topicSheet);
+                console.log('   ✅ Topic guidelines loaded:', this.data.topicGuidelines.length);
             }
 
             // Sheet 4: HINT_SYSTEM
-            const hintSheet = workbook.Sheets['HINT_SYSTEM'];
-            if (hintSheet) {
+            if (workbook.SheetNames.includes('HINT_SYSTEM')) {
+                const hintSheet = workbook.Sheets['HINT_SYSTEM'];
                 this.data.hintSystem = xlsx.utils.sheet_to_json(hintSheet);
+                console.log('   ✅ Hint system loaded:', this.data.hintSystem.length);
             }
 
             // Sheet 5: STEP_TEMPLATES
-            const stepSheet = workbook.Sheets['STEP_TEMPLATES'];
-            if (stepSheet) {
+            if (workbook.SheetNames.includes('STEP_TEMPLATES')) {
+                const stepSheet = workbook.Sheets['STEP_TEMPLATES'];
                 this.data.stepTemplates = xlsx.utils.sheet_to_json(stepSheet);
+                console.log('   ✅ Step templates loaded:', this.data.stepTemplates.length);
             }
 
             // Sheet 6: ANSWER_FORMATS
-            const answerSheet = workbook.Sheets['ANSWER_FORMATS'];
-            if (answerSheet) {
+            if (workbook.SheetNames.includes('ANSWER_FORMATS')) {
+                const answerSheet = workbook.Sheets['ANSWER_FORMATS'];
                 this.data.answerFormats = xlsx.utils.sheet_to_json(answerSheet);
+                console.log('   ✅ Answer formats loaded:', this.data.answerFormats.length);
             }
 
             // Sheet 7: EXAMPLES_BANK
-            const examplesSheet = workbook.Sheets['EXAMPLES_BANK'];
-            if (examplesSheet) {
+            if (workbook.SheetNames.includes('EXAMPLES_BANK')) {
+                const examplesSheet = workbook.Sheets['EXAMPLES_BANK'];
                 this.data.examplesBank = xlsx.utils.sheet_to_json(examplesSheet);
+                console.log('   ✅ Examples bank loaded:', this.data.examplesBank.length);
             }
 
             // Sheet 8: ERROR_PATTERNS
-            const errorSheet = workbook.Sheets['ERROR_PATTERNS'];
-            if (errorSheet) {
+            if (workbook.SheetNames.includes('ERROR_PATTERNS')) {
+                const errorSheet = workbook.Sheets['ERROR_PATTERNS'];
                 this.data.errorPatterns = xlsx.utils.sheet_to_json(errorSheet);
+                console.log('   ✅ Error patterns loaded:', this.data.errorPatterns.length);
             }
 
             // Sheet 9: ENCOURAGEMENT_LIBRARY
-            const encourageSheet = workbook.Sheets['ENCOURAGEMENT_LIBRARY'];
-            if (encourageSheet) {
+            if (workbook.SheetNames.includes('ENCOURAGEMENT_LIBRARY')) {
+                const encourageSheet = workbook.Sheets['ENCOURAGEMENT_LIBRARY'];
                 this.data.encouragementLibrary = xlsx.utils.sheet_to_json(encourageSheet);
+                console.log('   ✅ Encouragement library loaded:', this.data.encouragementLibrary.length);
             }
 
             // Sheet 10: QUESTION_TEMPLATES
-            const templateSheet = workbook.Sheets['QUESTION_TEMPLATES'];
-            if (templateSheet) {
+            if (workbook.SheetNames.includes('QUESTION_TEMPLATES')) {
+                const templateSheet = workbook.Sheets['QUESTION_TEMPLATES'];
                 this.data.questionTemplates = xlsx.utils.sheet_to_json(templateSheet);
+                console.log('   ✅ Question templates loaded:', this.data.questionTemplates.length);
             }
 
             // Sheet 11: PROGRESSION_RULES
-            const progressSheet = workbook.Sheets['PROGRESSION_RULES'];
-            if (progressSheet) {
+            if (workbook.SheetNames.includes('PROGRESSION_RULES')) {
+                const progressSheet = workbook.Sheets['PROGRESSION_RULES'];
                 this.data.progressionRules = xlsx.utils.sheet_to_json(progressSheet);
+                console.log('   ✅ Progression rules loaded:', this.data.progressionRules.length);
             }
 
             // Sheet 12: CULTURAL_CONTEXT
-            const culturalSheet = workbook.Sheets['CULTURAL_CONTEXT'];
-            if (culturalSheet) {
+            if (workbook.SheetNames.includes('CULTURAL_CONTEXT')) {
+                const culturalSheet = workbook.Sheets['CULTURAL_CONTEXT'];
                 this.data.culturalContext = xlsx.utils.sheet_to_json(culturalSheet);
+                console.log('   ✅ Cultural context loaded:', this.data.culturalContext.length);
             }
 
             this.loaded = true;
-            console.log('✅ Personality system loaded successfully!');
-            console.log(`   📊 Examples: ${this.data.examplesBank.length}`);
+            console.log('\n✅ Personality system loaded successfully!');
+            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+            console.log('📊 Summary:');
+            console.log(`   👤 Teacher: ${this.data.corePersonality.teacher_name || 'Unknown'}`);
+            console.log(`   📚 Examples: ${this.data.examplesBank.length}`);
             console.log(`   🎯 Topics: ${this.data.topicGuidelines.length}`);
             console.log(`   💡 Hints: ${this.data.hintSystem.length}`);
             console.log(`   ❌ Error patterns: ${this.data.errorPatterns.length}`);
+            console.log(`   💪 Encouragements: ${this.data.encouragementLibrary.length}`);
+            console.log(`   📝 Templates: ${this.data.questionTemplates.length}`);
+            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
             return true;
         } catch (error) {
             console.error('❌ Failed to load personality system:', error);
+            console.error('   Error details:', error.message);
             return false;
         }
     }
@@ -184,36 +222,26 @@ class PersonalitySystem {
         const core = this.data.corePersonality;
         const lang = this.data.languageStyle;
 
-        let prompt = `אתה ${core.teacher_name || 'נקסון'}, ${core.teacher_title || 'מורה למתמטיקה'}.\n\n`;
-
-        if (core.personality_type) {
-            prompt += `אישיות:\n`;
-            prompt += `• סגנון: ${core.personality_type}\n`;
-            prompt += `• טון: ${core.tone}\n`;
-            if (core.teaching_philosophy) {
-                prompt += `• פילוסופיה: ${core.teaching_philosophy}\n`;
-            }
-            if (core.approach_to_mistakes) {
-                prompt += `• גישה לטעויות: ${core.approach_to_mistakes}\n`;
-            }
-            prompt += `\n`;
+        if (!core.teacher_name) {
+            // Fallback if personality not loaded
+            return buildFallbackSystemPrompt(studentProfile);
         }
 
-        if (lang.sentence_length) {
+        let prompt = `אתה ${core.teacher_name}, ${core.teacher_title}.\n\n`;
+
+        prompt += `אישיות:\n`;
+        prompt += `• סגנון: ${core.personality_type}\n`;
+        prompt += `• טון: ${core.tone}\n`;
+        prompt += `• פילוסופיה: ${core.teaching_philosophy}\n`;
+        prompt += `• גישה לטעויות: ${core.approach_to_mistakes}\n\n`;
+
+        if (lang && Object.keys(lang).length > 0) {
             prompt += `סגנון תקשורת:\n`;
-            prompt += `• משפטים: ${lang.sentence_length}\n`;
-            if (lang.question_to_student) {
-                prompt += `• שאלות לתלמיד: ${lang.question_to_student}\n`;
-            }
-            if (lang.explanation_style) {
-                prompt += `• הסברים: ${lang.explanation_style}\n`;
-            }
-            if (lang.uses_examples) {
-                prompt += `• דוגמאות: ${lang.uses_examples}\n`;
-            }
-            if (lang.real_world_connections) {
-                prompt += `• קשר לחיים: ${lang.real_world_connections}\n`;
-            }
+            if (lang.sentence_length) prompt += `• משפטים: ${lang.sentence_length}\n`;
+            if (lang.question_to_student) prompt += `• שאלות לתלמיד: ${lang.question_to_student}\n`;
+            if (lang.explanation_style) prompt += `• הסברים: ${lang.explanation_style}\n`;
+            if (lang.uses_examples) prompt += `• דוגמאות: ${lang.uses_examples}\n`;
+            if (lang.real_world_connections) prompt += `• קשר לחיים: ${lang.real_world_connections}\n`;
             prompt += `\n`;
         }
 
@@ -227,93 +255,27 @@ class PersonalitySystem {
             prompt += `התלמיד אוהב מתמטיקה - תן אתגרים!\n`;
         }
 
+        // 🔥 ADD CRITICAL RAW DATA INSTRUCTION
+        prompt += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+        prompt += `🚨 CRITICAL: When creating graph/statistics questions:\n`;
+        prompt += `- ALWAYS write actual individual data points\n`;
+        prompt += `- NEVER write "the graph shows" or "average is"\n`;
+        prompt += `- NEVER use ranges like "0-2" or "3-5"\n`;
+        prompt += `- NEVER say "התוצאות מוצגות בגרף"\n`;
+        prompt += `- NEVER say "הנתונים מוצגים בגרף"\n`;
+        prompt += `- NEVER say "בגרף הפיזור הבא"\n`;
+        prompt += `- Write: "variable (x): 2, 3, 1, 4..."\n`;
+        prompt += `- Include visualData with raw data array\n`;
+        prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+
         return prompt;
     }
 
-    // Build question prompt with examples
+    // Build question prompt - NOT USED, ai-proxy.js uses buildDynamicQuestionPrompt instead
     buildQuestionPrompt(topic, subtopic, difficulty, studentProfile) {
-        let prompt = `צור שאלה במתמטיקה:\n\n`;
-
-        // Get topic guidelines
-        const guideline = this.getTopicGuideline(topic.name);
-        if (guideline) {
-            prompt += `🎯 הנחיות נושא:\n`;
-            if (guideline.exercise_types) {
-                prompt += `• סוגי תרגילים: ${guideline.exercise_types}\n`;
-            }
-            if (guideline.difficulty_progression) {
-                prompt += `• התקדמות קושי: ${guideline.difficulty_progression}\n`;
-            }
-            if (guideline.focus_areas) {
-                prompt += `• דגש על: ${guideline.focus_areas}\n`;
-            }
-            if (guideline.real_world_examples) {
-                prompt += `• דוגמאות מהחיים: ${guideline.real_world_examples}\n`;
-            }
-            if (guideline.common_mistakes) {
-                prompt += `• שגיאות נפוצות להימנע: ${guideline.common_mistakes}\n`;
-            }
-            prompt += `\n`;
-        }
-
-        // Get examples from bank
-        const examples = this.getExamplesForTopic(topic.name, difficulty);
-        if (examples.length > 0) {
-            prompt += `📚 דוגמאות לשאלות מהסוג הזה:\n\n`;
-            examples.slice(0, 3).forEach((ex, i) => {
-                prompt += `דוגמה ${i + 1}:\n`;
-                prompt += `שאלה: ${ex.question}\n`;
-                prompt += `תשובה: ${ex.answer}\n`;
-                if (ex.hint) prompt += `רמז: ${ex.hint}\n`;
-                if (ex.steps) prompt += `שלבים: ${ex.steps}\n`;
-                prompt += `\n`;
-            });
-        }
-
-        // Add cultural context
-        const names = this.getCulturalContext('names');
-        const currency = this.getCulturalContext('currency');
-        if (names.length > 0 || currency.length > 0) {
-            prompt += `🇮🇱 הקשר ישראלי:\n`;
-            if (currency.length > 0 && currency[0].value) {
-                prompt += `• מטבע: ${currency[0].value}\n`;
-            }
-            if (names.length > 0) {
-                const boyNames = names.filter(n => n.field === 'boys');
-                const girlNames = names.filter(n => n.field === 'girls');
-                if (boyNames.length > 0 && boyNames[0].value) {
-                    prompt += `• שמות (בנים): ${boyNames[0].value}\n`;
-                }
-                if (girlNames.length > 0 && girlNames[0].value) {
-                    prompt += `• שמות (בנות): ${girlNames[0].value}\n`;
-                }
-            }
-            prompt += `\n`;
-        }
-
-        prompt += `דרישות:\n`;
-        prompt += `• נושא: ${topic.name}\n`;
-        if (subtopic) prompt += `• תת-נושא: ${subtopic.name}\n`;
-        prompt += `• רמת קושי: ${difficulty}\n`;
-        prompt += `• כיתה: ${studentProfile.grade}\n\n`;
-
-        prompt += `חשוב:\n`;
-        prompt += `1. צור שאלה חדשה ושונה מהדוגמאות\n`;
-        prompt += `2. התאם לרמת כיתה ${studentProfile.grade}\n`;
-        prompt += `3. השתמש בהקשר ישראלי\n`;
-        prompt += `4. בדוק שהתשובה מתמטית נכונה!\n`;
-        prompt += `5. כלול 3 רמזים מדורגים\n\n`;
-
-        prompt += `פורמט JSON:\n`;
-        prompt += `{\n`;
-        prompt += `  "question": "השאלה המלאה",\n`;
-        prompt += `  "correctAnswer": "התשובה המדויקת",\n`;
-        prompt += `  "hints": ["רמז 1", "רמז 2", "רמז 3"],\n`;
-        prompt += `  "explanation": "הסבר מפורט",\n`;
-        prompt += `  "difficulty": "${difficulty}"\n`;
-        prompt += `}\n`;
-
-        return prompt;
+        // This method exists but is bypassed in favor of the strict prompt in ai-proxy.js
+        // Keeping it for compatibility but it won't be called
+        return '';
     }
 
     // Build verification prompt with error patterns
@@ -355,6 +317,17 @@ class PersonalitySystem {
     }
 }
 
+// Fallback system prompt builder
+function buildFallbackSystemPrompt(studentProfile) {
+    let prompt = `אתה נקסון, מורה דיגיטלי למתמטיקה מומחה.\n\n`;
+
+    if (studentProfile.grade) {
+        prompt += `התלמיד לומד בכיתה ${studentProfile.grade}.\n`;
+    }
+
+    return prompt;
+}
+
 // Singleton instance
-export const personalitySystem = new PersonalitySystem();
+const personalitySystem = new PersonalitySystem();
 export default personalitySystem;
