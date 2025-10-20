@@ -3,10 +3,14 @@
   "version": "1.0.0",
   "description": "Nexon Math Tutor AI Backend Server",
   "type": "module",
-  "main": "ai-proxy.js",
+  "main": "server/ai-proxy.js",
   "scripts": {
-    "start": "node ai-proxy.js",
-    "dev": "nodemon ai-proxy.js"
+    "start": "node server/ai-proxy.js",
+    "dev": "nodemon server/ai-proxy.js"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
   },
   "keywords": [
     "ai",
