@@ -1,4 +1,4 @@
-// src/store/authStore.js - NEXON ENHANCED VERSION
+// src/store/authStore.js - COMPLETE FIXED VERSION
 import { create } from 'zustand';
 import {
     signInWithEmailAndPassword,
@@ -20,7 +20,8 @@ const useAuthStore = create((set, get) => ({
     // Nexon-enhanced profile
     studentProfile: null,
     needsOnboarding: false,
-    nexonProfile: null, // NEW: Specific Nexon fields
+    onboardingComplete: false,
+    nexonProfile: null,
 
     initAuth: () => {
         console.log('🔧 initAuth: Setting up auth listener with Nexon support...');
@@ -44,7 +45,7 @@ const useAuthStore = create((set, get) => ({
                     const userObj = {
                         uid: firebaseUser.uid,
                         email: firebaseUser.email,
-                        displayName: firebaseUser.displayName,
+                        displayName: firebaseUser.displayName || userData.displayName,
                         ...userData
                     };
 
@@ -62,7 +63,6 @@ const useAuthStore = create((set, get) => ({
                         isAdmin: userData?.role === 'admin'
                     });
 
-                    // ✅ CHECK ONBOARDING with Nexon support
                     console.log('🔍 Calling checkOnboarding...');
                     await get().checkOnboarding();
 
@@ -79,16 +79,19 @@ const useAuthStore = create((set, get) => ({
                     loading: false,
                     studentProfile: null,
                     nexonProfile: null,
-                    needsOnboarding: false
+                    needsOnboarding: false,
+                    onboardingComplete: false
                 });
             }
         });
     },
 
     checkOnboarding: async () => {
-        const user = get().user;
+        const state = get();
+        const user = state.user;
+
         if (!user) {
-            console.log('⚠️ checkOnboarding: No user found');
+            console.log('⚠️ No user - skipping onboarding check');
             return;
         }
 
@@ -105,118 +108,128 @@ const useAuthStore = create((set, get) => ({
             set({
                 studentProfile: null,
                 nexonProfile: null,
-                needsOnboarding: false
+                needsOnboarding: false,
+                onboardingComplete: true
             });
             return;
         }
 
         try {
-            console.log('📡 Calling profileService.getProfile...');
+            console.log('📡 Fetching profile from Firestore...');
             const profile = await profileService.getProfile(user.uid);
 
             console.log('📦 Profile retrieved:', profile);
             console.log('   onboardingCompleted:', profile?.onboardingCompleted);
-            console.log('   nexonProfile:', profile?.nexonProfile);
+            console.log('   grade:', profile?.grade);
+            console.log('   weakTopics:', profile?.weakTopics?.length || 0);
 
-            if (profile && profile.onboardingCompleted === true) {
+            if (profile && profile.onboardingCompleted) {
                 console.log('✅ ONBOARDING COMPLETED - User has valid profile');
 
-                // Extract Nexon-specific fields
-                const nexonData = profile.nexonProfile ? {
-                    name: profile.name,
-                    grade: profile.grade,
-                    track: profile.track,
-                    mathFeeling: profile.mathFeeling,
-                    learningStyle: profile.learningStyle,
-                    goalFocus: profile.goalFocus,
-                    topicMastery: profile.topicMastery || {},
-                    strugglesText: profile.strugglesText
-                } : null;
-
+                // 🔥 FIX: Set BOTH studentProfile AND nexonProfile to the same object
                 set({
                     studentProfile: profile,
-                    nexonProfile: nexonData,
+                    nexonProfile: profile,  // ← This was missing!
+                    onboardingComplete: true,
                     needsOnboarding: false
                 });
+
                 console.log('📊 State updated: needsOnboarding = false');
-                console.log('   Nexon profile loaded:', !!nexonData);
+                console.log('   ✅ Both studentProfile and nexonProfile set');
             } else {
-                console.log('❌ NEEDS ONBOARDING - No profile or incomplete');
+                console.log('⚠️ ONBOARDING NEEDED - No valid profile found');
                 set({
                     studentProfile: null,
                     nexonProfile: null,
+                    onboardingComplete: false,
                     needsOnboarding: true
                 });
-                console.log('📊 State updated: needsOnboarding = true');
             }
 
-            // Log final state
-            const finalState = get();
             console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
             console.log('📊 FINAL STATE:');
-            console.log('   needsOnboarding:', finalState.needsOnboarding);
-            console.log('   hasProfile:', !!finalState.studentProfile);
-            console.log('   hasNexonProfile:', !!finalState.nexonProfile);
+            console.log('   needsOnboarding:', get().needsOnboarding);
+            console.log('   onboardingComplete:', get().onboardingComplete);
+            console.log('   hasProfile:', !!get().studentProfile);
+            console.log('   hasNexonProfile:', !!get().nexonProfile);
             console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
         } catch (error) {
-            console.error('❌ Error in checkOnboarding:', error);
-            console.error('   Error details:', error.message);
-            // Default to needs onboarding on error
+            console.error('❌ Error checking onboarding:', error);
             set({
-                studentProfile: null,
-                nexonProfile: null,
-                needsOnboarding: user.role === 'user'
+                needsOnboarding: true,
+                onboardingComplete: false
             });
         }
     },
 
-    completeOnboarding: async (formData) => {
+    completeOnboarding: async (data) => {
         const user = get().user;
-        if (!user) {
-            throw new Error('No user logged in');
-        }
-
-        console.log('💾 completeOnboarding called (Nexon Enhanced)');
-        console.log('   User:', user.email);
-        console.log('   FormData:', formData);
-
-        const profileData = {
-            ...formData,
-            onboardingCompleted: true,
-            completedAt: new Date().toISOString(),
-            userId: user.uid
-        };
-
-        console.log('💾 Saving Nexon profile:', profileData);
+        if (!user) throw new Error('No user logged in');
 
         try {
-            const savedProfile = await profileService.saveProfile(user.uid, profileData);
-            console.log('✅ Profile saved:', savedProfile);
+            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+            console.log('💾 COMPLETE ONBOARDING STARTING');
+            console.log('   User:', user.email);
+            console.log('   Input data:', data);
+            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-            // Extract Nexon-specific fields
-            const nexonData = formData.nexonProfile ? {
-                name: formData.name,
-                grade: formData.grade,
-                track: formData.track,
-                mathFeeling: formData.mathFeeling,
-                learningStyle: formData.learningStyle,
-                goalFocus: formData.goalFocus,
-                topicMastery: formData.topicMastery || {},
-                strugglesText: formData.strugglesText
-            } : null;
+            // Build complete profile object
+            const profileData = {
+                // User identification
+                uid: user.uid,
+                email: user.email,
+                displayName: user.displayName || data.name,
 
+                // Nexon onboarding data
+                name: data.name || user.displayName,
+                grade: data.grade,  // Already in 'grade7' format from onboarding
+                gradeLevel: data.grade,
+                educationLevel: data.educationLevel || (parseInt(data.grade.replace('grade', '')) <= 9 ? 'middle' : 'high'),
+                track: data.track || 'standard',
+                mathFeeling: data.mathFeeling,
+                learningStyle: data.learningStyle,
+                goalFocus: data.goalFocus,
+                weakTopics: data.weakTopics || [],
+                strugglesText: data.strugglesText || '',
+
+                // Flags
+                onboardingCompleted: true,
+                nexonProfile: true,
+                role: 'user',
+
+                // Timestamps
+                createdAt: data.createdAt || new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                completedAt: new Date().toISOString()
+            };
+
+            console.log('📝 Prepared profile data:', profileData);
+
+            // Save to Firestore - BOTH locations
+            console.log('💾 Saving to Firestore...');
+            const userRef = doc(db, 'users', user.uid);
+            const profileRef = doc(db, 'studentProfiles', user.uid);
+
+            await setDoc(userRef, profileData, { merge: true });
+            await setDoc(profileRef, profileData, { merge: true });
+
+            console.log('✅ Profile saved to Firebase successfully');
+
+            // Update Zustand state - SET BOTH!
             set({
-                studentProfile: savedProfile,
-                nexonProfile: nexonData,
+                studentProfile: profileData,
+                nexonProfile: profileData,  // ← Set both to same object
+                onboardingComplete: true,
                 needsOnboarding: false
             });
 
-            console.log('📊 State updated after onboarding complete');
-            console.log('   Nexon profile set:', !!nexonData);
-            return savedProfile;
+            console.log('✅ Local state updated');
+            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+            return profileData;
         } catch (error) {
-            console.error('❌ Error saving profile:', error);
+            console.error('❌ Error in completeOnboarding:', error);
             throw error;
         }
     },
@@ -242,7 +255,7 @@ const useAuthStore = create((set, get) => ({
                 user: {
                     uid: userCredential.user.uid,
                     email: userCredential.user.email,
-                    displayName: userCredential.user.displayName,
+                    displayName: userCredential.user.displayName || userData.displayName,
                     ...userData
                 },
                 isAuthenticated: true,
@@ -283,8 +296,9 @@ const useAuthStore = create((set, get) => ({
                 email: email,
                 displayName: displayName || email.split('@')[0],
                 role: 'user',
-                createdAt: new Date(),
-                emailVerified: false
+                createdAt: new Date().toISOString(),
+                emailVerified: false,
+                onboardingCompleted: false
             });
             console.log('📄 User document created in Firestore');
 
@@ -326,7 +340,8 @@ const useAuthStore = create((set, get) => ({
                 loading: false,
                 studentProfile: null,
                 nexonProfile: null,
-                needsOnboarding: false
+                needsOnboarding: false,
+                onboardingComplete: false
             });
             console.log('✅ Logout successful');
             return { success: true };
@@ -336,7 +351,12 @@ const useAuthStore = create((set, get) => ({
         }
     },
 
-    // NEW: Helper methods for Nexon
+    // Helper methods
+    getStudentGrade: () => {
+        const state = get();
+        return state.nexonProfile?.grade || state.studentProfile?.grade || 'grade7';
+    },
+
     getNexonGreeting: () => {
         const nexonProfile = get().nexonProfile;
         if (!nexonProfile?.name) return 'היי! Hi there!';
@@ -347,7 +367,7 @@ const useAuthStore = create((set, get) => ({
         const nexonProfile = get().nexonProfile;
         if (!nexonProfile?.grade || !nexonProfile?.track) return 'intermediate';
 
-        const grade = parseInt(nexonProfile.grade);
+        const grade = parseInt(nexonProfile.grade.replace('grade', ''));
         if (grade <= 9) return 'intermediate';
 
         if (nexonProfile.track.includes('5')) return 'advanced';

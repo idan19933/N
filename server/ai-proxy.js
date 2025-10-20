@@ -1,5 +1,5 @@
-// server/ai-proxy.js - ULTIMATE FIXED VERSION WITH PERSONALITY + GRAPH EXTRACTION
-
+// server/ai-proxy.js - SMART TOPIC-BASED QUESTION GENERATION
+import { formatMathAnswer, compareMathExpressions } from './utils/mathFormatter.js';
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -8,7 +8,17 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import personalitySystem from './services/personalityLoader.js';
+import questionHistoryManager from './services/questionHistory.js';
+import SVGGenerator from './services/svgGenerator.js';
 import { bucket } from './config/firebase-admin.js';
+import ISRAELI_CURRICULUM, {
+    getGradeConfig,
+    getReformNotes,
+    getExamInfo,
+    getClusters,
+    getPedagogicalNote,
+    CURRICULUM_METADATA
+} from '../src/config/israeliCurriculum.js';
 
 dotenv.config();
 
@@ -30,18 +40,15 @@ const upload = multer({
         console.log('📁 File upload attempt:');
         console.log('   Original name:', file.originalname);
         console.log('   MIME type:', file.mimetype);
-        console.log('   Field name:', file.fieldname);
 
-        // Check file extension
         const isExcel = file.originalname.toLowerCase().endsWith('.xlsx') ||
             file.originalname.toLowerCase().endsWith('.xls');
 
-        // Check MIME type (more permissive)
         const validMimeTypes = [
             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             'application/vnd.ms-excel',
-            'application/octet-stream', // Sometimes Windows sends this
-            'application/zip' // .xlsx files are actually zip archives
+            'application/octet-stream',
+            'application/zip'
         ];
 
         const validMime = validMimeTypes.includes(file.mimetype);
@@ -50,16 +57,14 @@ const upload = multer({
             console.log('   ✅ File accepted');
             cb(null, true);
         } else {
-            console.log('   ❌ File rejected - not an Excel file');
-            console.log('   Accepted extensions: .xlsx, .xls');
-            console.log('   Accepted MIME types:', validMimeTypes.join(', '));
-            cb(new Error('Only Excel files (.xlsx or .xls) allowed!'), false);
+            console.log('   ❌ File rejected');
+            cb(new Error('Only Excel files allowed!'), false);
         }
     }
 });
 
-// ==================== HELPER FUNCTION: CLEAN JSON ====================
-// ==================== HELPER FUNCTION: CLEAN JSON - ENHANCED ====================
+// ==================== HELPER: CLEAN JSON ====================
+// ==================== HELPER: CLEAN JSON - ENHANCED ====================
 function cleanJsonText(rawText) {
     let jsonText = rawText.trim();
 
@@ -78,37 +83,210 @@ function cleanJsonText(rawText) {
         jsonText = jsonText.substring(jsonStart, jsonEnd);
     }
 
-    // 🔥 FIX: Remove control characters (including unescaped newlines)
+    // 🔥 FIX 1: Remove control characters EXCEPT newlines in specific contexts
     jsonText = jsonText
-        .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, '') // Remove control chars
-        .replace(/\\n/g, '\\n')  // Ensure newlines are properly escaped
-        .replace(/\\r/g, '\\r')  // Ensure carriage returns are escaped
-        .replace(/\\t/g, '\\t'); // Ensure tabs are escaped
+        .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, '');
 
-    // 🔥 FIX: Handle unescaped quotes in strings
-    // This regex finds unescaped quotes within JSON string values
+    // 🔥 FIX 2: Fix newlines inside string values
+    // This regex finds strings and replaces \n with \\n inside them
+    jsonText = jsonText.replace(
+        /"([^"\\]|\\.)*"/g,
+        match => match.replace(/\n/g, '\\n').replace(/\r/g, '\\r')
+    );
+
+    // 🔥 FIX 3: Fix common JSON syntax errors
+    jsonText = jsonText
+        // Fix trailing commas before } or ]
+        .replace(/,(\s*[}\]])/g, '$1')
+        // Fix missing commas between properties (common Claude error)
+        .replace(/("\s*:\s*"[^"]*")\s*("\w+"\s*:)/g, '$1,$2')
+        .replace(/("\s*:\s*\d+)\s*("\w+"\s*:)/g, '$1,$2')
+        .replace(/("\s*:\s*true|false)\s*("\w+"\s*:)/g, '$1,$2')
+        // Fix unescaped quotes in Hebrew text
+        .replace(/:\\s*"([^"]*?)"([^,}\]]*?)"/g, (match, p1, p2) => {
+            if (p2.includes('"')) {
+                return `: "${p1}\\"${p2}"`;
+            }
+            return match;
+        });
+
+    // 🔥 FIX 4: Validate and repair structure
     try {
-        // Try parsing first
+        // Try to parse - if it works, return as-is
+        JSON.parse(jsonText);
         return jsonText;
     } catch (e) {
-        console.log('⚠️ Initial parse failed, attempting deep clean...');
+        console.log('⚠️ JSON still invalid, attempting deep repair...');
+        console.log('   Error:', e.message);
+        console.log('   Position:', e.message.match(/position (\d+)/)?.[1]);
 
-        // More aggressive cleaning: escape all unescaped newlines
-        jsonText = jsonText.split('\n').map(line => {
-            // If line is inside a string value, escape it
-            if (line.trim() && !line.trim().startsWith('{') && !line.trim().startsWith('}') && !line.trim().startsWith('"')) {
-                return line.replace(/\n/g, ' ');
-            }
-            return line;
-        }).join('\n');
+        // Log the problematic area
+        const errorPos = parseInt(e.message.match(/position (\d+)/)?.[1] || '0');
+        if (errorPos > 0) {
+            const start = Math.max(0, errorPos - 50);
+            const end = Math.min(jsonText.length, errorPos + 50);
+            console.log('   Context:', jsonText.substring(start, end));
+        }
+
+        // Last resort: Try to fix specific common patterns
+        jsonText = jsonText
+            // Fix Hebrew quotes that break JSON
+            .replace(/״/g, '\\"')
+            .replace(/׳/g, "'")
+            // Fix double quotes in values
+            .replace(/"([^"]*)"([^"]*?)"/g, (match, p1, p2) => {
+                if (p2.includes(':') || p2.includes(',') || p2.includes('}')) {
+                    return `"${p1}"${p2}`;
+                }
+                return `"${p1}${p2.replace(/"/g, '\\"')}"`;
+            });
 
         return jsonText;
     }
 }
 
-// ==================== VALIDATE QUESTION HAS RAW DATA - NUCLEAR VERSION ====================
+// ==================== TOPIC CLASSIFICATION SYSTEM ====================
+function classifyTopic(topicName, subtopicName) {
+    const topic = String(topicName || '').toLowerCase();
+    const subtopic = String(subtopicName || '').toLowerCase();
+
+    const isPureGeometry = (
+        (topic.includes('גאומטריה') || topic.includes('geometry')) &&
+        (subtopic.includes('נקודות') || subtopic.includes('קווים') ||
+            subtopic.includes('מישורים') || subtopic.includes('points') ||
+            subtopic.includes('lines') || subtopic.includes('planes'))
+    );
+
+    const isAppliedGeometry = (
+        (topic.includes('גאומטריה') || topic.includes('geometry')) &&
+        (subtopic.includes('משולש') || subtopic.includes('ריבוע') ||
+            subtopic.includes('מעגל') || subtopic.includes('שטח') ||
+            subtopic.includes('היקף') || subtopic.includes('triangle') ||
+            subtopic.includes('rectangle') || subtopic.includes('circle') ||
+            subtopic.includes('area') || subtopic.includes('perimeter'))
+    );
+
+    const isStatistics = (
+        topic.includes('סטטיסטיקה') || topic.includes('statistics') ||
+        topic.includes('גרפים') || topic.includes('graphs') ||
+        subtopic.includes('פיזור') || subtopic.includes('scatter') ||
+        subtopic.includes('רבעון') || subtopic.includes('quartile')
+    );
+
+    const isAlgebra = (
+        topic.includes('אלגברה') || topic.includes('algebra') ||
+        subtopic.includes('משוואות') || subtopic.includes('equations')
+    );
+
+    return {
+        isPureGeometry,
+        isAppliedGeometry,
+        isStatistics,
+        isAlgebra,
+        allowsRealWorld: !isPureGeometry,
+        requiresAbstract: isPureGeometry,
+        requiresData: isStatistics
+    };
+}
+
+// ==================== CURRICULUM-AWARE CONTEXT BUILDER ====================
+function buildCurriculumContext(gradeId, topic, subtopic) {
+    const gradeConfig = getGradeConfig(gradeId);
+    if (!gradeConfig) return '';
+
+    let context = `\n📚 CURRICULUM CONTEXT (תשפ"ה Reform):\n`;
+    context += `Grade: ${gradeConfig.name} (${gradeConfig.nameEn})\n`;
+
+    if (gradeConfig.implementationYear) {
+        context += `Reform Year: ${gradeConfig.implementationYear}\n`;
+    }
+
+    const reformNotes = getReformNotes(gradeId);
+    if (reformNotes) {
+        if (reformNotes.emphasis) {
+            context += `\n🎯 Pedagogical Emphasis:\n`;
+            reformNotes.emphasis.forEach(e => context += `  - ${e}\n`);
+        }
+        if (reformNotes.removed) {
+            context += `\n❌ Excluded Topics:\n`;
+            reformNotes.removed.forEach(r => context += `  - ${r}\n`);
+        }
+    }
+
+    const clusters = getClusters(gradeId);
+    if (clusters) {
+        context += `\n🎨 Learning Clusters:\n`;
+        clusters.forEach(c => {
+            context += `  - ${c.name}: ${c.description}\n`;
+        });
+    }
+
+    const topicId = topic?.id || '';
+    if (topicId) {
+        const pedNote = getPedagogicalNote(gradeId, topicId);
+        if (pedNote) {
+            context += `\n📝 Topic Note: ${pedNote}\n`;
+        }
+    }
+
+    if (subtopic) {
+        const subtopicName = subtopic.name || '';
+        if (subtopicName) {
+            context += `\n🔍 Specific Subtopic: ${subtopicName}\n`;
+            if (subtopic.note) {
+                context += `   Note: ${subtopic.note}\n`;
+            }
+        }
+    }
+
+    context += `\n`;
+    return context;
+}
+
+// ==================== ENHANCED SYSTEM PROMPT ====================
+function buildEnhancedSystemPrompt(studentProfile, gradeId, topic, subtopic) {
+    const { grade, mathFeeling } = studentProfile || {};
+
+    let prompt = '';
+
+    if (personalitySystem.loaded) {
+        const personality = personalitySystem.data.corePersonality;
+        prompt += `אתה ${personality.teacher_name}, ${personality.description}.\n`;
+        prompt += `${personality.teaching_approach}\n\n`;
+    } else {
+        prompt += `אתה נקסון, מורה דיגיטלי למתמטיקה.\n\n`;
+    }
+
+    prompt += buildCurriculumContext(gradeId, topic, subtopic);
+
+    if (grade) {
+        prompt += `התלמיד בכיתה ${grade}.\n`;
+    }
+
+    if (mathFeeling === 'struggle') {
+        prompt += `התלמיד מתקשה - היה סבלני, תן הסברים צעד-צעד.\n`;
+    } else if (mathFeeling === 'love') {
+        prompt += `התלמיד אוהב מתמטיקה - תן אתגרים מעניינים.\n`;
+    }
+
+    prompt += `\n🎯 General Principles:\n`;
+    prompt += `- Create questions aligned with Israeli curriculum standards\n`;
+    prompt += `- Use Hebrew naturally and clearly\n`;
+    prompt += `- Consider the reform changes (תשפ"ה)\n`;
+    prompt += `- Return VALID JSON only\n`;
+    prompt += `- Be encouraging and supportive\n`;
+    prompt += `- Create VARIED and UNIQUE questions every time\n\n`;
+
+    return prompt;
+}
+
+// ==================== VALIDATE QUESTION HAS RAW DATA ====================
 function validateQuestionHasRawData(parsed, topic, subtopic) {
-    const questionText = parsed.question;
+    const questionText = parsed?.question || '';
+
+    if (!questionText || typeof questionText !== 'string') {
+        return { valid: true };
+    }
 
     const graphTopics = [
         'פונקציות', 'גרפים', 'Functions', 'Graphs',
@@ -117,9 +295,16 @@ function validateQuestionHasRawData(parsed, topic, subtopic) {
         'תחום בין-רבעוני', 'IQR', 'היסטוגרמה', 'Histogram'
     ];
 
+    const topicName = String(topic?.name || '');
+    const topicNameEn = String(topic?.nameEn || '');
+    const subtopicName = String(subtopic?.name || '');
+    const subtopicNameEn = String(subtopic?.nameEn || '');
+
     const needsGraph = graphTopics.some(t =>
-        topic.name.includes(t) || topic.nameEn?.includes(t) ||
-        (subtopic && (subtopic.name.includes(t) || subtopic.nameEn?.includes(t)))
+        topicName.includes(t) ||
+        topicNameEn.includes(t) ||
+        subtopicName.includes(t) ||
+        subtopicNameEn.includes(t)
     );
 
     if (!needsGraph) {
@@ -128,7 +313,6 @@ function validateQuestionHasRawData(parsed, topic, subtopic) {
 
     console.log('🔍 Validating question has raw data...');
 
-    // 🔥🔥🔥 ULTIMATE FORBIDDEN PATTERNS
     const forbiddenPatterns = [
         /ממוצע.*הוא/,
         /ממוצע.*הכללי/,
@@ -150,18 +334,18 @@ function validateQuestionHasRawData(parsed, topic, subtopic) {
         /נתונים.*אלה.*מוצגים/,
         /מוצגים.*בגרף.*פיזור/,
         /נתוני.*הסקר.*מראים/,
-        /נתונים.*אלה/i,  // 🔥 NEW: "נתונים אלה"
-        /להלן.*הנתונים/i,  // 🔥 NEW: "להלן הנתונים"
+        /נתונים.*אלה/i,
+        /להלן.*הנתונים/i,
         /בגרף.*הבא/,
         /בגרף.*הפיזור.*הבא/,
         /שם.*התלמיד.*\|/,
         /\d+-\d+\s*\|/,
         /\d+\+\s*\|/,
         /טבלה.*הבאה/,
-        /\|.*\|.*\|/,  // Table format
-        /[א-ת]+\s*\d*\s*:\s*\d+\s*שעות/i,  // 🔥 NEW: catches "תלמיד 1: 5 שעות"
-        /תלמיד\s*\d+\s*:\s*\d+/i,  // 🔥 NEW: catches any "תלמיד X: Y"
-        /[א-ת]+:\s*\d+\s*שעות,\s*[א-ת]+:\s*\d+\s*שעות/  // catches "דני: 4 שעות, יוסי: 6 שעות"
+        /\|.*\|.*\|/,
+        /[א-ת]+\s*\d*\s*:\s*\d+\s*שעות/i,
+        /תלמיד\s*\d+\s*:\s*\d+/i,
+        /[א-ת]+:\s*\d+\s*שעות,\s*[א-ת]+:\s*\d+\s*שעות/
     ];
 
     const hasForbiddenPattern = forbiddenPatterns.some(pattern =>
@@ -170,50 +354,42 @@ function validateQuestionHasRawData(parsed, topic, subtopic) {
 
     if (hasForbiddenPattern) {
         console.log('❌ Question has FORBIDDEN pattern');
-
-        // Debug: show which pattern matched
-        forbiddenPatterns.forEach((pattern, idx) => {
-            if (pattern.test(questionText)) {
-                console.log(`   ⚠️ Matched forbidden pattern #${idx}`);
-            }
-        });
-
         return {
             valid: false,
-            reason: 'Contains forbidden name:value or description patterns'
+            reason: 'Contains forbidden patterns'
         };
     }
 
-    // 🔥 Check for TWO labeled lists format (REQUIRED for scatter plots)
     const hasTwoLabeledLists = /\(x\)\s*:\s*[0-9,\s]+/i.test(questionText) &&
         /\(y\)\s*:\s*[0-9,\s]+/i.test(questionText);
 
     if (hasTwoLabeledLists) {
-        console.log('✅ Question has TWO labeled lists with (x) and (y)');
+        console.log('✅ Question has TWO labeled lists');
         return { valid: true };
     }
 
-    // Check for comma-separated numbers (at least 10)
     const commaNumbers = questionText.match(/\d+(?:\.\d+)?(?:\s*,\s*\d+(?:\.\d+)?){9,}/g);
 
     if (commaNumbers && commaNumbers.length > 0) {
-        console.log('✅ Question has comma-separated numbers (10+)');
+        console.log('✅ Question has comma-separated numbers');
         return { valid: true };
     }
 
-    console.log('❌ Question does NOT have proper raw data format');
-    console.log('   Missing: TWO labeled lists with (x): ... and (y): ...');
+    console.log('❌ Question does NOT have proper raw data');
     return {
         valid: false,
-        reason: 'Missing proper labeled lists format'
+        reason: 'Missing proper data format'
     };
 }
 
-// ==================== FORCE REWRITE - ULTIMATE VERSION ====================
+// ==================== FORCE REWRITE ====================
 function forceRewriteGraphDescription(parsed, topic, subtopic) {
-    const questionText = parsed.question;
+    const questionText = parsed?.question || '';
 
-    // 🔥🔥🔥 ULTIMATE forbidden patterns detection
+    if (!questionText || typeof questionText !== 'string') {
+        return parsed;
+    }
+
     const forbiddenPatterns = [
         /הגרף.*מציג/i,
         /התרשים.*מציג/i,
@@ -222,41 +398,29 @@ function forceRewriteGraphDescription(parsed, topic, subtopic) {
         /הנתונים.*מוצגים/i,
         /נתונים.*אלה.*מוצגים/i,
         /נתוני.*הסקר.*מראים/i,
-        /נתונים.*אלה/i,  // 🔥 NEW
-        /להלן.*הנתונים/i,  // 🔥 NEW: catches "להלן הנתונים"
+        /נתונים.*אלה/i,
+        /להלן.*הנתונים/i,
         /הגרף.*שלו.*מציג/i,
         /מוצגים.*בגרף.*פיזור/i
     ];
 
     const hasGraphDescription = forbiddenPatterns.some(pattern => pattern.test(questionText));
 
-    // 🔥 Detect ANY label:number format (including "תלמיד 1: 5 שעות")
     const anyLabelPattern = /([א-ת]+\s*\d*)\s*:\s*(\d+)\s*שעות/g;
     const anyLabelMatches = [...questionText.matchAll(anyLabelPattern)];
-    const hasLabelValueFormat = anyLabelMatches.length >= 3;  // At least 3 label:value pairs
+    const hasLabelValueFormat = anyLabelMatches.length >= 3;
 
     if (!hasGraphDescription && !hasLabelValueFormat) {
-        return parsed; // Question is fine
+        return parsed;
     }
 
-    console.log('🚨🚨🚨 DETECTED BAD QUESTION FORMAT - FORCING COMPLETE REWRITE');
-    if (hasGraphDescription) {
-        console.log('   ❌ Has graph description phrase');
-    }
-    if (hasLabelValueFormat) {
-        console.log('   ❌ Uses label:value format (found', anyLabelMatches.length, 'pairs)');
-        console.log('   Labels:', anyLabelMatches.slice(0, 5).map(m => m[1]).join(', '));
-    }
+    console.log('🚨 FORCING COMPLETE REWRITE');
 
-    // Determine context from original question
-    const isWeight = questionText.includes('משקל');
-    const isHeight = questionText.includes('גובה');
-    const isSport = questionText.includes('ספורט') || questionText.includes('חוג');
-    const isGrades = questionText.includes('ציון');
-    const isCorrelation = questionText.includes('מתאם') || questionText.includes('קשר');
+    const questionLower = questionText.toLowerCase();
+    const isSport = questionLower.includes('ספורט') || questionLower.includes('חוג');
+    const isGrades = questionLower.includes('ציון');
 
-    // Generate realistic data
-    const numPoints = 20 + Math.floor(Math.random() * 4); // 20-23 points
+    const numPoints = 20 + Math.floor(Math.random() * 4);
     const xValues = [];
     const yValues = [];
 
@@ -265,115 +429,42 @@ function forceRewriteGraphDescription(parsed, topic, subtopic) {
     let yLabel = 'Y';
 
     if (isSport && isGrades) {
-        // Sport hours vs Math grades
         for (let i = 0; i < numPoints; i++) {
-            xValues.push(Math.floor(1 + Math.random() * 7));  // 1-7 hours
-            yValues.push(Math.floor(65 + Math.random() * 30)); // 65-95 grades
+            xValues.push(Math.floor(1 + Math.random() * 7));
+            yValues.push(Math.floor(65 + Math.random() * 30));
         }
 
-        rewrittenQuestion = `בית ספר 'רמת אביב' ערך סקר על מספר השעות השבועיות שתלמידי כיתה ח' משקיעים בספורט, והציונים שלהם במתמטיקה.
-
-נאספו נתונים מ-${numPoints} תלמידים:
+        rewrittenQuestion = `נאספו נתונים על ${numPoints} תלמידים - מספר שעות ספורט שבועיות והציון במתמטיקה:
 
 שעות ספורט שבועיות (x): ${xValues.join(', ')}
 ציון במתמטיקה (y): ${yValues.join(', ')}
 
-צרו גרף פיזור והסבירו מה ניתן ללמוד על הקשר בין שעות ספורט לציונים.`;
+צרו גרף פיזור והסבירו מה ניתן ללמוד על הקשר בין המשתנים.`;
 
         xLabel = 'שעות ספורט';
         yLabel = 'ציון במתמטיקה';
 
-    } else if (isSport && !isGrades) {
-        // Just sport/activity hours - create two variables
-        for (let i = 0; i < numPoints; i++) {
-            xValues.push(Math.floor(1 + Math.random() * 7));  // 1-7 hours outdoor
-            yValues.push(Math.floor(1 + Math.random() * 7));  // 1-7 hours indoor
-        }
-
-        rewrittenQuestion = `בקייטנת קיץ של בית הספר 'נווה שלום', נרשמו ${numPoints} תלמידים. המדריכים רשמו את מספר השעות השבועיות שכל תלמיד מבלה בחוגים שונים:
-
-שעות חוגי ספורט (x): ${xValues.join(', ')}
-שעות חוגי אומנות (y): ${yValues.join(', ')}
-
-צרו גרף פיזור והסבירו מה ניתן ללמוד מהנתונים על הקשר בין סוגי החוגים.`;
-
-        xLabel = 'חוגי ספורט (שעות)';
-        yLabel = 'חוגי אומנות (שעות)';
-
-    } else if (isWeight && isSport) {
-        // Weight vs Sport hours
-        for (let i = 0; i < numPoints; i++) {
-            xValues.push(Math.floor(40 + Math.random() * 40)); // 40-80 kg
-            yValues.push(Math.floor(1 + Math.random() * 8));   // 1-8 hours
-        }
-
-        rewrittenQuestion = `בקייטנת קיץ של בית ספר 'נווה אילן', נרשמו ${numPoints} תלמידים. נמדדו נתונים על מספר שעות ספורט שבועיות ומשקל:
-
-משקל בק"ג (x): ${xValues.join(', ')}
-שעות ספורט (y): ${yValues.join(', ')}
-
-צרו גרף פיזור והסבירו מה המתאם בין משקל למספר שעות ספורט.`;
-
-        xLabel = 'משקל (ק"ג)';
-        yLabel = 'שעות ספורט';
-
-    } else if (isHeight && isGrades) {
-        // Height vs Grades
-        for (let i = 0; i < numPoints; i++) {
-            xValues.push(Math.floor(145 + Math.random() * 40)); // 145-185 cm
-            yValues.push(Math.floor(65 + Math.random() * 30));  // 65-95 grades
-        }
-
-        rewrittenQuestion = `בכיתה ח' נמדדו ${numPoints} תלמידים. הנתונים כוללים גובה וציון במתמטיקה:
-
-גובה בס"מ (x): ${xValues.join(', ')}
-ציונים (y): ${yValues.join(', ')}
-
-צרו גרף פיזור והסבירו מה המתאם בין גובה התלמיד לציון במתמטיקה.`;
-
-        xLabel = 'גובה (ס"מ)';
-        yLabel = 'ציון במתמטיקה';
-
-    } else if (isSport || isCorrelation) {
-        // Generic sport/study hours correlation
-        for (let i = 0; i < numPoints; i++) {
-            xValues.push(Math.floor(1 + Math.random() * 8));   // 1-8 hours study
-            yValues.push(Math.floor(65 + Math.random() * 30)); // 65-95 grades
-        }
-
-        rewrittenQuestion = `במחקר על הקשר בין שעות לימוד לציונים, נאספו נתונים מ-${numPoints} תלמידים:
-
-שעות לימוד שבועיות (x): ${xValues.join(', ')}
-ציון מתמטיקה (y): ${yValues.join(', ')}
-
-צרו גרף פיזור והסבירו מה המתאם בין שעות הלימוד לציון.`;
-
-        xLabel = 'שעות לימוד';
-        yLabel = 'ציון';
-
     } else {
-        // Generic scatter data
         for (let i = 0; i < numPoints; i++) {
-            xValues.push(Math.floor(10 + Math.random() * 40));  // 10-50
-            yValues.push(Math.floor(50 + Math.random() * 50));  // 50-100
+            xValues.push(Math.floor(10 + Math.random() * 40));
+            yValues.push(Math.floor(50 + Math.random() * 50));
         }
 
-        rewrittenQuestion = `נאספו ${numPoints} נתונים על שני משתנים:
+        rewrittenQuestion = `נתונות ${numPoints} נקודות עם שני משתנים:
 
 משתנה X: ${xValues.join(', ')}
 משתנה Y: ${yValues.join(', ')}
 
-צרו גרף פיזור והסבירו מה המתאם בין שני המשתנים.`;
+צרו גרף פיזור וקבעו את סוג המתאם בין המשתנים.`;
 
         xLabel = 'X';
         yLabel = 'Y';
     }
 
-    // Create visualData
     const points = xValues.map((x, idx) => ({
         x: x,
         y: yValues[idx],
-        label: `תלמיד ${idx + 1}`
+        label: `נקודה ${idx + 1}`
     }));
 
     const visualData = {
@@ -382,564 +473,856 @@ function forceRewriteGraphDescription(parsed, topic, subtopic) {
         xRange: [Math.min(...xValues) - 2, Math.max(...xValues) + 2],
         yRange: [Math.min(...yValues) - 2, Math.max(...yValues) + 2],
         color: '#9333ea',
-        label: 'גרף פיזור - קשר בין משתנים',
+        label: 'גרף פיזור',
         xLabel: xLabel,
         yLabel: yLabel
     };
 
-    // Update parsed object
     parsed.question = rewrittenQuestion;
     parsed.visualData = visualData;
 
-    console.log('✅✅✅ Question COMPLETELY rewritten with proper format');
-    console.log('   X values:', xValues.length, 'points');
-    console.log('   Y values:', yValues.length, 'points');
-    console.log('   visualData type:', visualData.type);
-    console.log('   Format: TWO labeled comma-separated lists');
-    console.log('🔥🔥🔥 REWRITE COMPLETE 🔥🔥🔥\n');
-
+    console.log('✅ Question REWRITTEN');
     return parsed;
 }
-// ==================== ULTIMATE VISUAL DATA EXTRACTION ====================
+
+// ==================== VISUAL DATA EXTRACTION ====================
 function ensureVisualDataForGraphQuestions(parsed, topic, subtopic) {
     try {
-        const questionText = parsed.question;
+        const questionText = parsed?.question || '';
 
-        console.log('\n🔥🔥🔥 ULTIMATE EXTRACTION STARTING 🔥🔥🔥');
-        console.log('Question:', questionText.substring(0, 200));
-        console.log('Parsed visualData from AI:', parsed.visualData);
-
-        // Check if visualData exists AND has actual data
-        if (parsed.visualData && (parsed.visualData.data?.length > 0 || parsed.visualData.points?.length > 0)) {
-            console.log('✅ visualData already exists with data');
+        if (!questionText || typeof questionText !== 'string') {
+            console.log('⚠️ Invalid question text');
             return parsed;
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        // METHOD 0D: TWO SEPARATE COMMA-SEPARATED LISTS WITH LABELS
-        // This is THE PRIMARY method for scatter plots
-        // Example: "שעות צפייה (x): 2, 3, 1, 4... שעות גלישה (y): 3, 2, 4, 1..."
-        // ═══════════════════════════════════════════════════════════════
-        console.log('🔎 METHOD 0D: Searching for labeled X-Y lists...');
+        console.log('\n🔥🔥🔥 EXTRACTION V2 STARTING 🔥🔥🔥');
+        console.log('Question (first 200):', questionText.substring(0, 200));
+        console.log('AI visualData:', parsed.visualData ? 'EXISTS' : 'NULL');
 
-        // More flexible pattern matching
-        // Match: "any text (x): numbers" and "any text (y): numbers"
-        const xListPattern = /([^\n:]+?)\s*\(x\)\s*:\s*([0-9,\s]+)/i;
-        const yListPattern = /([^\n:]+?)\s*\(y\)\s*:\s*([0-9,\s]+)/i;
-
-        const xMatch = questionText.match(xListPattern);
-        const yMatch = questionText.match(yListPattern);
-
-        console.log('   X pattern match:', xMatch ? 'FOUND' : 'NOT FOUND');
-        console.log('   Y pattern match:', yMatch ? 'FOUND' : 'NOT FOUND');
-
-        if (xMatch && yMatch) {
-            console.log('📦 FOUND X-Y labeled lists!');
-
-            const xLabel = xMatch[1].trim();
-            const yLabel = yMatch[1].trim();
-
-            console.log('   X label:', xLabel);
-            console.log('   Y label:', yLabel);
-            console.log('   X raw data:', xMatch[2].substring(0, 50));
-            console.log('   Y raw data:', yMatch[2].substring(0, 50));
-
-            const xValues = xMatch[2]
-                .split(',')
-                .map(n => parseFloat(n.trim()))
-                .filter(n => !isNaN(n));
-
-            const yValues = yMatch[2]
-                .split(',')
-                .map(n => parseFloat(n.trim()))
-                .filter(n => !isNaN(n));
-
-            console.log('📊 Extracted values:');
-            console.log('   X count:', xValues.length, '→', xValues);
-            console.log('   Y count:', yValues.length, '→', yValues);
-
-            if (xValues.length >= 4 && yValues.length >= 4) {
-                // For scatter plots, we need matching lengths
-                const minLength = Math.min(xValues.length, yValues.length);
-                const xData = xValues.slice(0, minLength);
-                const yData = yValues.slice(0, minLength);
-
-                console.log('✅ Creating scatter plot with', minLength, 'points');
-
-                const points = xData.map((x, idx) => ({
-                    x: x,
-                    y: yData[idx],
-                    label: `נקודה ${idx + 1}`
-                }));
-
-                const visualData = {
-                    type: 'scatter',
-                    points: points,
-                    xRange: [Math.min(...xData) - 1, Math.max(...xData) + 1],
-                    yRange: [Math.min(...yData) - 1, Math.max(...yData) + 1],
-                    color: '#9333ea',
-                    label: 'גרף פיזור - קשר בין משתנים',
-                    xLabel: xLabel,
-                    yLabel: yLabel
-                };
-
-                console.log('✅✅✅ SUCCESS! Created scatter plot from labeled lists');
-                console.log('   Points:', points.length);
-                console.log('   X range:', visualData.xRange);
-                console.log('   Y range:', visualData.yRange);
-                console.log('🔥🔥🔥 EXTRACTION COMPLETE 🔥🔥🔥\n');
-
-                return { ...parsed, visualData };
-            } else {
-                console.log('❌ Not enough valid numbers extracted');
-                console.log('   X:', xValues.length, 'Y:', yValues.length);
-            }
-        } else {
-            console.log('❌ Could not find both X and Y labeled lists');
-            if (!xMatch) console.log('   Missing X pattern');
-            if (!yMatch) console.log('   Missing Y pattern');
+        if (parsed.visualData && (parsed.visualData.data?.length > 0 || parsed.visualData.points?.length > 0)) {
+            console.log('✅ visualData already complete');
+            return parsed;
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        // METHOD 0A: COORDINATE PAIRS (x,y) format
-        // ═══════════════════════════════════════════════════════════════
-        console.log('🔎 METHOD 0A: Searching for coordinate pairs...');
-        const coordPairPattern = /\((\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?)\)/g;
-        const coordMatches = [...questionText.matchAll(coordPairPattern)];
+        console.log('\n🔎 METHOD 1: X-Y labeled lists');
 
-        if (coordMatches && coordMatches.length >= 4) {
-            console.log('📦 Found coordinate pairs:', coordMatches.length, 'pairs');
+        const patterns = [
+            { x: /([^\n:]+?)\s*\(x\)\s*:\s*([0-9,\s.]+)/i, y: /([^\n:]+?)\s*\(y\)\s*:\s*([0-9,\s.]+)/i },
+            { x: /([^\n:]+?)\s*\(x\)\s*\:\s*([0-9,\s.]+)/i, y: /([^\n:]+?)\s*\(y\)\s*\:\s*([0-9,\s.]+)/i },
+            { x: /([א-ת\s]+)\(x\)\s*:\s*([0-9,\s.]+)/i, y: /([א-ת\s]+)\(y\)\s*:\s*([0-9,\s.]+)/i }
+        ];
 
-            const xValues = coordMatches.map(m => parseFloat(m[1]));
-            const yValues = coordMatches.map(m => parseFloat(m[2]));
+        for (let i = 0; i < patterns.length; i++) {
+            const xMatch = questionText.match(patterns[i].x);
+            const yMatch = questionText.match(patterns[i].y);
 
-            let xLabel = 'X';
-            let yLabel = 'Y';
+            if (xMatch && yMatch) {
+                console.log(`✓ Pattern ${i + 1} matched!`);
 
-            if (questionText.includes('שעות') || questionText.includes('ספורט')) {
-                xLabel = 'שעות';
-            }
-            if (questionText.includes('ציון') || questionText.includes('מתמטיקה')) {
-                yLabel = 'ציונים';
-            }
+                const xLabel = xMatch[1].trim();
+                const yLabel = yMatch[1].trim();
 
-            const points = xValues.map((x, idx) => ({
-                x: x,
-                y: yValues[idx],
-                label: `נקודה ${idx + 1}`
-            }));
+                const xValues = xMatch[2]
+                    .split(/[,،\s]+/)
+                    .map(n => parseFloat(n.trim()))
+                    .filter(n => !isNaN(n) && isFinite(n));
 
-            const visualData = {
-                type: 'scatter',
-                points: points,
-                xRange: [Math.min(...xValues) - 1, Math.max(...xValues) + 1],
-                yRange: [Math.min(...yValues) - 5, Math.max(...yValues) + 5],
-                color: '#9333ea',
-                label: 'גרף פיזור - קשר בין משתנים',
-                xLabel: xLabel,
-                yLabel: yLabel
-            };
+                const yValues = yMatch[2]
+                    .split(/[,،\s]+/)
+                    .map(n => parseFloat(n.trim()))
+                    .filter(n => !isNaN(n) && isFinite(n));
 
-            console.log('✅✅✅ SUCCESS! Created coordinate pairs scatter plot');
-            console.log('🔥🔥🔥 EXTRACTION COMPLETE 🔥🔥🔥\n');
+                console.log(`   X: ${xValues.length} values →`, xValues.slice(0, 5));
+                console.log(`   Y: ${yValues.length} values →`, yValues.slice(0, 5));
 
-            return { ...parsed, visualData };
-        }
+                if (xValues.length >= 4 && yValues.length >= 4) {
+                    const minLength = Math.min(xValues.length, yValues.length);
+                    const points = xValues.slice(0, minLength).map((x, idx) => ({
+                        x: x,
+                        y: yValues[idx],
+                        label: `נקודה ${idx + 1}`
+                    }));
 
-        // ═══════════════════════════════════════════════════════════════
-        // METHOD 2: Single comma-separated list (for boxplot/histogram)
-        // ═══════════════════════════════════════════════════════════════
-        console.log('🔎 METHOD 2: Searching for comma-separated numbers...');
-        const commaPattern = /(\d+(?:\.\d+)?(?:\s*,\s*\d+(?:\.\d+)?){4,})/g;
-        const commaMatches = questionText.match(commaPattern);
+                    const visualData = {
+                        type: 'scatter',
+                        points: points,
+                        xRange: [Math.min(...xValues.slice(0, minLength)) - 1, Math.max(...xValues.slice(0, minLength)) + 1],
+                        yRange: [Math.min(...yValues.slice(0, minLength)) - 1, Math.max(...yValues.slice(0, minLength)) + 1],
+                        color: '#9333ea',
+                        label: 'גרף פיזור',
+                        xLabel: xLabel,
+                        yLabel: yLabel
+                    };
 
-        if (commaMatches && commaMatches.length > 0) {
-            console.log('📦 Found comma-separated numbers');
-
-            const numbers = commaMatches[0]
-                .split(',')
-                .map(n => parseFloat(n.trim()))
-                .filter(n => !isNaN(n) && n >= 0);
-
-            console.log('📊 Extracted:', numbers.length, 'numbers');
-
-            if (numbers.length >= 5) {
-                const result = createVisualData(numbers, questionText);
-                if (result.visualData) {
-                    console.log('✅✅✅ SUCCESS from comma-separated list');
+                    console.log('✅✅✅ SUCCESS! Scatter plot created');
                     console.log('🔥🔥🔥 EXTRACTION COMPLETE 🔥🔥🔥\n');
-                    return { ...parsed, visualData: result.visualData };
+                    return { ...parsed, visualData };
                 }
             }
         }
 
-        console.log('⚠️ Could not extract data from question');
+        console.log('⚠️ Could not extract any valid data');
         console.log('🔥🔥🔥 EXTRACTION FAILED 🔥🔥🔥\n');
 
     } catch (error) {
         console.error('❌ EXTRACTION ERROR:', error.message);
-        console.error('Stack:', error.stack);
     }
 
     return parsed;
 }
 
-// Helper function for creating visualData from single array
-function createVisualData(numbers, questionText) {
-    const mean = numbers.reduce((a, b) => a + b, 0) / numbers.length;
-    const min = Math.min(...numbers);
-    const max = Math.max(...numbers);
-    const range = max - min;
+// ==================== DETECT GEOMETRY QUESTIONS ====================
+// ==================== DETECT GEOMETRY QUESTIONS - FIXED ====================
+// ==================== DETECT GEOMETRY QUESTIONS - FIXED V2 ====================
+// ==================== DETECT GEOMETRY QUESTIONS - FIXED V3 WITH HEIGHT FILTERING ====================
+// ==================== DETECT GEOMETRY QUESTIONS - COMPLETE FIXED VERSION ====================
+function detectGeometryVisual(parsed, topic, subtopic) {
+    const questionText = (parsed?.question || '').toLowerCase();
 
-    console.log(`📈 Stats: mean=${mean.toFixed(1)}, range=${range}`);
-
-    if (range < 1) {
-        console.log('❌ Range too small');
-        return { visualData: null };
+    if (!questionText || typeof questionText !== 'string') {
+        return parsed;
     }
 
-    let xLabel = 'ערכים';
-    if (questionText.includes('גובה') || questionText.includes('גבה')) {
-        xLabel = 'גובה (ס״מ)';
-    } else if (questionText.includes('ציון')) {
-        xLabel = 'ציונים';
-    } else if (questionText.includes('שעות')) {
-        xLabel = 'שעות';
-    } else if (questionText.includes('טמפרטורה')) {
-        xLabel = 'טמפרטורה';
-    } else if (questionText.includes('משקל')) {
-        xLabel = 'משקל (ק״ג)';
-    }
+    const geometryKeywords = [
+        'משולש', 'triangle', 'ריבוע', 'square', 'מלבן', 'rectangle',
+        'עיגול', 'circle', 'מעגל', 'זווית', 'angle', 'צלע', 'side',
+        'ניצב', 'right', 'שווה צלעות', 'equilateral', 'היקף', 'perimeter',
+        'שטח', 'area', 'רדיוס', 'radius', 'קוטר', 'diameter',
+        'שווה שוקיים', 'isosceles', 'שוקיים', 'שווה-שוקיים'
+    ];
 
-    const isHistogram = questionText.includes('היסטוגרמה');
-    const isScatter = questionText.includes('פיזור') || questionText.includes('scatter') || questionText.includes('מתאם');
+    const isGeometry = geometryKeywords.some(keyword => questionText.includes(keyword));
+    if (!isGeometry) return parsed;
 
-    let graphType = 'boxplot';
-    if (isHistogram) graphType = 'histogram';
-    if (isScatter) graphType = 'scatter';
+    console.log('🔺 Geometry question detected');
+    console.log('   Question:', parsed.question);
 
-    let visualData;
+    // 🔥 STEP 1: Extract and exclude angles
+    const anglePatterns = [
+        /זווית.*?(\d+)°/gi,
+        /זווית.*?(\d+)\s*מעלות/gi,
+        /(\d+)°/g,
+        /angle.*?(\d+)/gi
+    ];
 
-    if (graphType === 'scatter') {
-        const points = numbers.map((val, idx) => ({
-            x: idx + 1,
-            y: val,
-            label: `נקודה ${idx + 1}`
-        }));
+    const angleNumbers = new Set();
+    anglePatterns.forEach(pattern => {
+        let match;
+        const regex = new RegExp(pattern);
+        while ((match = regex.exec(parsed.question)) !== null) {
+            angleNumbers.add(parseFloat(match[1]));
+        }
+    });
+    console.log('   🚫 Angles to exclude:', Array.from(angleNumbers));
+
+    // 🔥 STEP 2: Extract and exclude height
+    const heightPatterns = [
+        /גובה.*?(\d+)/gi,
+        /height.*?(\d+)/gi
+    ];
+
+    const heightNumbers = new Set();
+    heightPatterns.forEach(pattern => {
+        let match;
+        const regex = new RegExp(pattern);
+        while ((match = regex.exec(parsed.question)) !== null) {
+            heightNumbers.add(parseFloat(match[1]));
+        }
+    });
+    console.log('   🚫 Heights to exclude:', Array.from(heightNumbers));
+
+    // 🔥 STEP 3: Extract ALL numbers, then filter out angles and heights
+    const allNumbers = (parsed.question || '')
+        .match(/\d+(\.\d+)?/g)
+        ?.map(n => parseFloat(n))
+        .filter(n => !angleNumbers.has(n) && !heightNumbers.has(n) && n > 0 && n < 1000) || [];
+
+    console.log('   ✅ Valid numbers (after filtering):', allNumbers);
+
+    let visualData = null;
+
+    // ==================== TRIANGLE DETECTION ====================
+    if (questionText.includes('משולש') || questionText.includes('triangle')) {
+        console.log('   → Triangle detected');
+
+        // Detect triangle type
+        const isRight = questionText.includes('ניצב') || questionText.includes('right') ||
+            questionText.includes('ישר-זווית') || questionText.includes('ישר זווית');
+        const isEquilateral = questionText.includes('שווה צלעות') || questionText.includes('equilateral');
+        const isIsosceles = questionText.includes('שווה שוקיים') || questionText.includes('שווה-שוקיים') ||
+            questionText.includes('isosceles') || questionText.includes('שוקיים');
+
+        let type = 'scalene';
+        if (isRight) type = 'right';
+        else if (isEquilateral) type = 'equilateral';
+        else if (isIsosceles) type = 'isosceles';
+
+        console.log('   Triangle type:', type);
+
+        let sideA, sideB, sideC;
+
+        // 🔥 ENHANCED ISOSCELES EXTRACTION
+        if (isIsosceles) {
+            console.log('   → Processing ISOSCELES triangle');
+
+            // 🔥 METHOD 1: Look for explicit "בסיס" and "שוקיים" keywords
+            const basePatterns = [
+                /(?:אורך\s+ה?)?בסיס(?:\s+הוא)?\s+(\d+)/i,
+                /בסיס\s+(\d+)/i,
+                /base\s+(\d+)/i
+            ];
+
+            const legPatterns = [
+                /(?:אורך\s+ה?)?שוקיים(?:\s+הוא)?\s+(\d+)/i,
+                /שוקיים\s+(\d+)/i,
+                /legs?\s+(\d+)/i
+            ];
+
+            let base = null;
+            let leg = null;
+
+            // Try to find base
+            for (const pattern of basePatterns) {
+                const match = parsed.question.match(pattern);
+                if (match) {
+                    base = parseFloat(match[1]);
+                    console.log('   ✅ Found BASE from keyword:', base);
+                    break;
+                }
+            }
+
+            // Try to find legs
+            for (const pattern of legPatterns) {
+                const match = parsed.question.match(pattern);
+                if (match) {
+                    leg = parseFloat(match[1]);
+                    console.log('   ✅ Found LEGS from keyword:', leg);
+                    break;
+                }
+            }
+
+            // 🔥 METHOD 2: Fallback - use position in filtered numbers
+            if (!base || !leg) {
+                console.log('   → Using fallback method');
+
+                if (allNumbers.length >= 2) {
+                    // First number is usually base, second is legs
+                    base = allNumbers[0];
+                    leg = allNumbers[1];
+                    console.log('   ✅ Fallback - Base:', base, 'Legs:', leg);
+                } else if (allNumbers.length === 1) {
+                    // Only one number - make equilateral
+                    base = allNumbers[0];
+                    leg = allNumbers[0];
+                    console.log('   ⚠️ Only one number - using equilateral');
+                } else {
+                    // No numbers - use defaults
+                    base = 8;
+                    leg = 10;
+                    console.log('   ⚠️ No numbers found - using defaults');
+                }
+            }
+
+            // Ensure we have valid numbers
+            if (!angleNumbers.has(base) && !heightNumbers.has(base) &&
+                !angleNumbers.has(leg) && !heightNumbers.has(leg)) {
+                sideA = base;    // Base (BC)
+                sideB = leg;     // Left leg (AB)
+                sideC = leg;     // Right leg (AC)
+                console.log('   ✅ FINAL ISOSCELES - Base:', sideA, 'Legs:', sideB, sideC);
+            } else {
+                // Validation failed - use defaults
+                sideA = 8;
+                sideB = 10;
+                sideC = 10;
+                console.log('   ⚠️ Validation failed - using defaults');
+            }
+        }
+        // EQUILATERAL
+        else if (isEquilateral) {
+            sideA = allNumbers[0] || 8;
+            sideB = sideA;
+            sideC = sideA;
+            console.log('   ✅ Equilateral - All sides:', sideA);
+        }
+        // RIGHT TRIANGLE
+        else if (isRight) {
+            sideA = allNumbers[0] || 3;
+            sideB = allNumbers[1] || 4;
+            sideC = allNumbers[2] || 5;
+            console.log('   ✅ Right triangle - Sides:', sideA, sideB, sideC);
+        }
+        // SCALENE
+        else {
+            sideA = allNumbers[0] || 6;
+            sideB = allNumbers[1] || 8;
+            sideC = allNumbers[2] || 7;
+            console.log('   ✅ Scalene - Sides:', sideA, sideB, sideC);
+        }
+
+        console.log('   📏 FINAL TRIANGLE - A:', sideA, 'B:', sideB, 'C:', sideC);
 
         visualData = {
-            type: 'scatter',
-            points: points,
-            xRange: [0, numbers.length + 1],
-            yRange: [Math.max(0, min - 2), max + 2],
-            color: '#9333ea',
-            label: 'גרף פיזור',
-            xLabel: 'תלמיד',
-            yLabel: xLabel
+            type: 'svg-triangle',
+            svgData: {
+                type: type,
+                sideA: sideA,
+                sideB: sideB,
+                sideC: sideC,
+                showLabels: true,
+                showAngles: questionText.includes('זווית') || questionText.includes('angle')
+            }
         };
-    } else {
+    }
+    // ==================== RECTANGLE ====================
+    else if (questionText.includes('מלבן') || questionText.includes('rectangle')) {
+        const width = allNumbers[0] || 5;
+        const height = allNumbers[1] || 3;
         visualData = {
-            type: graphType,
-            data: numbers,
-            label: graphType === 'boxplot' ? 'תרשים קופסה' : 'היסטוגרמה',
-            xLabel: xLabel,
-            yLabel: graphType === 'histogram' ? 'תדירות' : '',
-            bins: 5
+            type: 'svg-rectangle',
+            svgData: { width, height, showLabels: true }
+        };
+    }
+    // ==================== CIRCLE ====================
+    else if (questionText.includes('עיגול') || questionText.includes('מעגל') || questionText.includes('circle')) {
+        const radius = allNumbers[0] || 5;
+        visualData = {
+            type: 'svg-circle',
+            svgData: { radius, showLabels: true }
         };
     }
 
-    console.log('✅ Created visualData:', graphType, 'with', numbers.length, 'points');
+    if (visualData) {
+        console.log('✅ Visual created:', visualData.type);
+        console.log('   📊 Data:', JSON.stringify(visualData.svgData, null, 2));
+        parsed.visualData = visualData;
+    }
 
-    return { visualData };
+    return parsed;
 }
 
 // ==================== HEALTH CHECK ====================
 app.get('/health', (req, res) => {
     res.json({
         status: 'ok',
-        message: 'Nexon AI Server Running',
+        message: 'Nexon AI Server - Smart Topic-Based Questions',
         personalityLoaded: personalitySystem.loaded,
+        curriculumLoaded: true,
+        questionHistoryActive: true,
+        visualGenerationActive: true,
+        reformYear: CURRICULUM_METADATA.reformYear,
         firebaseStorage: bucket ? 'available' : 'unavailable'
     });
 });
 
-// ==================== ADMIN: UPLOAD PERSONALITY EXCEL ====================
-app.post('/api/admin/upload-personality', upload.single('file'), async (req, res) => {
+// ==================== 🔥 SMART TOPIC-BASED QUESTION PROMPT ====================
+// ==================== 🔥 SMART TOPIC-BASED QUESTION PROMPT ====================
+// ==================== 🔥 SMART TOPIC-BASED QUESTION PROMPT ====================
+// ==================== 🔥 SMART TOPIC-BASED QUESTION PROMPT - COMPLETE ====================
+// ==================== 🔥 COMPLETE buildDynamicQuestionPrompt WITH EXAMPLE FILTERING ====================
+function buildDynamicQuestionPrompt(topic, subtopic, difficulty, studentProfile, gradeId) {
     try {
-        if (!req.file) {
-            return res.status(400).json({ success: false, error: 'No file uploaded' });
+        if (!topic || typeof topic !== 'object') {
+            console.error('❌ Invalid topic object:', topic);
+            throw new Error('Invalid topic object');
         }
 
-        console.log('📁 Uploading personality file...');
+        const topicName = String(topic?.name || 'Unknown Topic');
+        const topicNameEn = String(topic?.nameEn || '');
+        const subtopicName = String(subtopic?.name || '');
+        const subtopicNameEn = String(subtopic?.nameEn || '');
+        const studentGrade = String(studentProfile?.grade || '7');
 
-        if (bucket) {
-            console.log('☁️ Saving to Firebase Storage...');
+        console.log('✅ buildDynamicQuestionPrompt - Variables:');
+        console.log('   topicName:', topicName);
+        console.log('   subtopicName:', subtopicName);
 
-            const blob = bucket.file('personality-system.xlsx');
-            const blobStream = blob.createWriteStream({
-                metadata: {
-                    contentType: req.file.mimetype,
-                    metadata: {
-                        uploadedAt: new Date().toISOString()
-                    }
+        const classification = classifyTopic(topicName, subtopicName);
+        console.log('   Classification:', classification);
+
+        let prompt = `צור שאלה במתמטיקה בעברית.\n\n`;
+
+        prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+        prompt += `🎯 MANDATORY TOPIC REQUIREMENTS\n`;
+        prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+        prompt += `נושא ראשי: ${topicName}\n`;
+
+        if (subtopicName) {
+            prompt += `תת-נושא (MUST BE THE MAIN FOCUS): ${subtopicName}\n`;
+            prompt += `⚠️⚠️⚠️ השאלה חייבת להיות ישירות על "${subtopicName}"\n`;
+        }
+
+        prompt += `רמת קושי: ${difficulty}\n`;
+        prompt += `כיתה: ${studentGrade}\n`;
+        prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+        // 🔥 GEOMETRY SECTIONS
+        if (classification.isPureGeometry) {
+            prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+            prompt += `📐 PURE GEOMETRY MODE - נקודות, קווים ומישורים\n`;
+            prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+            prompt += `🚨 CRITICAL RULES:\n`;
+            prompt += `✓ השתמש בשפה גאומטרית טהורה בלבד\n`;
+            prompt += `✓ השאלה חייבת להתחיל ב: "נתון/נתונה/נתונים"\n`;
+            prompt += `✓ דוגמאות לפתיחה:\n`;
+            prompt += `  - "נתון מישור α וקו ישר l"\n`;
+            prompt += `  - "נתונות שתי נקודות A ו-B במישור"\n`;
+            prompt += `  - "נתונים שני קווים מקבילים m ו-n"\n\n`;
+            prompt += `❌ אסור בהחלט:\n`;
+            prompt += `  ❌ הקשרים מהחיים האמיתיים (גנים, בניינים וכו')\n`;
+            prompt += `  ❌ חישובי שטח, היקף\n`;
+            prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+        }
+
+        if (classification.isAppliedGeometry) {
+            prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+            prompt += `📏 APPLIED GEOMETRY MODE - חישובי צורות\n`;
+            prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+            prompt += `✓ פתיחה: "נתון משולש...", "נתון ריבוע...", "נתון מעגל..."\n`;
+            prompt += `✓ שאל על: שטח, היקף, גובה, אורך צלע\n\n`;
+
+            prompt += `🚨 CRITICAL GEOMETRY VALIDATION RULES:\n`;
+            prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+            // 🔥🔥🔥 ULTRA-STRICT ISOSCELES SECTION - TRIPLE EMPHASIS
+            prompt += `╔════════════════════════════════════════════════════╗\n`;
+            prompt += `║  ⚠️  ABSOLUTE RULE FOR ISOSCELES TRIANGLES  ⚠️   ║\n`;
+            prompt += `╚════════════════════════════════════════════════════╝\n\n`;
+
+            prompt += `1. משולש שווה-שוקיים (Isosceles Triangle):\n`;
+            prompt += `   \n`;
+            prompt += `   🚨 READ THIS 5 TIMES BEFORE GENERATING:\n`;
+            prompt += `   • An isosceles triangle has EXACTLY 3 SIDES:\n`;
+            prompt += `     - Base (בסיס)\n`;
+            prompt += `     - Left Leg (שוק שמאלי)\n`;
+            prompt += `     - Right Leg (שוק ימני)\n`;
+            prompt += `   \n`;
+            prompt += `   • גובה (HEIGHT) is NOT A SIDE!\n`;
+            prompt += `   • Height is a LINE FROM apex TO base (perpendicular)\n`;
+            prompt += `   • Height is CALCULATED by student, NOT GIVEN\n`;
+            prompt += `   • If you give height, the visual generator BREAKS\n`;
+            prompt += `   \n`;
+            prompt += `   ✅ THE ONLY ALLOWED FORMAT:\n`;
+            prompt += `   "נתון משולש שווה-שוקיים ABC, שבו אורך הבסיס הוא X ס"מ,\n`;
+            prompt += `    ואורך השוקיים הוא Y ס"מ. מה שטח המשולש?"\n`;
+            prompt += `   \n`;
+            prompt += `   That's it. NOTHING ELSE. Period.\n`;
+            prompt += `   Just: Triangle definition + Base + Legs + Question.\n`;
+            prompt += `   NO height mentioned ANYWHERE.\n`;
+            prompt += `   \n`;
+            prompt += `   🚫 FORBIDDEN PHRASES (NEVER USE THESE):\n`;
+            prompt += `   ❌ "אם גובה המשולש לבסיס הוא" ← BREAKS THE SYSTEM!\n`;
+            prompt += `   ❌ "אם גובה המשולש הוא" ← BREAKS THE SYSTEM!\n`;
+            prompt += `   ❌ "גובה המשולש הוא" ← BREAKS THE SYSTEM!\n`;
+            prompt += `   ❌ "וגובה" ← BREAKS THE SYSTEM!\n`;
+            prompt += `   ❌ ", גובה" ← BREAKS THE SYSTEM!\n`;
+            prompt += `   ❌ ANY mention of גובה as given information ← FORBIDDEN!\n`;
+            prompt += `   \n`;
+            prompt += `   💡 WHY NEVER MENTION HEIGHT?\n`;
+            prompt += `   Because the student must LEARN to calculate it:\n`;
+            prompt += `   Step 1: Split triangle in half → creates right triangle\n`;
+            prompt += `   Step 2: Use Pythagorean theorem: h² + (base/2)² = leg²\n`;
+            prompt += `   Step 3: Solve for h\n`;
+            prompt += `   Step 4: Calculate area = ½ × base × h\n`;
+            prompt += `   \n`;
+            prompt += `   This is EDUCATIONAL. Giving height makes it trivial.\n`;
+            prompt += `   Also: Mentioning height confuses the visual generator (sees 3 numbers).\n`;
+            prompt += `   \n`;
+            prompt += `   ✅ CORRECT EXAMPLES (COPY THESE FORMATS):\n`;
+            prompt += `   1. "נתון משולש שווה-שוקיים ABC, בסיס 12 ס"מ, שוקיים 15 ס"מ. מה השטח?"\n`;
+            prompt += `   2. "נתון משולש שווה-שוקיים, בסיס 10 ס"מ, שוקיים 13 ס"מ. מה ההיקף?"\n`;
+            prompt += `   3. "נתון משולש שווה-שוקיים, בסיס 16 ס"מ, שוקיים 17 ס"מ. חשב את השטח."\n`;
+            prompt += `   4. "נתון משולש שווה-שוקיים ABC, בסיס 14 ס"מ, שוקיים 20 ס"מ. מצא את הגובה." ← Height is ANSWER!\n`;
+            prompt += `   \n`;
+            prompt += `   ❌ WRONG EXAMPLES (NEVER EVER USE THESE):\n`;
+            prompt += `   ❌ "בסיס 12, שוקיים 15, אם גובה 8, מה השטח?" ← 3 numbers = BROKEN VISUAL!\n`;
+            prompt += `   ❌ "בסיס 12, שוקיים 15, וגובה המשולש הוא 8" ← FORBIDDEN FORMAT!\n`;
+            prompt += `   ❌ "משולש עם צלעות 12, 15, 8" ← 8 is NOT a side!\n`;
+            prompt += `   ❌ "נתון משולש שווה-שוקיים, בסיס 12 ס"מ, שוקיים 15 ס"מ. אם גובה המשולש לבסיס הוא 8 ס"מ, מה שטח המשולש?"\n`;
+            prompt += `      ↑ THIS IS THE EXACT PHRASE YOU'VE BEEN GENERATING - STOP IT!\n`;
+            prompt += `   \n`;
+            prompt += `   📐 HOW TO SOLVE ISOSCELES AREA (Student's work):\n`;
+            prompt += `   Given: Base = 12 cm, Legs = 15 cm\n`;
+            prompt += `   Step 1: Height splits base in half → 6 cm each side\n`;
+            prompt += `   Step 2: Right triangle formed: h² + 6² = 15²\n`;
+            prompt += `   Step 3: h² = 225 - 36 = 189\n`;
+            prompt += `   Step 4: h = √189 ≈ 13.75 cm\n`;
+            prompt += `   Step 5: Area = ½ × 12 × 13.75 = 82.5 cm²\n`;
+            prompt += `   \n`;
+            prompt += `   See? Student calculates height! Don't give it!\n`;
+            prompt += `   \n`;
+            prompt += `   🎯 YOUR TASK: Create question with ONLY base + legs!\n`;
+            prompt += `   Format: "נתון משולש שווה-שוקיים, בסיס X, שוקיים Y. מה השטח?"\n`;
+            prompt += `   Two numbers only. Never three. Never mention גובה.\n\n`;
+
+            prompt += `2. משולש ישר-זווית (Right Triangle):\n`;
+            prompt += `   📋 Format: "נתון משולש ישר-זווית עם ניצב אחד X ס"מ וניצב שני Y ס"מ"\n`;
+            prompt += `   ✅ Example: "משולש ניצבים 4 ו-6. מה השטח?"\n`;
+            prompt += `   ✅ SAFE QUESTIONS: היתר, שטח, היקף\n\n`;
+
+            prompt += `3. משולש שווה-צלעות (Equilateral):\n`;
+            prompt += `   📋 Format: "נתון משולש שווה-צלעות שאורך צלעו X ס"מ"\n`;
+            prompt += `   ✅ SAFE QUESTIONS: היקף, שטח, גובה\n\n`;
+
+            prompt += `4. משולש כללי (General Triangle):\n`;
+            prompt += `   📋 Format: "משולש בסיס X, גובה Y. מה השטח?"\n`;
+            prompt += `   ✅ For general triangles, you CAN give both base AND height\n`;
+            prompt += `   ⚠️ But for ISOSCELES: base + legs only!\n\n`;
+
+            prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+            prompt += `🎯 PRE-GENERATION VALIDATION CHECKLIST:\n`;
+            prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+            prompt += `Before generating, mentally check:\n`;
+            prompt += `□ Am I creating an isosceles triangle question?\n`;
+            prompt += `□ If YES: Did I count the numbers in my question?\n`;
+            prompt += `□ For isosceles: Are there exactly 2 numbers (base + leg)?\n`;
+            prompt += `□ Did I use the word "גובה" anywhere? If YES → DELETE IT!\n`;
+            prompt += `□ Is my format: "נתון משולש שווה-שוקיים, בסיס X, שוקיים Y. מה..."?\n`;
+            prompt += `□ Am I asking for area, perimeter, or height calculation?\n`;
+            prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+        }
+
+        // Load personality examples with filtering
+        const studentId = studentProfile?.studentId || studentProfile?.name || 'anonymous';
+        const topicId = topic?.id || topicName;
+        const avoidancePrompt = questionHistoryManager.buildAvoidancePrompt(studentId, topicId);
+        if (avoidancePrompt) {
+            prompt += avoidancePrompt;
+        }
+
+        if (!classification.isPureGeometry) {
+            const strategies = [
+                '1. Pure mathematical: "נתון..."',
+                '2. Real-world story',
+                '3. Multi-step challenge',
+                '4. Pattern discovery',
+                '5. Comparison'
+            ];
+            const randomStrategy = strategies[Math.floor(Math.random() * strategies.length)];
+            prompt += `🎲 VARIATION: ${randomStrategy}\n\n`;
+        }
+
+        prompt += `🔢 Use diverse, interesting numbers\n\n`;
+
+        if (classification.allowsRealWorld && !classification.isPureGeometry) {
+            const contexts = ['⚽ ספורט', '🏫 בית ספר', '🎨 אומנות', '🏗️ בנייה', '🌳 טבע'];
+            const randomContext = contexts[Math.floor(Math.random() * contexts.length)];
+            prompt += `🎨 אפשרי: ${randomContext}\n\n`;
+        }
+
+        // 🔥 PERSONALITY SYSTEM WITH SMART FILTERING
+        if (personalitySystem.loaded) {
+            const topicGuideline = personalitySystem.getTopicGuideline(topicName);
+            if (topicGuideline) {
+                prompt += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+                prompt += `📚 CURRICULUM GUIDELINES\n`;
+                prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+                if (topicGuideline.curriculum_requirements) {
+                    prompt += `⚠️ MANDATORY:\n${topicGuideline.curriculum_requirements}\n\n`;
                 }
-            });
+                prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+            }
 
-            blobStream.on('error', (err) => {
-                console.error('❌ Firebase upload error:', err);
-                return res.status(500).json({ success: false, error: 'Failed to upload to storage' });
-            });
+            try {
+                const examples = personalitySystem.getExamplesForTopic(topicName, difficulty);
+                if (examples && examples.length > 0) {
+                    let filteredExamples = examples;
 
-            blobStream.on('finish', async () => {
-                console.log('✅ File saved to Firebase Storage');
+                    // 🔥 FILTER EXAMPLES FOR TRIANGLE TOPICS
+                    const isTriangleTopic = topicName.includes('משולש') || topicName.includes('triangle') ||
+                        topicName.includes('גאומטריה') || topicName.includes('geometry') ||
+                        subtopicName.includes('משולש') || subtopicName.includes('triangle');
 
-                const tempPath = `/tmp/personality-system-${Date.now()}.xlsx`;
-                fs.writeFileSync(tempPath, req.file.buffer);
+                    if (isTriangleTopic) {
+                        console.log('   🔍 Filtering triangle examples for topic:', topicName);
 
-                const loaded = personalitySystem.loadFromExcel(tempPath);
+                        filteredExamples = examples.filter(ex => {
+                            const question = String(ex?.question || '');
+                            if (!question) return false;
 
-                fs.unlinkSync(tempPath);
+                            // Check if isosceles
+                            const isIsosceles = question.includes('שווה-שוקיים') ||
+                                question.includes('שווה שוקיים') ||
+                                question.toLowerCase().includes('isosceles');
 
-                if (loaded) {
-                    res.json({
-                        success: true,
-                        message: 'Personality system uploaded and loaded successfully!',
-                        persistentStorage: true,
-                        stats: {
-                            examples: personalitySystem.data.examplesBank.length,
-                            topics: personalitySystem.data.topicGuidelines.length,
-                            hints: personalitySystem.data.hintSystem.length,
-                            errors: personalitySystem.data.errorPatterns.length,
-                            encouragements: personalitySystem.data.encouragementLibrary.length,
-                            templates: personalitySystem.data.questionTemplates.length
+                            if (!isIsosceles) return true; // Keep non-isosceles
+
+                            // For isosceles: reject if mentions height as given info
+                            const badPatterns = [
+                                /אם\s+גובה/i,
+                                /וגובה\s+המשולש/i,
+                                /גובה\s+המשולש\s+(?:לבסיס\s+)?(?:הוא|הינו)\s+\d+/i,
+                                /,\s*גובה\s+\d+/i,
+                                /\.\s*גובה/i
+                            ];
+
+                            const hasBadPattern = badPatterns.some(pattern => pattern.test(question));
+
+                            if (hasBadPattern) {
+                                console.log('   ❌ Filtered bad example:', question.substring(0, 100));
+                                return false;
+                            }
+
+                            console.log('   ✅ Kept good example:', question.substring(0, 80));
+                            return true;
+                        });
+
+                        console.log(`   📊 Filtering: ${examples.length} → ${filteredExamples.length} examples`);
+                    }
+
+                    if (filteredExamples.length > 0) {
+                        const shuffled = filteredExamples.sort(() => 0.5 - Math.random());
+                        const selected = shuffled.slice(0, Math.min(2, filteredExamples.length));
+
+                        prompt += `\n📚 EXAMPLE STYLES (create something DIFFERENT):\n`;
+                        selected.forEach((ex, i) => {
+                            prompt += `${i + 1}. ${ex.question}\n`;
+                        });
+                        prompt += `\n⚠️ Your question must be UNIQUE!\n`;
+
+                        if (isTriangleTopic) {
+                            prompt += `\n🚨 CRITICAL OVERRIDE FOR ISOSCELES:\n`;
+                            prompt += `Even if you see old examples mentioning "גובה":\n`;
+                            prompt += `YOU MUST NOT COPY THAT FORMAT!\n`;
+                            prompt += `Use ONLY: "נתון משולש שווה-שוקיים, בסיס X, שוקיים Y"\n`;
+                            prompt += `TWO numbers ONLY. NO height!\n`;
                         }
-                    });
-                } else {
-                    res.status(500).json({ success: false, error: 'Failed to load personality system' });
-                }
-            });
-
-            blobStream.end(req.file.buffer);
-        } else {
-            console.log('⚠️ No Firebase Storage - saving locally (temporary)');
-
-            const uploadDir = path.join(__dirname, '../uploads');
-            if (!fs.existsSync(uploadDir)) {
-                fs.mkdirSync(uploadDir, { recursive: true });
-            }
-
-            const localPath = path.join(uploadDir, 'personality-system.xlsx');
-            fs.writeFileSync(localPath, req.file.buffer);
-
-            const loaded = personalitySystem.loadFromExcel(localPath);
-
-            if (loaded) {
-                res.json({
-                    success: true,
-                    message: 'Personality system uploaded (temporary - will be lost on restart)',
-                    persistentStorage: false,
-                    stats: {
-                        examples: personalitySystem.data.examplesBank.length,
-                        topics: personalitySystem.data.topicGuidelines.length,
-                        hints: personalitySystem.data.hintSystem.length,
-                        errors: personalitySystem.data.errorPatterns.length,
-                        encouragements: personalitySystem.data.encouragementLibrary.length,
-                        templates: personalitySystem.data.questionTemplates.length
+                        prompt += `\n`;
                     }
-                });
-            } else {
-                res.status(500).json({ success: false, error: 'Failed to load personality system' });
+                }
+            } catch (exampleError) {
+                console.error('⚠️ Error loading examples:', exampleError.message);
             }
         }
+
+        // Statistics formatting
+        if (classification.isStatistics) {
+            prompt += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+            prompt += `📊 DATA FORMATTING (MANDATORY)\n`;
+            prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+            prompt += `✅ REQUIRED: MINIMUM 20 data points\n`;
+            prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+        }
+
+        // JSON formatting rules
+        prompt += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+        prompt += `🚨 CRITICAL JSON RULES:\n`;
+        prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+        prompt += `1. Return ONLY valid JSON\n`;
+        prompt += `2. Use \\n for newlines, NOT actual newlines\n`;
+        prompt += `3. Escape quotes: use \\" inside strings\n`;
+        prompt += `4. NO trailing commas\n`;
+        prompt += `5. NO comments\n\n`;
+
+        prompt += `REQUIRED FORMAT:\n`;
+        prompt += `{\n`;
+        prompt += `  "question": "השאלה (NO actual newlines)",\n`;
+        prompt += `  "correctAnswer": "התשובה",\n`;
+        prompt += `  "hints": ["רמז 1", "רמז 2", "רמז 3"],\n`;
+        prompt += `  "explanation": "ההסבר"\n`;
+        prompt += `}\n`;
+        prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+        prompt += `╔════════════════════════════════════════════════════╗\n`;
+        prompt += `║  🔥 FINAL REMINDER FOR ISOSCELES TRIANGLES 🔥    ║\n`;
+        prompt += `╚════════════════════════════════════════════════════╝\n`;
+        prompt += `If creating isosceles triangle question:\n`;
+        prompt += `- Give ONLY base and legs (2 numbers)\n`;
+        prompt += `- Format: "נתון משולש שווה-שוקיים, בסיס X, שוקיים Y"\n`;
+        prompt += `- DO NOT EVER mention גובה (height)\n`;
+        prompt += `- Let student calculate height themselves\n`;
+        prompt += `- This prevents visual errors AND teaches properly\n\n`;
+
+        console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log('📝 COMPLETE PROMPT TO CLAUDE');
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log(prompt);
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+        return prompt;
+
     } catch (error) {
-        console.error('Upload error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        console.error('❌ FATAL ERROR in buildDynamicQuestionPrompt:', error);
+        throw new Error(`buildDynamicQuestionPrompt failed: ${error.message}`);
     }
-});
-
-// ==================== ADMIN: GET PERSONALITY STATUS ====================
-app.get('/api/admin/personality-status', (req, res) => {
-    res.json({
-        loaded: personalitySystem.loaded,
-        firebaseStorage: bucket ? 'available' : 'unavailable',
-        stats: personalitySystem.loaded ? {
-            examples: personalitySystem.data.examplesBank.length,
-            topics: personalitySystem.data.topicGuidelines.length,
-            hints: personalitySystem.data.hintSystem.length,
-            errors: personalitySystem.data.errorPatterns.length,
-            encouragements: personalitySystem.data.encouragementLibrary.length,
-            templates: personalitySystem.data.questionTemplates.length,
-            corePersonality: personalitySystem.data.corePersonality
-        } : null
-    });
-});
-
-// ==================== DYNAMIC QUESTION GENERATION ====================
+}
+// ==================== GENERATE QUESTION ENDPOINT ====================
 app.post('/api/ai/generate-question', async (req, res) => {
     try {
         const { topic, subtopic, difficulty, studentProfile } = req.body;
 
+        if (!topic || !topic.name) {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid topic object'
+            });
+        }
+
+        if (!studentProfile || !studentProfile.grade) {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid student profile'
+            });
+        }
+
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('📝 PERSONALITY-BASED QUESTION GENERATION');
+        console.log('📝 SMART QUESTION GENERATION');
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('   Student:', studentProfile.name);
-        console.log('   Grade:', studentProfile.grade);
         console.log('   Topic:', topic.name);
         console.log('   Subtopic:', subtopic?.name || 'General');
-        console.log('   Difficulty:', difficulty);
-        console.log('   Personality System:', personalitySystem.loaded ? '✅ Active' : '❌ Not Loaded');
 
-        const systemPrompt = personalitySystem.loaded
-            ? personalitySystem.buildSystemPrompt(studentProfile)
-            : buildSystemPrompt(studentProfile);
+        const gradeId = `grade_${studentProfile.grade}`;
+        const studentId = studentProfile.studentId || studentProfile.name || 'anonymous';
 
-        // 🔥 ALWAYS use strict prompt, then add personality examples after
-        let prompt = buildDynamicQuestionPrompt(topic, subtopic, difficulty, studentProfile);
+        let prompt = buildDynamicQuestionPrompt(topic, subtopic, difficulty, studentProfile, gradeId);
+        const systemPrompt = buildEnhancedSystemPrompt(studentProfile, gradeId, topic, subtopic);
 
-        // Add personality examples if loaded
-        if (personalitySystem.loaded) {
-            const examples = personalitySystem.getExamplesForTopic(topic.name, difficulty);
-            if (examples.length > 0) {
-                console.log(`   📚 Adding ${examples.length} example(s) from personality system`);
-                prompt += `\n📚 דוגמאות נוספות:\n`;
-                examples.slice(0, 2).forEach((ex, i) => {
-                    prompt += `דוגמה ${i + 1}: ${ex.question} → ${ex.answer}\n`;
+        let attempts = 0;
+        let parsed;
+        const maxAttempts = 3;
+
+        while (attempts < maxAttempts) {
+            attempts++;
+
+            if (process.env.ANTHROPIC_API_KEY) {
+                console.log(`   🔄 Attempt ${attempts}/${maxAttempts}`);
+
+                const response = await fetch('https://api.anthropic.com/v1/messages', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-api-key': process.env.ANTHROPIC_API_KEY,
+                        'anthropic-version': '2023-06-01'
+                    },
+                    body: JSON.stringify({
+                        model: 'claude-3-5-haiku-20241022',
+                        max_tokens: 3000,
+                        temperature: 0.8 + (attempts * 0.1),
+                        system: systemPrompt,
+                        messages: [{ role: 'user', content: prompt }]
+                    })
                 });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error?.message || 'API error');
+                }
+
+                const rawText = data.content[0].text;
+                const jsonText = cleanJsonText(rawText);
+                parsed = JSON.parse(jsonText);
+
+                console.log('   ✅ Parsed successfully');
+
+                const topicId = topic.id || topic.name;
+                const recentQuestions = questionHistoryManager.getRecentQuestions(studentId, topicId, 5);
+                const isSimilar = questionHistoryManager.isSimilar(parsed.question, recentQuestions);
+
+                if (isSimilar && attempts < maxAttempts) {
+                    console.log(`   ⚠️ Too similar, retrying...`);
+                    prompt += `\n\n🚨 TOO SIMILAR! Create MORE DIFFERENT!\n`;
+                    continue;
+                } else {
+                    console.log('   ✅ Question is unique');
+                    break;
+                }
+            } else {
+                throw new Error('No AI API configured');
             }
         }
 
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+        const validation = validateQuestionHasRawData(parsed, topic, subtopic);
+        if (!validation.valid) {
+            console.log('   ⚠️ Validation failed - rewriting');
+            parsed = forceRewriteGraphDescription(parsed, topic, subtopic);
+        }
 
-        if (process.env.ANTHROPIC_API_KEY) {
-            console.log('🤖 Using Claude 3.5 Haiku for question generation...');
+        parsed = ensureVisualDataForGraphQuestions(parsed, topic, subtopic);
+        parsed = detectGeometryVisual(parsed, topic, subtopic);
 
-            const response = await fetch('https://api.anthropic.com/v1/messages', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-api-key': process.env.ANTHROPIC_API_KEY,
-                    'anthropic-version': '2023-06-01'
-                },
-                body: JSON.stringify({
-                    model: 'claude-3-5-haiku-20241022',
-                    max_tokens: 3000,
-                    temperature: 0.8,
-                    system: systemPrompt,
-                    messages: [{ role: 'user', content: prompt }]
-                })
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                console.error('❌ Claude API error:', data.error);
-                throw new Error(data.error?.message || 'Claude API error');
-            }
+        if (parsed.visualData?.type?.startsWith('svg-')) {
+            const svgType = parsed.visualData.type.replace('svg-', '');
+            let svg = null;
 
             try {
-                const rawText = data.content[0].text;
-                console.log('📥 Claude raw response (first 300 chars):', rawText.substring(0, 300));
-
-                const jsonText = cleanJsonText(rawText);
-                let parsed = JSON.parse(jsonText);
-
-                console.log('✅ JSON parsed successfully');
-                console.log('   Question:', parsed.question.substring(0, 80) + '...');
-                console.log('   Answer:', parsed.correctAnswer);
-                console.log('   visualData BEFORE validation:', parsed.visualData ? 'EXISTS' : 'NULL');
-
-                // 🔥 VALIDATE QUESTION HAS RAW DATA
-                const validation = validateQuestionHasRawData(parsed, topic, subtopic);
-
-                if (!validation.valid) {
-                    console.log('⚠️ Question validation failed:', validation.reason);
-                    console.log('🔥 FORCING QUESTION REWRITE ON SERVER SIDE');
-
-                    // Don't retry with AI - just rewrite it ourselves
-                    parsed = forceRewriteGraphDescription(parsed, topic, subtopic);
-                    console.log('✅ Question forcibly rewritten with real data');
+                if (svgType === 'triangle') {
+                    svg = SVGGenerator.generateTriangle(parsed.visualData.svgData);
+                } else if (svgType === 'rectangle') {
+                    svg = SVGGenerator.generateRectangle(parsed.visualData.svgData);
+                } else if (svgType === 'circle') {
+                    svg = SVGGenerator.generateCircle(parsed.visualData.svgData);
                 }
 
-                // 🔥🔥🔥 CALL EXTRACTION FUNCTION
-                console.log('\n🔥🔥🔥 CALLING EXTRACTION FUNCTION');
-                console.log('   Question has commas?', /\d+\s*,\s*\d+/.test(parsed.question));
-                console.log('   Question has "פיזור"?', parsed.question.includes('פיזור'));
-
-                try {
-                    parsed = ensureVisualDataForGraphQuestions(parsed, topic, subtopic);
-                    console.log('✅ EXTRACTION FUNCTION COMPLETED');
-                } catch (extractError) {
-                    console.error('❌❌❌ EXTRACTION CRASHED:', extractError.message);
-                    console.error('Stack:', extractError.stack);
+                if (svg) {
+                    parsed.visualData.svg = svg;
+                    console.log('   ✅ SVG generated:', svgType);
                 }
-
-                console.log('\n🔍 AFTER EXTRACTION:');
-                console.log('   visualData exists?', !!parsed.visualData);
-                console.log('   visualData type:', parsed.visualData?.type);
-                console.log('   visualData data:', parsed.visualData?.data?.length || parsed.visualData?.points?.length || 0, 'items');
-
-                const responsePayload = {
-                    success: true,
-                    question: {
-                        question: parsed.question,
-                        correctAnswer: parsed.correctAnswer,
-                        hints: parsed.hints || [],
-                        explanation: parsed.explanation || '',
-                        topic: topic.name,
-                        subtopic: subtopic?.name,
-                        difficulty: parsed.difficulty || difficulty,
-                        gradeLevel: studentProfile.grade,
-                        visualData: parsed.visualData || null
-                    },
-                    model: 'claude-3.5-haiku',
-                    generatedDynamically: true,
-                    personalityActive: personalitySystem.loaded
-                };
-
-                console.log('\n🚀 SENDING RESPONSE TO FRONTEND:');
-                console.log('   visualData in response:', responsePayload.question.visualData ? '✅ YES' : '❌ NO');
-                console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-
-                return res.json(responsePayload);
-            } catch (parseError) {
-                console.error('❌ Parse error:', parseError);
-                console.error('Raw response:', data.content[0].text);
-                throw parseError;
+            } catch (svgError) {
+                console.error('   ❌ SVG error:', svgError);
             }
         }
 
-        throw new Error('No AI API configured');
+        const topicId = topic.id || topic.name;
+        questionHistoryManager.addQuestion(studentId, topicId, {
+            question: parsed.question,
+            timestamp: Date.now()
+        });
+
+        console.log('   ✅ Complete');
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+        return res.json({
+            success: true,
+            question: {
+                question: parsed.question,
+                correctAnswer: parsed.correctAnswer,
+                hints: parsed.hints || [],
+                explanation: parsed.explanation || '',
+                topic: topic.name,
+                subtopic: subtopic?.name,
+                difficulty: parsed.difficulty || difficulty,
+                gradeLevel: studentProfile.grade,
+                visualData: parsed.visualData || null,
+                curriculumAligned: true,
+                reformYear: CURRICULUM_METADATA.reformYear
+            },
+            model: 'claude-3.5-haiku',
+            personalityActive: personalitySystem.loaded,
+            attemptCount: attempts
+        });
 
     } catch (error) {
-        console.error('❌ Question generation error:', error);
+        console.error('❌ Error:', error);
         res.status(500).json({
             success: false,
             error: error.message
         });
     }
 });
-
 // ==================== VERIFY ANSWER ====================
 app.post('/api/ai/verify-answer', async (req, res) => {
     try {
-        const { question, userAnswer, correctAnswer, studentName, grade, topic, subtopic } = req.body;
+        const { question, userAnswer, correctAnswer, studentName, topic } = req.body;
 
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('🔍 SMART ANSWER VERIFICATION');
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('   Student:', studentName);
-        console.log('   User Answer:', userAnswer);
-        console.log('   Expected:', correctAnswer);
+        console.log('🔍 VERIFYING ANSWER');
 
-        const prompt = personalitySystem.loaded
-            ? personalitySystem.buildVerificationPrompt(question, userAnswer, correctAnswer, topic)
-            : buildVerificationPrompt(question, userAnswer, correctAnswer, topic, subtopic, grade);
+        if (compareMathExpressions(userAnswer, correctAnswer)) {
+            console.log('✅ EXACT MATCH');
+
+            return res.json({
+                success: true,
+                isCorrect: true,
+                confidence: 100,
+                feedback: 'נכון מצוין! 🎉',
+                explanation: 'התשובה שלך נכונה!',
+                model: 'exact-match'
+            });
+        }
+
+        const prompt = `בדוק:\n\nשאלה: ${question}\nתלמיד: ${userAnswer}\nנכון: ${correctAnswer}\n\nJSON:\n{"isCorrect":true/false,"feedback":"...","explanation":"..."}`;
 
         if (process.env.ANTHROPIC_API_KEY) {
-            const systemPromptText = personalitySystem.loaded
-                ? `אתה ${personalitySystem.data.corePersonality.teacher_name}, מורה מתמטיקה מומחה. החזר JSON תקין בלבד.`
-                : `אתה נקסון, מורה מתמטיקה מומחה. החזר JSON תקין בלבד.`;
-
             const response = await fetch('https://api.anthropic.com/v1/messages', {
                 method: 'POST',
                 headers: {
@@ -951,7 +1334,7 @@ app.post('/api/ai/verify-answer', async (req, res) => {
                     model: 'claude-3-5-haiku-20241022',
                     max_tokens: 1500,
                     temperature: 0.3,
-                    system: systemPromptText,
+                    system: 'אתה נקסון. בדוק שקילות מתמטית. JSON בלבד.',
                     messages: [{ role: 'user', content: prompt }]
                 })
             });
@@ -959,52 +1342,27 @@ app.post('/api/ai/verify-answer', async (req, res) => {
             const data = await response.json();
 
             if (!response.ok) {
-                throw new Error(data.error?.message || 'Claude API error');
+                throw new Error(data.error?.message || 'API error');
             }
 
-            try {
-                const rawText = data.content[0].text;
-                const jsonText = cleanJsonText(rawText);
-                const parsed = JSON.parse(jsonText);
+            const rawText = data.content[0].text;
+            const jsonText = cleanJsonText(rawText);
+            const parsed = JSON.parse(jsonText);
 
-                let feedback = parsed.feedback;
-                if (personalitySystem.loaded) {
-                    let situation = parsed.isCorrect ? 'correct_first_try' : 'wrong_answer_first';
-                    const personalizedFeedback = personalitySystem.getEncouragement(situation);
-                    if (personalizedFeedback) {
-                        feedback = personalizedFeedback.replace('תלמיד', studentName);
-                    }
-                }
-
-                return res.json({
-                    success: true,
-                    isCorrect: parsed.isCorrect,
-                    isPartial: parsed.isPartial || false,
-                    confidence: parsed.confidence || 95,
-                    feedback: feedback || (parsed.isCorrect ? 'נכון!' : 'לא נכון'),
-                    explanation: parsed.explanation || '',
-                    model: 'claude-3.5-haiku',
-                    personalityActive: personalitySystem.loaded
-                });
-            } catch (parseError) {
-                const rawText = data.content[0].text;
-                const seemsCorrect = rawText.includes('נכון') || rawText.includes('correct');
-
-                return res.json({
-                    success: true,
-                    isCorrect: seemsCorrect,
-                    confidence: 60,
-                    feedback: seemsCorrect ? 'נכון!' : 'נסה שוב',
-                    model: 'claude-3.5-haiku',
-                    fallback: true
-                });
-            }
+            return res.json({
+                success: true,
+                isCorrect: parsed.isCorrect,
+                confidence: 95,
+                feedback: parsed.feedback,
+                explanation: parsed.explanation,
+                model: 'claude-3.5-haiku'
+            });
         }
 
-        throw new Error('No AI API configured');
+        throw new Error('No AI configured');
 
     } catch (error) {
-        console.error('❌ Verification error:', error);
+        console.error('❌ Error:', error);
         res.status(500).json({
             success: false,
             error: error.message
@@ -1015,14 +1373,10 @@ app.post('/api/ai/verify-answer', async (req, res) => {
 // ==================== GET HINT ====================
 app.post('/api/ai/get-hint', async (req, res) => {
     try {
-        const { question, hintIndex, studentProfile } = req.body;
+        const { question, hintIndex } = req.body;
 
-        const hintLevels = ['רמז עדין', 'רמז ישיר', 'רמז ספציפי', 'כמעט הפתרון'];
-        const prompt = `תן ${hintLevels[hintIndex]} לשאלה:\n\n${question}\n\nהחזר רק את הרמז בעברית.`;
-
-        const systemPrompt = personalitySystem.loaded
-            ? personalitySystem.buildSystemPrompt(studentProfile)
-            : buildSystemPrompt(studentProfile || {});
+        const hintLevels = ['רמז עדין', 'רמז ישיר', 'רמז ספציפי'];
+        const prompt = `תן ${hintLevels[hintIndex]} לשאלה:\n\n${question}`;
 
         if (process.env.ANTHROPIC_API_KEY) {
             const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -1036,7 +1390,6 @@ app.post('/api/ai/get-hint', async (req, res) => {
                     model: 'claude-3-5-haiku-20241022',
                     max_tokens: 500,
                     temperature: 0.7,
-                    system: systemPrompt,
                     messages: [{ role: 'user', content: prompt }]
                 })
             });
@@ -1044,23 +1397,22 @@ app.post('/api/ai/get-hint', async (req, res) => {
             const data = await response.json();
 
             if (!response.ok) {
-                throw new Error(data.error?.message || 'Claude API error');
+                throw new Error(data.error?.message || 'API error');
             }
 
             return res.json({
                 success: true,
-                hint: data.content[0].text,
-                personalityActive: personalitySystem.loaded
+                hint: data.content[0].text
             });
         }
 
-        throw new Error('No AI API configured');
+        throw new Error('No AI configured');
 
     } catch (error) {
-        console.error('❌ Hint error:', error);
+        console.error('❌ Error:', error);
         res.json({
             success: true,
-            hint: 'נסה לפרק את השאלה לשלבים קטנים יותר 🤔'
+            hint: 'נסה לפרק את השאלה 🤔'
         });
     }
 });
@@ -1070,15 +1422,11 @@ app.post('/api/ai/chat', async (req, res) => {
     try {
         const { message, context } = req.body;
 
-        const systemPrompt = personalitySystem.loaded
-            ? `אתה ${personalitySystem.data.corePersonality.teacher_name}, מורה מתמטיקה מומחה.`
-            : `אתה נקסון, מורה מתמטיקה מומחה.`;
-
-        const wantsFullSolution = /פתרון|הראה|תן|שלב|צעד|איך|כן|בטח|מלא/i.test(message);
+        const wantsFullSolution = /פתרון|הראה|שלב/i.test(message);
 
         let conversationPrompt = wantsFullSolution
-            ? `התלמיד ${context?.studentName} ביקש פתרון מלא!\n\nהשאלה: ${context?.question}\n\nתן פתרון מפורט עם כל השלבים.`
-            : `התלמיד ${context?.studentName} שואל: "${message}"\n\nתן עזרה קצרה (2-3 משפטים).`;
+            ? `תן פתרון מפורט ל: ${context?.question}`
+            : `עזור: "${message}"\n\nשאלה: ${context?.question}`;
 
         if (process.env.ANTHROPIC_API_KEY) {
             const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -1092,7 +1440,6 @@ app.post('/api/ai/chat', async (req, res) => {
                     model: 'claude-3-5-haiku-20241022',
                     max_tokens: wantsFullSolution ? 2000 : 800,
                     temperature: 0.7,
-                    system: systemPrompt,
                     messages: [{ role: 'user', content: conversationPrompt }]
                 })
             });
@@ -1100,21 +1447,20 @@ app.post('/api/ai/chat', async (req, res) => {
             const data = await response.json();
 
             if (!response.ok) {
-                throw new Error(data.error?.message || 'Claude API error');
+                throw new Error(data.error?.message || 'API error');
             }
 
             return res.json({
                 success: true,
                 response: data.content[0].text,
-                model: 'claude-3.5-haiku',
-                personalityActive: personalitySystem.loaded
+                model: 'claude-3.5-haiku'
             });
         }
 
-        throw new Error('No AI API configured');
+        throw new Error('No AI configured');
 
     } catch (error) {
-        console.error('❌ Chat error:', error);
+        console.error('❌ Error:', error);
         res.status(500).json({
             success: false,
             error: error.message
@@ -1122,72 +1468,14 @@ app.post('/api/ai/chat', async (req, res) => {
     }
 });
 
-// ==================== HELPER FUNCTIONS ====================
-
-function buildSystemPrompt(studentProfile) {
-    const { grade, mathFeeling } = studentProfile;
-
-    let prompt = `אתה נקסון, מורה דיגיטלי למתמטיקה.\n\n`;
-
-    if (grade) {
-        prompt += `התלמיד בכיתה ${grade}.\n`;
-    }
-
-    if (mathFeeling === 'struggle') {
-        prompt += `התלמיד מתקשה - היה סבלני.\n`;
-    } else if (mathFeeling === 'love') {
-        prompt += `התלמיד אוהב מתמטיקה - תן אתגרים.\n`;
-    }
-
-    return prompt;
-}
-
-function buildDynamicQuestionPrompt(topic, subtopic, difficulty, studentProfile) {
-    let prompt = `צור שאלה במתמטיקה בעברית.\n\n`;
-
-    prompt += `נושא: ${topic.name}\n`;
-    if (subtopic) prompt += `תת-נושא: ${subtopic.name}\n`;
-    prompt += `רמת קושי: ${difficulty}\n`;
-    prompt += `כיתה: ${studentProfile.grade}\n\n`;
-
-    const graphTopics = ['פונקציות', 'גרפים', 'סטטיסטיקה', 'נתונים', 'פיזור', 'היסטוגרמה'];
-    const needsGraph = graphTopics.some(t => topic.name.includes(t) || topic.nameEn?.includes(t));
-
-    if (needsGraph) {
-        prompt += `🚨 CRITICAL RULES:\n`;
-        prompt += `❌ FORBIDDEN: "גרף מציג", "הנתונים מוצגים", "נתוני הסקר מראים", "דני: 4 שעות"\n`;
-        prompt += `✅ REQUIRED FORMAT:\n`;
-        prompt += `"שעות ספורט (x): 1, 2, 3, 4, 5, 6, 7, 2, 3, 4, 5, 6, 7, 8, 3, 4, 5, 6, 7, 8\n`;
-        prompt += `ציונים (y): 65, 70, 75, 80, 85, 90, 95, 68, 72, 78, 82, 88, 92, 96, 70, 76, 80, 86, 90, 94\n\n`;
-        prompt += `מה המתאם?"\n\n`;
-        prompt += `Write AT LEAST 20 numbers in EACH list!\n\n`;
-    }
-
-    // 🔥 ADD THIS: Tell Claude to avoid newlines in JSON
-    prompt += `⚠️ CRITICAL JSON FORMAT RULES:\n`;
-    prompt += `- DO NOT use actual newline characters inside JSON string values\n`;
-    prompt += `- Use spaces or "\\n" (escaped) instead of actual newlines\n`;
-    prompt += `- Keep the entire JSON on as few lines as possible\n`;
-    prompt += `- All text inside "question" field should be ONE LINE with spaces\n\n`;
-
-    prompt += `פורמט JSON (בשורה אחת או עם \\n escaped):\n`;
-    prompt += `{"question": "השאלה עם נתונים", "correctAnswer": "תשובה", "hints": ["רמז1", "רמז2", "רמז3"], "explanation": "הסבר"}\n`;
-
-    return prompt;
-}
-
-function buildVerificationPrompt(question, userAnswer, correctAnswer, topic, subtopic, grade) {
-    return `בדוק תשובה:\n\nשאלה: ${question}\nתשובת תלמיד: ${userAnswer}\nתשובה נכונה: ${correctAnswer}\n\nהחזר JSON:\n{\n  "isCorrect": true/false,\n  "confidence": 0-100,\n  "feedback": "משוב",\n  "explanation": "הסבר"\n}`;
-}
-
 // ==================== START SERVER ====================
-
 async function loadPersonalityFromStorage() {
     if (!bucket) {
-        console.log('⚠️ Firebase Storage not available');
+        console.log('⚠️ Firebase not configured - using local storage');
         const localPath = path.join(__dirname, '../uploads/personality-system.xlsx');
         if (fs.existsSync(localPath)) {
             personalitySystem.loadFromExcel(localPath);
+            console.log('✅ Loaded from local file');
         }
         return;
     }
@@ -1199,10 +1487,10 @@ async function loadPersonalityFromStorage() {
             const tempPath = `/tmp/personality-system.xlsx`;
             await file.download({ destination: tempPath });
             personalitySystem.loadFromExcel(tempPath);
-            console.log('✅ Personality loaded');
+            console.log('✅ Loaded from Firebase');
         }
     } catch (error) {
-        console.error('❌ Error loading:', error.message);
+        console.error('❌ Error loading personality:', error.message);
     }
 }
 
@@ -1210,15 +1498,11 @@ app.listen(PORT, async () => {
     await loadPersonalityFromStorage();
 
     console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('🚀 NEXON AI SERVER - COMPLETE VERSION');
+    console.log('🚀 NEXON AI - SMART TOPIC-BASED QUESTIONS');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log(`📡 Server: http://localhost:${PORT}`);
-    console.log('');
-    console.log('✨ Features:');
-    console.log('   • 🎭 Personality integration');
-    console.log('   • 🔥 Auto graph rewriting');
-    console.log('   • 📊 Visual data extraction');
-    console.log('   • ✅ Strict validation');
-    console.log('   • 🤖 Dynamic questions');
+    console.log(`   • Personality: ${personalitySystem.loaded ? '✅' : '❌'}`);
+    console.log(`   • Smart Topics: ✅`);
+    console.log(`   • SVG Support: ✅`);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 });

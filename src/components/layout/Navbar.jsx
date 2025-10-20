@@ -2,8 +2,10 @@ import React from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import useAuthStore from '../../store/authStore';
+import { motion, AnimatePresence } from 'framer-motion';
+
 import NotificationBell from '../common/NotificationBell';
-import { Menu, X, User, LogOut, LayoutDashboard, Users, Moon, Sun, BookOpen, ArrowLeft, ChevronLeft } from 'lucide-react';
+import { Menu, X, User, LogOut, LayoutDashboard, Users, Moon, Sun, ChevronLeft, Brain, Sparkles, BookOpen } from 'lucide-react';
 
 const Navbar = () => {
     const { user, isAuthenticated, isAdmin, logout } = useAuthStore();
@@ -13,8 +15,8 @@ const Navbar = () => {
     const [isDark, setIsDark] = useState(false);
     const [scrolled, setScrolled] = useState(false);
 
-    // Check if we should show the back button (not on home page)
-    const showBackButton = location.pathname !== '/';
+    // Check if we should show the back button (not on home or dashboard)
+    const showBackButton = location.pathname !== '/' && location.pathname !== '/dashboard';
 
     useEffect(() => {
         const saved = localStorage.getItem('theme');
@@ -52,7 +54,7 @@ const Navbar = () => {
         if (window.history.length > 1) {
             navigate(-1);
         } else {
-            navigate('/');
+            navigate('/dashboard');
         }
     };
 
@@ -60,90 +62,73 @@ const Navbar = () => {
         <nav
             className={`sticky top-0 z-50 transition-all duration-300 ${
                 scrolled
-                    ? 'bg-white/95 dark:bg-gray-900/95 backdrop-blur-lg shadow-lg'
-                    : 'bg-white dark:bg-gray-900 shadow-md'
+                    ? 'bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl shadow-2xl border-b border-purple-200/30 dark:border-purple-800/30'
+                    : 'bg-gradient-to-r from-white via-purple-50/30 to-pink-50/30 dark:from-gray-900 dark:via-purple-900/10 dark:to-pink-900/10 shadow-lg'
             }`}
         >
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="flex justify-between items-center h-20">
                     {/* Right Side: Back Button + Logo */}
                     <div className="flex items-center gap-3">
-                        {/* Back Button - Animated */}
+                        {/* Back Button - Modern Gradient Style */}
                         {showBackButton && (
-                            <button
+                            <motion.button
+                                initial={{ opacity: 0, x: 20 }}
+                                animate={{ opacity: 1, x: 0 }}
                                 onClick={handleBack}
-                                className="group flex items-center gap-2 px-3 sm:px-4 py-2 bg-gradient-to-r from-gray-100 to-gray-50 dark:from-gray-800 dark:to-gray-700 hover:from-indigo-500 hover:to-purple-500 rounded-lg transition-all duration-300 shadow-sm hover:shadow-md border border-gray-200 dark:border-gray-600"
-                                aria-label="חזור"
+                                className="group flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-100 to-pink-100 dark:from-purple-900/30 dark:to-pink-900/30 hover:from-purple-500 hover:to-pink-500 rounded-2xl transition-all duration-300 shadow-md hover:shadow-xl border-2 border-purple-200 dark:border-purple-700 hover:border-transparent"
                             >
                                 <ChevronLeft
                                     size={20}
-                                    className="text-gray-700 dark:text-gray-300 group-hover:text-white transition-all duration-300 group-hover:-translate-x-1"
+                                    className="text-purple-700 dark:text-purple-300 group-hover:text-white transition-all duration-300 group-hover:-translate-x-1"
                                 />
-                                <span className="hidden sm:block text-sm font-semibold text-gray-700 dark:text-gray-300 group-hover:text-white transition-colors duration-300">
+                                <span className="hidden sm:block text-sm font-bold text-purple-700 dark:text-purple-300 group-hover:text-white transition-colors duration-300">
                                     חזור
                                 </span>
-                            </button>
+                            </motion.button>
                         )}
 
-                        {/* Logo - Enhanced with circular design */}
-                        <Link to="/" className="flex items-center group">
-                            <div className="relative">
-                                {/* Glow effect on hover */}
-                                <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-full blur-lg opacity-0 group-hover:opacity-30 transition-opacity duration-300"></div>
+                        {/* Logo - Enhanced Modern Design */}
+                        <Link to={isAuthenticated ? "/dashboard" : "/"} className="flex items-center group relative">
+                            {/* Animated glow effect */}
+                            <div className="absolute inset-0 bg-gradient-to-r from-purple-500 via-pink-500 to-orange-500 rounded-2xl blur-xl opacity-0 group-hover:opacity-40 transition-opacity duration-500"></div>
 
-                                {/* Circular container for logo */}
-                                <div className="relative bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 rounded-full p-[3px] shadow-lg group-hover:shadow-xl transition-shadow duration-300">
-                                    <div className="bg-white dark:bg-gray-800 rounded-full p-2 sm:p-2.5">
-                                        <img
-                                            src="/logo.png"
-                                            alt="Nexon Education"
-                                            className="h-8 sm:h-10 w-8 sm:w-10 object-contain group-hover:scale-110 transition-transform duration-300"
-                                            onError={(e) => {
-                                                e.target.style.display = 'none';
-                                                const fallback = document.createElement('div');
-                                                fallback.className = 'h-8 sm:h-10 w-8 sm:w-10 flex items-center justify-center';
-                                                fallback.innerHTML = '<span class="text-xl font-black bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">N</span>';
-                                                e.target.parentElement.appendChild(fallback);
-                                            }}
-                                        />
+                            {/* Logo container with gradient border */}
+                            <div className="relative bg-gradient-to-br from-purple-500 via-pink-500 to-orange-500 rounded-2xl p-[2px] shadow-xl group-hover:shadow-2xl transition-all duration-300">
+                                <div className="bg-white dark:bg-gray-800 rounded-2xl p-2.5 sm:p-3 flex items-center gap-3">
+                                    {/* Brain icon instead of logo image */}
+                                    <div className="relative">
+                                        <Brain className="h-8 w-8 sm:h-10 sm:w-10 text-transparent bg-gradient-to-br from-purple-600 via-pink-600 to-orange-600 bg-clip-text group-hover:scale-110 transition-transform duration-300" style={{ WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }} />
+                                        <Sparkles className="absolute -top-1 -right-1 h-4 w-4 text-yellow-400 group-hover:rotate-12 transition-transform duration-300" />
+                                    </div>
+
+                                    {/* Brand name */}
+                                    <div className="hidden sm:flex flex-col">
+                                        <span className="text-2xl font-black bg-gradient-to-r from-purple-600 via-pink-600 to-orange-600 bg-clip-text text-transparent group-hover:scale-105 transition-transform duration-300">
+                                            NEXON
+                                        </span>
+                                        <span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 -mt-1">
+                                            AI Math Tutor
+                                        </span>
                                     </div>
                                 </div>
                             </div>
-
-                            {/* Brand name - hidden on mobile */}
-                            <span className="hidden sm:block mr-3 text-xl font-black bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent group-hover:scale-105 transition-transform duration-300">
-                                NEXON
-                            </span>
                         </Link>
                     </div>
 
                     {/* Desktop Menu */}
-                    <div className="hidden md:flex items-center gap-2 lg:gap-4">
-                        <Link
-                            to="/courses"
-                            className="flex items-center gap-2 px-4 py-2 text-gray-700 dark:text-gray-300 hover:text-white hover:bg-gradient-to-r hover:from-indigo-600 hover:to-purple-600 rounded-lg font-medium transition-all duration-300 group"
-                        >
-                            <BookOpen size={18} className="group-hover:rotate-12 transition-transform" />
-                            כל הקורסים
-                        </Link>
-
+                    <div className="hidden md:flex items-center gap-3">
                         {isAuthenticated ? (
                             <>
                                 {!isAdmin && (
                                     <>
-                                        <Link
-                                            to="/my-courses"
-                                            className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:text-white hover:bg-gradient-to-r hover:from-purple-600 hover:to-pink-600 rounded-lg font-medium transition-all duration-300"
-                                        >
-                                            הקורסים שלי
-                                        </Link>
-
+                                        {/* Dashboard/Learning Area Button */}
                                         <Link
                                             to="/dashboard"
-                                            className="flex items-center gap-2 px-4 py-2 text-gray-700 dark:text-gray-300 hover:text-white hover:bg-gradient-to-r hover:from-pink-600 hover:to-rose-600 rounded-lg font-medium transition-all duration-300"
+                                            className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-purple-100 to-pink-100 dark:from-purple-900/30 dark:to-pink-900/30 hover:from-purple-600 hover:to-pink-600 text-purple-700 dark:text-purple-300 hover:text-white rounded-2xl font-bold transition-all duration-300 shadow-md hover:shadow-xl border-2 border-purple-200 dark:border-purple-700 hover:border-transparent"
                                         >
-                                            <User size={18} />
-                                            איזור אישי
+                                            <BookOpen size={18} />
+                                            <span className="hidden lg:inline">איזור למידה</span>
                                         </Link>
                                     </>
                                 )}
@@ -152,79 +137,83 @@ const Navbar = () => {
                                     <>
                                         <Link
                                             to="/admin"
-                                            className="flex items-center gap-2 px-4 py-2 text-gray-700 dark:text-gray-300 hover:text-white hover:bg-gradient-to-r hover:from-indigo-600 hover:to-purple-600 rounded-lg font-medium transition-all duration-300"
+                                            className="flex items-center gap-2 px-5 py-2.5 text-gray-700 dark:text-gray-300 hover:text-white hover:bg-gradient-to-r hover:from-indigo-600 hover:to-purple-600 rounded-2xl font-bold transition-all duration-300 shadow-md hover:shadow-xl"
                                         >
                                             <LayoutDashboard size={18} />
-                                            ניהול קורסים
+                                            <span className="hidden lg:inline">ניהול</span>
                                         </Link>
                                         <Link
                                             to="/admin/users"
-                                            className="flex items-center gap-2 px-4 py-2 text-gray-700 dark:text-gray-300 hover:text-white hover:bg-gradient-to-r hover:from-purple-600 hover:to-pink-600 rounded-lg font-medium transition-all duration-300"
+                                            className="flex items-center gap-2 px-5 py-2.5 text-gray-700 dark:text-gray-300 hover:text-white hover:bg-gradient-to-r hover:from-purple-600 hover:to-pink-600 rounded-2xl font-bold transition-all duration-300 shadow-md hover:shadow-xl"
                                         >
                                             <Users size={18} />
-                                            ניהול משתמשים
+                                            <span className="hidden lg:inline">משתמשים</span>
                                         </Link>
                                     </>
                                 )}
 
+                                {/* Theme Toggle + Notifications */}
                                 <div className="flex items-center gap-2 mr-2">
                                     <NotificationBell />
 
                                     <button
                                         onClick={toggleTheme}
-                                        className="p-2.5 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gradient-to-r hover:from-yellow-400 hover:to-orange-400 hover:shadow-lg transition-all duration-300 group"
+                                        className="p-3 rounded-2xl bg-gradient-to-br from-yellow-100 to-orange-100 dark:from-gray-800 dark:to-gray-700 hover:shadow-xl transition-all duration-300 group border-2 border-yellow-200 dark:border-gray-600"
                                     >
                                         {isDark ? (
-                                            <Sun size={20} className="text-yellow-500 group-hover:text-white group-hover:rotate-180 transition-transform duration-500" />
+                                            <Sun size={20} className="text-yellow-500 group-hover:text-yellow-400 group-hover:rotate-180 transition-all duration-500" />
                                         ) : (
-                                            <Moon size={20} className="text-gray-700 group-hover:text-white group-hover:-rotate-12 transition-transform duration-300" />
+                                            <Moon size={20} className="text-gray-700 group-hover:text-gray-900 group-hover:-rotate-12 transition-all duration-300" />
                                         )}
                                     </button>
                                 </div>
 
-                                <div className="flex items-center gap-3 mr-2 pr-3 border-r-2 border-gray-200 dark:border-gray-700">
-                                    <div className="hidden lg:flex items-center gap-2">
-                                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center text-white font-bold text-sm shadow-lg">
+                                {/* User Menu */}
+                                <div className="flex items-center gap-3 mr-2 pr-4 border-r-2 border-purple-200 dark:border-purple-700">
+                                    <div className="hidden lg:flex items-center gap-3 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 px-4 py-2 rounded-2xl border-2 border-purple-200 dark:border-purple-700">
+                                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 via-pink-500 to-orange-500 flex items-center justify-center text-white font-black text-lg shadow-lg">
                                             {user?.email?.charAt(0).toUpperCase() || 'U'}
                                         </div>
-                                        <span className="text-gray-700 dark:text-gray-300 font-medium text-sm">
+                                        <span className="text-gray-800 dark:text-gray-200 font-bold text-sm">
                                             {user?.email?.split('@')[0]}
                                         </span>
                                     </div>
                                     <button
                                         onClick={handleLogout}
-                                        className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-700 hover:shadow-lg transition-all duration-300 font-medium"
+                                        className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-2xl hover:from-red-600 hover:to-red-700 hover:shadow-xl transition-all duration-300 font-bold shadow-md"
                                     >
                                         <LogOut size={18} />
-                                        <span className="hidden lg:inline">התנתק</span>
+                                        <span className="hidden lg:inline">יציאה</span>
                                     </button>
                                 </div>
                             </>
                         ) : (
                             <>
+                                {/* Theme Toggle (Not Authenticated) */}
                                 <button
                                     onClick={toggleTheme}
-                                    className="p-2.5 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gradient-to-r hover:from-yellow-400 hover:to-orange-400 hover:shadow-lg transition-all duration-300 group"
+                                    className="p-3 rounded-2xl bg-gradient-to-br from-yellow-100 to-orange-100 dark:from-gray-800 dark:to-gray-700 hover:shadow-xl transition-all duration-300 group border-2 border-yellow-200 dark:border-gray-600"
                                 >
                                     {isDark ? (
-                                        <Sun size={20} className="text-yellow-500 group-hover:text-white group-hover:rotate-180 transition-transform duration-500" />
+                                        <Sun size={20} className="text-yellow-500 group-hover:rotate-180 transition-transform duration-500" />
                                     ) : (
-                                        <Moon size={20} className="text-gray-700 group-hover:text-white group-hover:-rotate-12 transition-transform duration-300" />
+                                        <Moon size={20} className="text-gray-700 group-hover:-rotate-12 transition-transform duration-300" />
                                     )}
                                 </button>
 
+                                {/* Auth Buttons */}
                                 <div className="flex items-center gap-3 mr-2">
                                     <Link
                                         to="/login"
-                                        className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-400 font-medium transition-colors"
+                                        className="px-5 py-2.5 text-gray-700 dark:text-gray-300 hover:text-purple-600 dark:hover:text-purple-400 font-bold transition-colors rounded-2xl hover:bg-purple-50 dark:hover:bg-purple-900/20"
                                     >
                                         התחבר
                                     </Link>
                                     <Link
                                         to="/register"
-                                        className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white rounded-lg hover:shadow-lg hover:scale-105 transition-all duration-300 font-bold"
+                                        className="px-6 py-3 bg-gradient-to-r from-purple-600 via-pink-600 to-orange-600 text-white rounded-2xl hover:shadow-2xl hover:scale-105 transition-all duration-300 font-black shadow-lg"
                                     >
-                                        הירשם עכשיו
+                                        הצטרף עכשיו
                                     </Link>
                                 </div>
                             </>
@@ -237,7 +226,7 @@ const Navbar = () => {
 
                         <button
                             onClick={toggleTheme}
-                            className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                            className="p-2.5 rounded-xl bg-gradient-to-br from-yellow-100 to-orange-100 dark:from-gray-800 dark:to-gray-700 transition-colors border-2 border-yellow-200 dark:border-gray-600"
                         >
                             {isDark ? (
                                 <Sun size={20} className="text-yellow-500" />
@@ -248,7 +237,7 @@ const Navbar = () => {
 
                         <button
                             onClick={() => setIsMenuOpen(!isMenuOpen)}
-                            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                            className="p-2.5 rounded-xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors border-2 border-transparent hover:border-purple-300 dark:hover:border-purple-700"
                         >
                             {isMenuOpen ? (
                                 <X size={24} className="text-gray-700 dark:text-gray-300" />
@@ -261,7 +250,7 @@ const Navbar = () => {
 
                 {/* Mobile Menu */}
                 {isMenuOpen && (
-                    <div className="md:hidden pb-4 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700">
+                    <div className="md:hidden pb-4 bg-gradient-to-b from-purple-50/50 to-pink-50/50 dark:from-gray-900 dark:to-gray-800 border-t-2 border-purple-200 dark:border-purple-800 rounded-b-3xl">
                         <div className="flex flex-col space-y-2 pt-4">
                             {/* Back Button in Mobile Menu */}
                             {showBackButton && (
@@ -270,41 +259,24 @@ const Navbar = () => {
                                         handleBack();
                                         setIsMenuOpen(false);
                                     }}
-                                    className="flex items-center gap-2 text-gray-700 dark:text-gray-300 hover:text-white hover:bg-gradient-to-r hover:from-gray-600 hover:to-gray-700 font-medium py-3 px-4 rounded-lg transition-all border border-gray-200 dark:border-gray-700"
+                                    className="flex items-center gap-2 text-purple-700 dark:text-purple-300 hover:text-white hover:bg-gradient-to-r hover:from-purple-600 hover:to-pink-600 font-bold py-3 px-4 rounded-2xl transition-all border-2 border-purple-200 dark:border-purple-700 shadow-md"
                                 >
                                     <ChevronLeft size={18} />
                                     חזור לדף הקודם
                                 </button>
                             )}
 
-                            <Link
-                                to="/courses"
-                                className="flex items-center gap-2 text-gray-700 dark:text-gray-300 hover:text-white hover:bg-gradient-to-r hover:from-indigo-600 hover:to-purple-600 font-medium py-3 px-4 rounded-lg transition-all"
-                                onClick={() => setIsMenuOpen(false)}
-                            >
-                                <BookOpen size={18} />
-                                כל הקורסים
-                            </Link>
-
                             {isAuthenticated ? (
                                 <>
                                     {!isAdmin && (
                                         <>
                                             <Link
-                                                to="/my-courses"
-                                                className="text-gray-700 dark:text-gray-300 hover:text-white hover:bg-gradient-to-r hover:from-purple-600 hover:to-pink-600 font-medium py-3 px-4 rounded-lg transition-all"
-                                                onClick={() => setIsMenuOpen(false)}
-                                            >
-                                                הקורסים שלי
-                                            </Link>
-
-                                            <Link
                                                 to="/dashboard"
-                                                className="flex items-center gap-2 text-gray-700 dark:text-gray-300 hover:text-white hover:bg-gradient-to-r hover:from-pink-600 hover:to-rose-600 font-medium py-3 px-4 rounded-lg transition-all"
+                                                className="flex items-center gap-2 text-purple-700 dark:text-purple-300 hover:text-white hover:bg-gradient-to-r hover:from-purple-600 hover:to-pink-600 font-bold py-3 px-4 rounded-2xl transition-all border-2 border-purple-200 dark:border-purple-700 shadow-md"
                                                 onClick={() => setIsMenuOpen(false)}
                                             >
-                                                <User size={18} />
-                                                איזור אישי
+                                                <BookOpen size={18} />
+                                                איזור למידה
                                             </Link>
                                         </>
                                     )}
@@ -313,7 +285,7 @@ const Navbar = () => {
                                         <>
                                             <Link
                                                 to="/admin"
-                                                className="flex items-center gap-2 text-gray-700 dark:text-gray-300 hover:text-white hover:bg-gradient-to-r hover:from-indigo-600 hover:to-purple-600 font-medium py-3 px-4 rounded-lg transition-all"
+                                                className="flex items-center gap-2 text-gray-700 dark:text-gray-300 hover:text-white hover:bg-gradient-to-r hover:from-indigo-600 hover:to-purple-600 font-bold py-3 px-4 rounded-2xl transition-all shadow-md"
                                                 onClick={() => setIsMenuOpen(false)}
                                             >
                                                 <LayoutDashboard size={18} />
@@ -321,7 +293,7 @@ const Navbar = () => {
                                             </Link>
                                             <Link
                                                 to="/admin/users"
-                                                className="flex items-center gap-2 text-gray-700 dark:text-gray-300 hover:text-white hover:bg-gradient-to-r hover:from-purple-600 hover:to-pink-600 font-medium py-3 px-4 rounded-lg transition-all"
+                                                className="flex items-center gap-2 text-gray-700 dark:text-gray-300 hover:text-white hover:bg-gradient-to-r hover:from-purple-600 hover:to-pink-600 font-bold py-3 px-4 rounded-2xl transition-all shadow-md"
                                                 onClick={() => setIsMenuOpen(false)}
                                             >
                                                 <Users size={18} />
@@ -330,23 +302,24 @@ const Navbar = () => {
                                         </>
                                     )}
 
-                                    <div className="pt-3 border-t border-gray-200 dark:border-gray-700 mt-2">
-                                        <div className="flex items-center gap-3 mb-3 px-4 py-2">
-                                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center text-white font-bold shadow-lg">
+                                    {/* User Info + Logout */}
+                                    <div className="pt-3 border-t-2 border-purple-200 dark:border-purple-700 mt-2">
+                                        <div className="flex items-center gap-3 mb-3 px-4 py-3 bg-gradient-to-r from-purple-100 to-pink-100 dark:from-purple-900/30 dark:to-pink-900/30 rounded-2xl border-2 border-purple-200 dark:border-purple-700">
+                                            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 via-pink-500 to-orange-500 flex items-center justify-center text-white font-black text-lg shadow-lg">
                                                 {user?.email?.charAt(0).toUpperCase() || 'U'}
                                             </div>
                                             <div className="flex-1">
-                                                <p className="text-gray-700 dark:text-gray-300 font-bold text-sm">
+                                                <p className="text-gray-800 dark:text-gray-200 font-black text-sm">
                                                     {user?.email?.split('@')[0]}
                                                 </p>
-                                                <p className="text-gray-500 dark:text-gray-400 text-xs">
+                                                <p className="text-gray-600 dark:text-gray-400 text-xs">
                                                     {user?.email}
                                                 </p>
                                             </div>
                                         </div>
                                         <button
                                             onClick={handleLogout}
-                                            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-700 transition-all font-medium"
+                                            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-2xl hover:from-red-600 hover:to-red-700 transition-all font-black shadow-lg"
                                         >
                                             <LogOut size={18} />
                                             התנתק
@@ -354,20 +327,20 @@ const Navbar = () => {
                                     </div>
                                 </>
                             ) : (
-                                <div className="flex flex-col gap-2 pt-3 border-t border-gray-200 dark:border-gray-700 mt-2">
+                                <div className="flex flex-col gap-2 pt-3 border-t-2 border-purple-200 dark:border-purple-700 mt-2">
                                     <Link
                                         to="/login"
-                                        className="text-center py-3 text-gray-700 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-400 font-medium rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                                        className="text-center py-3 text-gray-700 dark:text-gray-300 hover:text-purple-600 dark:hover:text-purple-400 font-bold rounded-2xl hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors border-2 border-transparent hover:border-purple-200 dark:hover:border-purple-700"
                                         onClick={() => setIsMenuOpen(false)}
                                     >
                                         התחבר
                                     </Link>
                                     <Link
                                         to="/register"
-                                        className="text-center px-4 py-3 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white rounded-lg hover:shadow-lg transition-all font-bold"
+                                        className="text-center px-4 py-3 bg-gradient-to-r from-purple-600 via-pink-600 to-orange-600 text-white rounded-2xl hover:shadow-2xl transition-all font-black shadow-lg"
                                         onClick={() => setIsMenuOpen(false)}
                                     >
-                                        הירשם עכשיו
+                                        הצטרף עכשיו
                                     </Link>
                                 </div>
                             )}

@@ -1,4 +1,4 @@
-// server/services/personalityLoader.js - COMPLETE PERSONALITY SYSTEM LOADER (ORDER-INDEPENDENT)
+// server/services/personalityLoader.js - COMPLETE WITH CURRICULUM ENFORCEMENT
 import xlsx from 'xlsx';
 import fs from 'fs';
 import path from 'path';
@@ -172,11 +172,6 @@ class PersonalitySystem {
             console.log(`   ❌ Error patterns: ${this.data.errorPatterns.length}`);
             console.log(`   💪 Encouragements: ${this.data.encouragementLibrary.length}`);
             console.log(`   📝 Templates: ${this.data.questionTemplates.length}`);
-            console.log(`   🎨 Response templates: ${this.data.responseTemplates.length}`);
-            console.log(`   📈 Difficulty indicators: ${this.data.difficultyIndicators.length}`);
-            console.log(`   🎓 Scaffolding strategies: ${this.data.scaffoldingStrategies.length}`);
-            console.log(`   🎯 Learning milestones: ${this.data.learningMilestones.length}`);
-            console.log(`   🔄 Adaptive feedback: ${this.data.adaptiveFeedback.length}`);
             console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
             return true;
@@ -191,22 +186,23 @@ class PersonalitySystem {
     // ==================== HELPER METHODS ====================
 
     // Get examples for a specific topic
-    getExamplesForTopic(topicName, difficulty = null) {
-        if (!topicName) return [];
+    getExamplesForTopic(topic, difficulty) {
+        if (!this.loaded || !this.data.examplesBank) return [];
 
-        let examples = this.data.examplesBank.filter(ex => {
-            const exTopic = ex.topic || ex.Topic || ex.TOPIC || '';
-            return exTopic.includes(topicName);
+        // 🔥 FIX: Safe string conversion
+        const topicStr = String(topic || '').toLowerCase();
+
+        return this.data.examplesBank.filter(ex => {
+            // 🔥 FIX: Safe property access
+            const exTopic = String(ex?.topic || '').toLowerCase();
+            const exDifficulty = String(ex?.difficulty || '').toLowerCase();
+            const difficultyStr = String(difficulty || '').toLowerCase();
+
+            const matchesTopic = exTopic.includes(topicStr);
+            const matchesDifficulty = !difficulty || exDifficulty === difficultyStr;
+
+            return matchesTopic && matchesDifficulty;
         });
-
-        if (difficulty) {
-            examples = examples.filter(ex => {
-                const exDiff = ex.difficulty || ex.Difficulty || ex.DIFFICULTY || '';
-                return exDiff === difficulty;
-            });
-        }
-
-        return examples;
     }
 
     // Get topic guidelines
@@ -217,6 +213,38 @@ class PersonalitySystem {
             const tName = t.topic || t.Topic || t.TOPIC || t.topic_name || '';
             return tName.includes(topicName);
         });
+    }
+
+    // 🔥 NEW: Get topic guideline with grade filter
+    getTopicGuidelineForGrade(topicName, grade) {
+        if (!topicName) return null;
+
+        const guidelines = this.data.topicGuidelines.filter(t => {
+            const tName = t.topic || t.Topic || t.TOPIC || '';
+            const tGrade = t.grade || t.Grade || t.GRADE;
+            return tName.includes(topicName) && (!tGrade || tGrade == grade);
+        });
+
+        return guidelines[0] || null;
+    }
+
+    // 🔥 NEW: Get question template for topic and difficulty
+    getQuestionTemplate(topicName, difficulty) {
+        if (!topicName) return null;
+
+        let templates = this.data.questionTemplates.filter(t => {
+            const tName = t.topic || t.Topic || t.TOPIC || '';
+            return tName.includes(topicName);
+        });
+
+        if (difficulty) {
+            templates = templates.filter(t => {
+                const tDiff = t.difficulty || t.Difficulty || t.DIFFICULTY || '';
+                return tDiff === difficulty;
+            });
+        }
+
+        return templates[0] || null;
     }
 
     // Get hint for topic and level
@@ -303,14 +331,12 @@ class PersonalitySystem {
         });
     }
 
-    // ==================== SYSTEM PROMPT BUILDERS ====================
+    // ==================== 🔥 ENHANCED SYSTEM PROMPT WITH HARD/SOFT SEPARATION ====================
 
-    // Build enhanced system prompt with personality
     buildSystemPrompt(studentProfile = {}) {
         const core = this.data.corePersonality;
 
         if (!core.teacher_name && !core.Teacher_Name) {
-            // Fallback if personality not loaded
             return buildFallbackSystemPrompt(studentProfile);
         }
 
@@ -320,7 +346,35 @@ class PersonalitySystem {
 
         let prompt = `אתה ${teacherName}, מורה דיגיטלי למתמטיקה.\n\n`;
 
-        prompt += `אישיות:\n`;
+        // 🔥 SECTION 1: HARD CURRICULUM RULES (MUST OBEY)
+        prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+        prompt += `🚨 CURRICULUM RULES (Hard - MUST Obey)\n`;
+        prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+        prompt += `Israeli Math Curriculum (תשפ"ה Reform)\n`;
+
+        if (studentProfile.grade) {
+            prompt += `Grade: ${studentProfile.grade}\n`;
+
+            // Grade-specific hard rules
+            if (studentProfile.grade === 7) {
+                prompt += `\n📚 Grade 7 Mandatory Principles:\n`;
+                prompt += `• Round 1: Variables MUST use concrete examples (fuel ₪7/L, triangle)\n`;
+                prompt += `• Round 1: Powers ONLY perfect squares up to 144\n`;
+                prompt += `• Round 1: NO formal definitions yet\n`;
+                prompt += `• Round 2: Equations - variable on ONE side ONLY\n`;
+                prompt += `• Round 2: Negative numbers - START with elevator/temperature/sea level\n`;
+                prompt += `• Round 2: Right triangle BEFORE general triangle\n`;
+                prompt += `• Round 3: Functions - "soft" introduction, 4 representations\n`;
+                prompt += `• NO algebraic power rules (saved for grade 9)\n`;
+            }
+        }
+
+        prompt += `\n⚠️ These curriculum rules OVERRIDE personality!\n`;
+        prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+        // 🎭 SECTION 2: SOFT PERSONALITY (Can Adapt)
+        prompt += `🎭 PERSONALITY (Soft - Adapt Style)\n`;
+        prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
         prompt += `• סגנון הוראה: ${teachingStyle}\n`;
         prompt += `• טון: ${tone}\n`;
 
@@ -332,37 +386,27 @@ class PersonalitySystem {
             prompt += `• פילוסופיה: ${core.learning_philosophy || core.Learning_Philosophy}\n`;
         }
 
-        prompt += `\n`;
+        prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
-        if (studentProfile.grade) {
-            prompt += `התלמיד לומד בכיתה ${studentProfile.grade}.\n`;
-        }
-
+        // Student adaptation
         if (studentProfile.mathFeeling === 'struggle') {
-            prompt += `התלמיד מתקשה במתמטיקה - היה סבלני במיוחד, תן הסברים פשוטים ומפורטים.\n`;
+            prompt += `Student Adaptation: מתקשה - היה סבלני במיוחד, תן הסברים פשוטים.\n`;
         } else if (studentProfile.mathFeeling === 'love') {
-            prompt += `התלמיד אוהב מתמטיקה - תן אתגרים מעניינים ושאלות מתקדמות.\n`;
+            prompt += `Student Adaptation: אוהב מתמטיקה - תן אתגרים מעניינים.\n`;
         }
 
         if (studentProfile.learningStyle === 'independent') {
-            prompt += `התלמיד מעדיף ללמוד בעצמו - תן רמזים עדינים.\n`;
+            prompt += `Learning Style: עצמאי - תן רמזים עדינים.\n`;
         } else if (studentProfile.learningStyle === 'ask') {
-            prompt += `התלמיד מעדיף לקבל הסברים - תן הסברים מפורטים.\n`;
+            prompt += `Learning Style: מעדיף הסברים - תן הסברים מפורטים.\n`;
         }
 
-        // 🔥 CRITICAL RAW DATA INSTRUCTION
-        prompt += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-        prompt += `🚨 CRITICAL JSON RULES:\n`;
-        prompt += `• DO NOT use actual newline characters in JSON strings\n`;
-        prompt += `• Use spaces or "\\n" (escaped) instead\n`;
-        prompt += `• Keep JSON compact\n`;
-        prompt += `\n🚨 CRITICAL GRAPH/STATISTICS RULES:\n`;
-        prompt += `• ALWAYS write actual raw data points in lists\n`;
-        prompt += `• NEVER write "הגרף מציג", "התוצאות מוצגות", "נתוני הסקר מראים"\n`;
-        prompt += `• NEVER use "תלמיד 1: 5 שעות" format\n`;
-        prompt += `• ALWAYS use: "variable (x): 2, 3, 1, 4, 5, 6..."\n`;
-        prompt += `• Include AT LEAST 15-20 data points\n`;
-        prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+        // Technical requirements
+        prompt += `\n🚨 TECHNICAL REQUIREMENTS:\n`;
+        prompt += `• Valid JSON only, no newlines in strings\n`;
+        prompt += `• Graph questions: raw data in (x): and (y): format\n`;
+        prompt += `• Minimum 20 data points for statistics\n`;
+        prompt += `• NO "הגרף מציג" or similar phrases\n`;
 
         return prompt;
     }

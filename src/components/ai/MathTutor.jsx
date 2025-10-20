@@ -1,4 +1,4 @@
-// src/components/ai/MathTutor.jsx - FIXED WITH BETTER GRAPH RENDERING
+// src/components/ai/MathTutor.jsx - ENHANCED VISUAL DESIGN
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -32,6 +32,182 @@ import {
 
 const API_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 
+// ==================== MATH FORMATTER UTILITY ====================
+const formatMathText = (text) => {
+    if (!text) return text;
+
+    let formatted = String(text);
+
+    const fractionMap = {
+        '1/2': '½', '1/3': '⅓', '2/3': '⅔', '1/4': '¼', '3/4': '¾',
+        '1/5': '⅕', '2/5': '⅖', '3/5': '⅗', '4/5': '⅘',
+        '1/6': '⅙', '5/6': '⅚', '1/7': '⅐',
+        '1/8': '⅛', '3/8': '⅜', '5/8': '⅝', '7/8': '⅞',
+        '1/9': '⅑', '1/10': '⅒'
+    };
+
+    Object.entries(fractionMap).forEach(([plain, unicode]) => {
+        const regex = new RegExp(plain.replace('/', '\\/'), 'g');
+        formatted = formatted.replace(regex, unicode);
+    });
+
+    const superscriptMap = {
+        '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴',
+        '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹',
+        '+': '⁺', '-': '⁻', '=': '⁼', '(': '⁽', ')': '⁾'
+    };
+
+    formatted = formatted.replace(/\^(\d+)/g, (match, digits) => {
+        return digits.split('').map(d => superscriptMap[d] || d).join('');
+    });
+
+    formatted = formatted.replace(/([a-zA-Zא-ת])(\d)(?!\d)/g, (match, letter, digit) =>
+        letter + (superscriptMap[digit] || digit)
+    );
+
+    formatted = formatted.replace(/\\int/g, '∫');
+    formatted = formatted.replace(/integral/gi, '∫');
+
+    formatted = formatted.replace(/([+\-=])/g, ' $1 ');
+    formatted = formatted.replace(/\s+/g, ' ').trim();
+
+    return formatted;
+};
+
+// ==================== MATH DISPLAY COMPONENT ====================
+const MathDisplay = ({ children, className = '', inline = false }) => {
+    const formatted = formatMathText(children);
+
+    const style = {
+        fontFamily: 'Georgia, "Times New Roman", serif',
+        letterSpacing: '0.02em',
+        lineHeight: inline ? 'inherit' : '1.6'
+    };
+
+    if (inline) {
+        return (
+            <span className={`math-text ${className}`} style={style}>
+                {formatted}
+            </span>
+        );
+    }
+
+    return (
+        <div className={`math-text ${className}`} style={style}>
+            {formatted}
+        </div>
+    );
+};
+
+// ==================== 🔥 ENHANCED SVG VISUAL COMPONENT ====================
+const SVGVisual = ({ visualData }) => {
+    console.log('🔺 Rendering SVG Visual:', visualData?.type);
+
+    if (!visualData?.svg) {
+        console.warn('⚠️ No SVG data in visualData');
+        return null;
+    }
+
+    const getTitle = (type) => {
+        switch (type) {
+            case 'svg-triangle': return '🔺 תרשים משולש';
+            case 'svg-rectangle': return '⬜ תרשים מלבן';
+            case 'svg-circle': return '⭕ תרשים עיגול';
+            case 'svg-coordinate': return '📊 מערכת צירים';
+            default: return '📐 תרשים גאומטרי';
+        }
+    };
+
+    const getIcon = (type) => {
+        return Target;
+    };
+
+    const Icon = getIcon(visualData.type);
+
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50 rounded-2xl border-4 border-purple-300 p-6 mb-6 shadow-xl"
+        >
+            <div className="flex items-center gap-3 mb-4 bg-white/80 backdrop-blur-sm rounded-xl p-3">
+                <Icon className="w-6 h-6 text-purple-600" />
+                <span className="font-black text-xl text-gray-800">{getTitle(visualData.type)}</span>
+            </div>
+
+            <div
+                className="flex justify-center items-center bg-white rounded-2xl p-6 shadow-inner min-h-[400px]"
+                dangerouslySetInnerHTML={{ __html: visualData.svg }}
+            />
+
+            {visualData.svgData && (
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.3 }}
+                    className="mt-6 p-5 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-2xl border-3 border-blue-300 shadow-lg"
+                >
+                    <div className="text-base font-black text-blue-900 mb-3 flex items-center gap-2">
+                        📐 מידות התרשים:
+                    </div>
+                    <div className="text-base text-blue-900 space-y-2">
+                        {visualData.svgData.sideA && (
+                            <div className="flex items-center gap-3 bg-white/70 p-2 rounded-lg">
+                                <span className="font-mono bg-purple-200 px-3 py-1 rounded-lg font-bold text-lg">A</span>
+                                <span className="font-bold">צלע: {visualData.svgData.sideA} ס"מ</span>
+                            </div>
+                        )}
+                        {visualData.svgData.sideB && (
+                            <div className="flex items-center gap-3 bg-white/70 p-2 rounded-lg">
+                                <span className="font-mono bg-pink-200 px-3 py-1 rounded-lg font-bold text-lg">B</span>
+                                <span className="font-bold">צלע: {visualData.svgData.sideB} ס"מ</span>
+                            </div>
+                        )}
+                        {visualData.svgData.sideC && (
+                            <div className="flex items-center gap-3 bg-white/70 p-2 rounded-lg">
+                                <span className="font-mono bg-orange-200 px-3 py-1 rounded-lg font-bold text-lg">C</span>
+                                <span className="font-bold">צלע: {visualData.svgData.sideC} ס"מ</span>
+                            </div>
+                        )}
+                        {visualData.svgData.width && (
+                            <div className="flex items-center gap-3 bg-white/70 p-2 rounded-lg">
+                                <span className="font-bold text-lg">רוחב:</span>
+                                <span className="text-lg font-black text-purple-700">{visualData.svgData.width} ס"מ</span>
+                            </div>
+                        )}
+                        {visualData.svgData.height && (
+                            <div className="flex items-center gap-3 bg-white/70 p-2 rounded-lg">
+                                <span className="font-bold text-lg">גובה:</span>
+                                <span className="text-lg font-black text-pink-700">{visualData.svgData.height} ס"מ</span>
+                            </div>
+                        )}
+                        {visualData.svgData.radius && (
+                            <div className="flex items-center gap-3 bg-white/70 p-2 rounded-lg">
+                                <span className="font-bold text-lg">רדיוס:</span>
+                                <span className="text-lg font-black text-orange-700">{visualData.svgData.radius} ס"מ</span>
+                            </div>
+                        )}
+                        {visualData.svgData.type && (
+                            <div className="mt-3 pt-3 border-t-2 border-blue-200">
+                                <span className="text-sm text-blue-700 font-bold bg-white/70 px-3 py-1 rounded-full">
+                                    {visualData.svgData.type === 'right' && '📐 משולש ישר-זווית'}
+                                    {visualData.svgData.type === 'equilateral' && '△ משולש שווה-צלעות'}
+                                    {visualData.svgData.type === 'isosceles' && '△ משולש שווה-שוקיים'}
+                                    {visualData.svgData.type === 'scalene' && '△ משולש שונה-צלעות'}
+                                </span>
+                            </div>
+                        )}
+                    </div>
+                </motion.div>
+            )}
+
+            <div className="text-sm text-gray-600 text-center mt-4 font-semibold bg-yellow-50 p-2 rounded-lg">
+                ✨ תרשים אינטראקטיבי - הניח עכבר על האלמנטים
+            </div>
+        </motion.div>
+    );
+};
+
 // ==================== BOX PLOT COMPONENT ====================
 const BoxPlotVisualization = ({ data, label = 'תרשים קופסה' }) => {
     console.log('📦 Rendering BoxPlot with data:', data);
@@ -57,15 +233,18 @@ const BoxPlotVisualization = ({ data, label = 'תרשים קופסה' }) => {
     const range = max - min;
 
     return (
-        <div className="bg-white rounded-xl border-2 border-purple-200 p-6 mb-6">
-            <div className="flex items-center gap-2 mb-6">
-                <Box className="w-5 h-5 text-purple-600" />
-                <span className="font-bold text-gray-800">{label}</span>
+        <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl border-4 border-purple-300 p-6 mb-6 shadow-xl"
+        >
+            <div className="flex items-center gap-3 mb-6 bg-white/80 backdrop-blur-sm rounded-xl p-3">
+                <Box className="w-6 h-6 text-purple-600" />
+                <span className="font-black text-xl text-gray-800">{label}</span>
             </div>
 
-            <div className="relative h-48 bg-gradient-to-b from-purple-50 to-white rounded-lg p-8 mb-6">
+            <div className="relative h-48 bg-white rounded-2xl p-8 mb-6 shadow-inner">
                 <div className="absolute bottom-12 left-8 right-8 h-24">
-                    {/* Min whisker */}
                     <div
                         className="absolute bg-purple-500 h-1"
                         style={{
@@ -76,7 +255,6 @@ const BoxPlotVisualization = ({ data, label = 'תרשים קופסה' }) => {
                         }}
                     />
 
-                    {/* Min line */}
                     <div
                         className="absolute bg-purple-700 w-1 h-12"
                         style={{
@@ -85,7 +263,6 @@ const BoxPlotVisualization = ({ data, label = 'תרשים קופסה' }) => {
                         }}
                     />
 
-                    {/* Box */}
                     <div
                         className="absolute bg-gradient-to-r from-purple-200 to-purple-300 border-4 border-purple-600 rounded-lg shadow-lg"
                         style={{
@@ -95,7 +272,6 @@ const BoxPlotVisualization = ({ data, label = 'תרשים קופסה' }) => {
                             top: '0%'
                         }}
                     >
-                        {/* Median line */}
                         <div
                             className="absolute bg-purple-900 w-1 h-full"
                             style={{
@@ -104,7 +280,6 @@ const BoxPlotVisualization = ({ data, label = 'תרשים קופסה' }) => {
                         />
                     </div>
 
-                    {/* Max whisker */}
                     <div
                         className="absolute bg-purple-500 h-1"
                         style={{
@@ -115,7 +290,6 @@ const BoxPlotVisualization = ({ data, label = 'תרשים קופסה' }) => {
                         }}
                     />
 
-                    {/* Max line */}
                     <div
                         className="absolute bg-purple-700 w-1 h-12"
                         style={{
@@ -163,7 +337,7 @@ const BoxPlotVisualization = ({ data, label = 'תרשים קופסה' }) => {
             <div className="text-xs text-gray-500 text-center mt-4">
                 נתונים ממוינים: [{sorted.join(', ')}]
             </div>
-        </div>
+        </motion.div>
     );
 };
 
@@ -177,40 +351,46 @@ const BarChartVisualization = ({ data, xLabel = 'קטגוריה', yLabel = 'ער
     }
 
     return (
-        <div className="bg-white rounded-xl border-2 border-purple-200 p-4 mb-6">
-            <div className="flex items-center gap-2 mb-4">
-                <BarChart3 className="w-5 h-5 text-purple-600" />
-                <span className="font-bold text-gray-800">{label}</span>
+        <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl border-4 border-purple-300 p-6 mb-6 shadow-xl"
+        >
+            <div className="flex items-center gap-3 mb-4 bg-white/80 backdrop-blur-sm rounded-xl p-3">
+                <BarChart3 className="w-6 h-6 text-purple-600" />
+                <span className="font-black text-xl text-gray-800">{label}</span>
             </div>
 
-            <ResponsiveContainer width="100%" height={300}>
-                <RechartsBarChart data={data}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis
-                        dataKey="x"
-                        stroke="#6b7280"
-                        label={{ value: xLabel, position: 'insideBottom', offset: -5 }}
-                    />
-                    <YAxis
-                        stroke="#6b7280"
-                        label={{ value: yLabel, angle: -90, position: 'insideLeft' }}
-                    />
-                    <Tooltip
-                        contentStyle={{
-                            backgroundColor: '#ffffff',
-                            border: '2px solid #9333ea',
-                            borderRadius: '8px'
-                        }}
-                        formatter={(value, name, props) => [value, props.payload.label || xLabel]}
-                    />
-                    <Bar dataKey="y" fill={color} radius={[8, 8, 0, 0]} />
-                </RechartsBarChart>
-            </ResponsiveContainer>
-
-            <div className="text-xs text-gray-500 text-center mt-2">
-                גרף עמודות אינטראקטיבי - עבור עם העכבר לראות ערכים
+            <div className="bg-white rounded-2xl p-4 shadow-inner">
+                <ResponsiveContainer width="100%" height={300}>
+                    <RechartsBarChart data={data}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis
+                            dataKey="x"
+                            stroke="#6b7280"
+                            label={{ value: xLabel, position: 'insideBottom', offset: -5 }}
+                        />
+                        <YAxis
+                            stroke="#6b7280"
+                            label={{ value: yLabel, angle: -90, position: 'insideLeft' }}
+                        />
+                        <Tooltip
+                            contentStyle={{
+                                backgroundColor: '#ffffff',
+                                border: '2px solid #9333ea',
+                                borderRadius: '8px'
+                            }}
+                            formatter={(value, name, props) => [value, props.payload.label || xLabel]}
+                        />
+                        <Bar dataKey="y" fill={color} radius={[8, 8, 0, 0]} />
+                    </RechartsBarChart>
+                </ResponsiveContainer>
             </div>
-        </div>
+
+            <div className="text-sm text-gray-600 text-center mt-3 font-semibold bg-yellow-50 p-2 rounded-lg">
+                📊 גרף עמודות אינטראקטיבי - עבור עם העכבר לראות ערכים
+            </div>
+        </motion.div>
     );
 };
 
@@ -242,43 +422,49 @@ const HistogramVisualization = ({ data, bins = 5, xLabel = 'טווח', yLabel = 
     }
 
     return (
-        <div className="bg-white rounded-xl border-2 border-purple-200 p-4 mb-6">
-            <div className="flex items-center gap-2 mb-4">
-                <BarChart3 className="w-5 h-5 text-purple-600" />
-                <span className="font-bold text-gray-800">{label}</span>
+        <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl border-4 border-purple-300 p-6 mb-6 shadow-xl"
+        >
+            <div className="flex items-center gap-3 mb-4 bg-white/80 backdrop-blur-sm rounded-xl p-3">
+                <BarChart3 className="w-6 h-6 text-purple-600" />
+                <span className="font-black text-xl text-gray-800">{label}</span>
             </div>
 
-            <ResponsiveContainer width="100%" height={300}>
-                <RechartsBarChart data={histogramData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis
-                        dataKey="x"
-                        stroke="#6b7280"
-                        label={{ value: xLabel, position: 'insideBottom', offset: -5 }}
-                    />
-                    <YAxis
-                        stroke="#6b7280"
-                        label={{ value: yLabel, angle: -90, position: 'insideLeft' }}
-                    />
-                    <Tooltip
-                        contentStyle={{
-                            backgroundColor: '#ffffff',
-                            border: '2px solid #9333ea',
-                            borderRadius: '8px'
-                        }}
-                    />
-                    <Bar dataKey="y" fill="#ec4899" radius={[8, 8, 0, 0]} />
-                </RechartsBarChart>
-            </ResponsiveContainer>
-
-            <div className="text-xs text-gray-500 text-center mt-2">
-                היסטוגרמה - התפלגות תדירות
+            <div className="bg-white rounded-2xl p-4 shadow-inner">
+                <ResponsiveContainer width="100%" height={300}>
+                    <RechartsBarChart data={histogramData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis
+                            dataKey="x"
+                            stroke="#6b7280"
+                            label={{ value: xLabel, position: 'insideBottom', offset: -5 }}
+                        />
+                        <YAxis
+                            stroke="#6b7280"
+                            label={{ value: yLabel, angle: -90, position: 'insideLeft' }}
+                        />
+                        <Tooltip
+                            contentStyle={{
+                                backgroundColor: '#ffffff',
+                                border: '2px solid #9333ea',
+                                borderRadius: '8px'
+                            }}
+                        />
+                        <Bar dataKey="y" fill="#ec4899" radius={[8, 8, 0, 0]} />
+                    </RechartsBarChart>
+                </ResponsiveContainer>
             </div>
-        </div>
+
+            <div className="text-sm text-gray-600 text-center mt-3 font-semibold bg-yellow-50 p-2 rounded-lg">
+                📈 היסטוגרמה - התפלגות תדירות
+            </div>
+        </motion.div>
     );
 };
 
-// ==================== MAIN VISUAL GRAPH COMPONENT ====================
+// ==================== 🔥 MAIN VISUAL GRAPH COMPONENT WITH SVG ====================
 const VisualGraph = ({ visualData }) => {
     console.log('🎨 VisualGraph received:', visualData);
 
@@ -287,8 +473,16 @@ const VisualGraph = ({ visualData }) => {
         return null;
     }
 
+    const { type } = visualData;
+
+    // 🔥 PRIORITY 1: Handle SVG types FIRST
+    if (type?.startsWith('svg-')) {
+        console.log('✅ Rendering SVG type:', type);
+        return <SVGVisual visualData={visualData} />;
+    }
+
+    // Rest of existing code for recharts graphs...
     const {
-        type,
         points,
         data,
         equation,
@@ -305,83 +499,84 @@ const VisualGraph = ({ visualData }) => {
     console.log('📍 Points:', points);
     console.log('📦 Data:', data);
 
-    // Box Plot
     if (type === 'boxplot' && data) {
         console.log('✅ Rendering BoxPlot');
         return <BoxPlotVisualization data={data} label={label} />;
     }
 
-    // Histogram
     if (type === 'histogram' && data) {
         console.log('✅ Rendering Histogram');
         return <HistogramVisualization data={data} bins={bins} xLabel={xLabel} yLabel={yLabel} label={label} />;
     }
 
-    // Bar Chart
     if (type === 'bar' && points && points.length > 0) {
         console.log('✅ Rendering BarChart');
         return <BarChartVisualization data={points} xLabel={xLabel} yLabel={yLabel} label={label} color={color} />;
     }
 
-    // Scatter Plot
     if (type === 'scatter' && points && points.length > 0) {
         console.log('✅ Rendering Scatter Plot');
         return (
-            <div className="bg-white rounded-xl border-2 border-purple-200 p-4 mb-6">
-                <div className="flex items-center gap-2 mb-4">
-                    <LineChart className="w-5 h-5 text-purple-600" />
-                    <span className="font-bold text-gray-800">{label}</span>
+            <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl border-4 border-purple-300 p-6 mb-6 shadow-xl"
+            >
+                <div className="flex items-center gap-3 mb-4 bg-white/80 backdrop-blur-sm rounded-xl p-3">
+                    <LineChart className="w-6 h-6 text-purple-600" />
+                    <span className="font-black text-xl text-gray-800">{label}</span>
                 </div>
 
-                <ResponsiveContainer width="100%" height={300}>
-                    <ScatterChart>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                        <XAxis
-                            dataKey="x"
-                            type="number"
-                            stroke="#6b7280"
-                            label={{ value: xLabel, position: 'insideBottom', offset: -5 }}
-                            domain={xRange}
-                        />
-                        <YAxis
-                            dataKey="y"
-                            type="number"
-                            stroke="#6b7280"
-                            domain={yRange}
-                            label={{ value: yLabel, angle: -90, position: 'insideLeft' }}
-                        />
-                        <Tooltip
-                            contentStyle={{
-                                backgroundColor: '#ffffff',
-                                border: '2px solid #9333ea',
-                                borderRadius: '8px'
-                            }}
-                            formatter={(value, name, props) => {
-                                const point = props.payload;
-                                return [
-                                    `${yLabel}: ${point.y}`,
-                                    point.label || `נקודה ${point.x}`
-                                ];
-                            }}
-                        />
-                        <ReferenceLine x={0} stroke="#9ca3af" strokeWidth={1} />
-                        <ReferenceLine y={0} stroke="#9ca3af" strokeWidth={1} />
-                        <Scatter
-                            data={points}
-                            fill={color}
-                            isAnimationActive={true}
-                        />
-                    </ScatterChart>
-                </ResponsiveContainer>
-
-                <div className="text-xs text-gray-500 text-center mt-2">
-                    גרף פיזור אינטראקטיבי - עבור עם העכבר לראות פרטים
+                <div className="bg-white rounded-2xl p-4 shadow-inner">
+                    <ResponsiveContainer width="100%" height={300}>
+                        <ScatterChart>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                            <XAxis
+                                dataKey="x"
+                                type="number"
+                                stroke="#6b7280"
+                                label={{ value: xLabel, position: 'insideBottom', offset: -5 }}
+                                domain={xRange}
+                            />
+                            <YAxis
+                                dataKey="y"
+                                type="number"
+                                stroke="#6b7280"
+                                domain={yRange}
+                                label={{ value: yLabel, angle: -90, position: 'insideLeft' }}
+                            />
+                            <Tooltip
+                                contentStyle={{
+                                    backgroundColor: '#ffffff',
+                                    border: '2px solid #9333ea',
+                                    borderRadius: '8px'
+                                }}
+                                formatter={(value, name, props) => {
+                                    const point = props.payload;
+                                    return [
+                                        `${yLabel}: ${point.y}`,
+                                        point.label || `נקודה ${point.x}`
+                                    ];
+                                }}
+                            />
+                            <ReferenceLine x={0} stroke="#9ca3af" strokeWidth={1} />
+                            <ReferenceLine y={0} stroke="#9ca3af" strokeWidth={1} />
+                            <Scatter
+                                data={points}
+                                fill={color}
+                                isAnimationActive={true}
+                            />
+                        </ScatterChart>
+                    </ResponsiveContainer>
                 </div>
-            </div>
+
+                <div className="text-sm text-gray-600 text-center mt-3 font-semibold bg-yellow-50 p-2 rounded-lg">
+                    📊 גרף פיזור אינטראקטיבי - עבור עם העכבר לראות פרטים
+                </div>
+            </motion.div>
         );
     }
 
-    // Line/Parabola/Function graphs
     const generateGraphData = () => {
         if (points && points.length > 0) {
             return points;
@@ -438,60 +633,64 @@ const VisualGraph = ({ visualData }) => {
     console.log('✅ Rendering Line/Function Graph');
 
     return (
-        <div className="bg-white rounded-xl border-2 border-purple-200 p-4 mb-6">
-            <div className="flex items-center gap-2 mb-4">
-                <LineChart className="w-5 h-5 text-purple-600" />
-                <span className="font-bold text-gray-800">{label}</span>
+        <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl border-4 border-purple-300 p-6 mb-6 shadow-xl"
+        >
+            <div className="flex items-center gap-3 mb-4 bg-white/80 backdrop-blur-sm rounded-xl p-3">
+                <LineChart className="w-6 h-6 text-purple-600" />
+                <span className="font-black text-xl text-gray-800">{label}</span>
                 {equation && (
-                    <span className="text-sm text-gray-600 font-mono bg-gray-100 px-2 py-1 rounded">
-                        {equation}
+                    <span className="text-sm text-gray-600 font-mono bg-white px-3 py-1 rounded-lg shadow">
+                        <MathDisplay inline>{equation}</MathDisplay>
                     </span>
                 )}
             </div>
 
-            <ResponsiveContainer width="100%" height={300}>
-                <RechartsLineChart data={graphData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis
-                        dataKey="x"
-                        stroke="#6b7280"
-                        label={{ value: xLabel, position: 'insideBottomRight', offset: -5 }}
-                    />
-                    <YAxis
-                        stroke="#6b7280"
-                        domain={yRange}
-                        label={{ value: yLabel, angle: -90, position: 'insideLeft' }}
-                    />
-                    <Tooltip
-                        contentStyle={{
-                            backgroundColor: '#ffffff',
-                            border: '2px solid #9333ea',
-                            borderRadius: '8px'
-                        }}
-                        labelFormatter={(value) => `${xLabel} = ${value}`}
-                        formatter={(value) => [`${yLabel} = ${value}`, '']}
-                    />
-                    <ReferenceLine x={0} stroke="#9ca3af" strokeWidth={2} />
-                    <ReferenceLine y={0} stroke="#9ca3af" strokeWidth={2} />
-                    <Line
-                        type="monotone"
-                        dataKey="y"
-                        stroke={color}
-                        strokeWidth={3}
-                        dot={false}
-                        isAnimationActive={true}
-                    />
-                </RechartsLineChart>
-            </ResponsiveContainer>
-
-            <div className="text-xs text-gray-500 text-center mt-2">
-                גרף אינטראקטיבי - עבור עם העכבר לראות ערכים
+            <div className="bg-white rounded-2xl p-4 shadow-inner">
+                <ResponsiveContainer width="100%" height={300}>
+                    <RechartsLineChart data={graphData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis
+                            dataKey="x"
+                            stroke="#6b7280"
+                            label={{ value: xLabel, position: 'insideBottomRight', offset: -5 }}
+                        />
+                        <YAxis
+                            stroke="#6b7280"
+                            domain={yRange}
+                            label={{ value: yLabel, angle: -90, position: 'insideLeft' }}
+                        />
+                        <Tooltip
+                            contentStyle={{
+                                backgroundColor: '#ffffff',
+                                border: '2px solid #9333ea',
+                                borderRadius: '8px'
+                            }}
+                            labelFormatter={(value) => `${xLabel} = ${value}`}
+                            formatter={(value) => [`${yLabel} = ${value}`, '']}
+                        />
+                        <ReferenceLine x={0} stroke="#9ca3af" strokeWidth={2} />
+                        <ReferenceLine y={0} stroke="#9ca3af" strokeWidth={2} />
+                        <Line
+                            type="monotone"
+                            dataKey="y"
+                            stroke={color}
+                            strokeWidth={3}
+                            dot={false}
+                            isAnimationActive={true}
+                        />
+                    </RechartsLineChart>
+                </ResponsiveContainer>
             </div>
-        </div>
-    );
-};
 
-// ==================== AI CHAT SIDEBAR ====================
+            <div className="text-sm text-gray-600 text-center mt-3 font-semibold bg-yellow-50 p-2 rounded-lg">
+                📊 גרף אינטראקטיבי - עבור עם העכבר לראות ערכים
+            </div>
+        </motion.div>
+    );
+};// ==================== AI CHAT SIDEBAR ====================
 const AIChatSidebar = ({ question, studentProfile, isOpen, onToggle, currentAnswer }) => {
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
@@ -582,6 +781,8 @@ const AIChatSidebar = ({ question, studentProfile, isOpen, onToggle, currentAnsw
             <motion.button
                 initial={{ x: -100 }}
                 animate={{ x: 0 }}
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
                 onClick={onToggle}
                 className="fixed right-4 top-1/2 -translate-y-1/2 bg-gradient-to-r from-purple-600 to-pink-600 text-white p-4 rounded-full shadow-2xl hover:shadow-3xl transition-all z-50"
             >
@@ -621,7 +822,9 @@ const AIChatSidebar = ({ question, studentProfile, isOpen, onToggle, currentAnsw
                                 ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white'
                                 : 'bg-white shadow-lg text-gray-900'
                         }`}>
-                            <div className="whitespace-pre-wrap text-sm">{message.content}</div>
+                            <div className="whitespace-pre-wrap text-sm">
+                                <MathDisplay inline>{message.content}</MathDisplay>
+                            </div>
                         </div>
                     </motion.div>
                 ))}
@@ -807,31 +1010,26 @@ const MathTutor = () => {
     const user = useAuthStore(state => state.user);
     const nexonProfile = useAuthStore(state => state.nexonProfile);
 
-    // View states
     const [view, setView] = useState('home');
     const [selectedTopic, setSelectedTopic] = useState(null);
     const [selectedSubtopic, setSelectedSubtopic] = useState(null);
 
-    // Question states
     const [currentQuestion, setCurrentQuestion] = useState(null);
     const [userAnswer, setUserAnswer] = useState('');
     const [isGeneratingQuestion, setIsGeneratingQuestion] = useState(false);
     const [hintCount, setHintCount] = useState(0);
     const [currentHints, setCurrentHints] = useState([]);
 
-    // Live feedback states
     const [feedbackStatus, setFeedbackStatus] = useState('idle');
     const [liveFeedback, setLiveFeedback] = useState(null);
     const [finalFeedback, setFinalFeedback] = useState(null);
     const [attemptCount, setAttemptCount] = useState(0);
 
-    // Chat state
     const [chatOpen, setChatOpen] = useState(false);
 
     const autoCheckTimerRef = useRef(null);
     const lastCheckedAnswerRef = useRef('');
 
-    // Session stats
     const [sessionStats, setSessionStats] = useState({
         correct: 0,
         total: 0,
@@ -843,13 +1041,11 @@ const MathTutor = () => {
         questionTimes: []
     });
 
-    // Timer
     const [timer, setTimer] = useState(0);
     const [isTimerRunning, setIsTimerRunning] = useState(false);
     const timerRef = useRef(null);
     const inputRef = useRef(null);
 
-    // Get curriculum
     const currentGrade = nexonProfile?.grade || user?.grade || '8';
     const currentTrack = nexonProfile?.track || user?.track;
     const gradeId = getUserGradeId(currentGrade, currentTrack);
@@ -860,7 +1056,6 @@ const MathTutor = () => {
         console.log('📚 Curriculum loaded:', { currentGrade, currentTrack, gradeId, topicsCount: availableTopics.length });
     }, [currentGrade, currentTrack, gradeId]);
 
-    // Timer effect
     useEffect(() => {
         if (isTimerRunning) {
             timerRef.current = setInterval(() => setTimer(t => t + 1), 1000);
@@ -872,7 +1067,6 @@ const MathTutor = () => {
         };
     }, [isTimerRunning]);
 
-    // Live feedback effect
     useEffect(() => {
         if (!userAnswer.trim() || finalFeedback?.isCorrect) {
             if (autoCheckTimerRef.current) {
@@ -945,29 +1139,32 @@ const MathTutor = () => {
         lastCheckedAnswerRef.current = '';
 
         try {
+            if (!topic || typeof topic !== 'object' || !topic.name) {
+                throw new Error('Invalid topic object');
+            }
+
             const requestBody = {
                 topic: {
-                    id: topic.id,
-                    name: topic.name,
-                    nameEn: topic.nameEn
+                    id: String(topic.id || topic.name || 'unknown'),
+                    name: String(topic.name),
+                    nameEn: String(topic.nameEn || '')
                 },
                 subtopic: subtopic ? {
-                    id: subtopic.id,
-                    name: subtopic.name,
-                    nameEn: subtopic.nameEn
+                    id: String(subtopic.id || subtopic.name || 'unknown'),
+                    name: String(subtopic.name || ''),
+                    nameEn: String(subtopic.nameEn || '')
                 } : null,
-                difficulty: topic.difficulty || 'intermediate',
+                difficulty: String(topic.difficulty || 'intermediate'),
                 studentProfile: {
-                    name: nexonProfile?.name || user?.name || 'תלמיד',
-                    grade: nexonProfile?.grade || user?.grade || '8',
-                    track: nexonProfile?.track || user?.track,
-                    mathFeeling: nexonProfile?.mathFeeling || 'okay',
-                    learningStyle: nexonProfile?.learningStyle || 'ask',
-                    goalFocus: nexonProfile?.goalFocus || 'understanding'
+                    name: String(nexonProfile?.name || user?.name || 'תלמיד'),
+                    grade: String(nexonProfile?.grade || user?.grade || '8'),
+                    track: String(nexonProfile?.track || user?.track || ''),
+                    mathFeeling: String(nexonProfile?.mathFeeling || 'okay'),
+                    learningStyle: String(nexonProfile?.learningStyle || 'ask'),
+                    goalFocus: String(nexonProfile?.goalFocus || 'understanding'),
+                    studentId: String(nexonProfile?.id || user?.id || 'anonymous')
                 }
             };
-
-            console.log('🚀 Sending question request:', requestBody);
 
             const response = await fetch(`${API_URL}/api/ai/generate-question`, {
                 method: 'POST',
@@ -975,29 +1172,65 @@ const MathTutor = () => {
                 body: JSON.stringify(requestBody)
             });
 
-            const data = await response.json();
-
-            console.log('📥 Backend response:', data);
-
-            if (!response.ok) {
-                throw new Error(data.error || data.message || `Backend error: ${response.status}`);
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('text/html')) {
+                const htmlText = await response.text();
+                console.error('❌ Server returned HTML instead of JSON');
+                throw new Error('Server error - check if server is running on port 3001');
             }
 
-            if (data.success && data.question) {
-                console.log('✅ Question received!');
-                console.log('   Question:', data.question.question);
-                console.log('   visualData:', data.question.visualData);
-
-                await new Promise(resolve => setTimeout(resolve, 1500));
-                setCurrentQuestion(data.question);
-                setIsTimerRunning(true);
-                setTimeout(() => inputRef.current?.focus(), 100);
-            } else {
-                throw new Error(data.error || 'Failed to generate question');
+            let data;
+            try {
+                const text = await response.text();
+                data = JSON.parse(text);
+            } catch (parseError) {
+                console.error('❌ JSON Parse Error:', parseError);
+                throw new Error(`Invalid JSON response from server: ${parseError.message}`);
             }
+
+            if (!response.ok || !data.success) {
+                let errorMsg = 'Failed to generate question';
+
+                if (data.error) {
+                    if (typeof data.error === 'string') {
+                        errorMsg = data.error;
+                    } else if (typeof data.error === 'object' && data.error !== null) {
+                        errorMsg = data.error.message || JSON.stringify(data.error);
+                    }
+                } else if (data.message) {
+                    errorMsg = String(data.message);
+                }
+
+                throw new Error(errorMsg);
+            }
+
+            if (!data.question) {
+                throw new Error('No question data received');
+            }
+
+            await new Promise(resolve => setTimeout(resolve, 1500));
+            setCurrentQuestion(data.question);
+            setIsTimerRunning(true);
+            setTimeout(() => inputRef.current?.focus(), 100);
+
         } catch (error) {
-            console.error('❌ Question generation error:', error);
-            toast.error(`שגיאה ביצירת שאלה: ${error.message}`);
+            console.error('❌ Error in generateNewQuestion:', error);
+
+            let displayMessage = 'שגיאה ביצירת שאלה';
+
+            if (error.message.includes('fetch')) {
+                displayMessage = 'לא ניתן להתחבר לשרת. בדוק שהשרת רץ על http://localhost:3001';
+            } else if (error.message.includes('JSON')) {
+                displayMessage = 'שגיאת תקשורת עם השרת. נסה שוב.';
+            } else if (error.message) {
+                displayMessage = `שגיאה: ${error.message}`;
+            }
+
+            toast.error(displayMessage, {
+                duration: 5000,
+                icon: '❌'
+            });
+
             setView('topic-select');
         } finally {
             setIsGeneratingQuestion(false);
@@ -1180,34 +1413,35 @@ const MathTutor = () => {
                             transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}
                             className="inline-block mb-6"
                         >
-                            <div className="w-24 h-24 bg-white/20 backdrop-blur-xl rounded-3xl flex items-center justify-center mx-auto">
-                                <Brain className="w-14 h-14 text-white" />
+                            <div className="w-28 h-28 bg-white/20 backdrop-blur-xl rounded-full flex items-center justify-center mx-auto shadow-2xl border-4 border-white/30">
+                                <Brain className="w-16 h-16 text-white" />
                             </div>
                         </motion.div>
 
-                        <h1 className="text-6xl font-black text-white mb-4 drop-shadow-lg">נקסון</h1>
-                        <p className="text-2xl text-white/90 mb-2">המורה הדיגיטלי שלך</p>
-                        <p className="text-lg text-white/80">
-                            {gradeConfig?.name} • {availableTopics.length} נושאים
+                        <h1 className="text-7xl font-black text-white mb-4 drop-shadow-2xl">נקסון</h1>
+                        <p className="text-3xl text-white/90 mb-2 font-bold">המורה הדיגיטלי שלך 🎓</p>
+                        <p className="text-xl text-white/80 font-semibold">
+                            {gradeConfig?.name} • {availableTopics.length} נושאים מגניבים 🚀
                         </p>
                     </motion.div>
 
-                    <div className="grid grid-cols-3 gap-4 mb-8">
+                    <div className="grid grid-cols-3 gap-6 mb-8">
                         {[
-                            { icon: Trophy, label: 'הרמה שלך', value: 'Level 5', color: 'yellow' },
-                            { icon: Flame, label: 'רצף תשובות', value: '12', color: 'orange' },
-                            { icon: Star, label: 'נקודות', value: '2,450', color: 'blue' }
+                            { icon: Trophy, label: 'הרמה שלך', value: 'Level 5', color: 'yellow', emoji: '🏆' },
+                            { icon: Flame, label: 'רצף תשובות', value: '12', color: 'orange', emoji: '🔥' },
+                            { icon: Star, label: 'נקודות', value: '2,450', color: 'blue', emoji: '⭐' }
                         ].map((stat, i) => (
                             <motion.div
                                 key={i}
                                 initial={{ opacity: 0, scale: 0.8 }}
                                 animate={{ opacity: 1, scale: 1 }}
                                 transition={{ delay: i * 0.1 }}
-                                className="bg-white/20 backdrop-blur-xl rounded-2xl p-4 text-center"
+                                whileHover={{ scale: 1.05 }}
+                                className="bg-white/30 backdrop-blur-xl rounded-3xl p-6 text-center shadow-xl border-2 border-white/40"
                             >
-                                <stat.icon className={`w-8 h-8 text-${stat.color}-300 mx-auto mb-2`} />
-                                <div className="text-2xl font-bold text-white">{stat.value}</div>
-                                <div className="text-sm text-white/80">{stat.label}</div>
+                                <div className="text-5xl mb-2">{stat.emoji}</div>
+                                <div className="text-3xl font-black text-white drop-shadow-lg">{stat.value}</div>
+                                <div className="text-sm text-white/90 font-bold">{stat.label}</div>
                             </motion.div>
                         ))}
                     </div>
@@ -1216,20 +1450,20 @@ const MathTutor = () => {
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                         onClick={() => setView('topic-select')}
-                        className="w-full bg-white text-purple-600 rounded-2xl py-6 font-bold text-xl shadow-2xl hover:shadow-3xl transition-all mb-6 flex items-center justify-center gap-3"
+                        className="w-full bg-white text-purple-600 rounded-3xl py-8 font-black text-2xl shadow-2xl hover:shadow-3xl transition-all mb-6 flex items-center justify-center gap-4"
                     >
-                        <Play className="w-6 h-6" />
-                        התחל תרגול
-                        <Sparkles className="w-6 h-6" />
+                        <Play className="w-8 h-8" />
+                        בואו נתחיל! 🎉
+                        <Sparkles className="w-8 h-8" />
                     </motion.button>
 
                     <motion.button
                         whileHover={{ scale: 1.02 }}
                         onClick={() => toast.success('סטטיסטיקות בקרוב!')}
-                        className="w-full bg-white/10 backdrop-blur-xl text-white rounded-2xl py-4 font-semibold hover:bg-white/20 transition-all flex items-center justify-center gap-2"
+                        className="w-full bg-white/20 backdrop-blur-xl text-white rounded-3xl py-5 font-bold text-lg hover:bg-white/30 transition-all flex items-center justify-center gap-3 border-2 border-white/30"
                     >
-                        <BarChart3 className="w-5 h-5" />
-                        הסטטיסטיקה שלי
+                        <BarChart3 className="w-6 h-6" />
+                        הסטטיסטיקה שלי 📊
                     </motion.button>
                 </div>
             </div>
@@ -1241,26 +1475,29 @@ const MathTutor = () => {
         return (
             <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50 p-4" dir="rtl">
                 <div className="max-w-5xl mx-auto">
-                    <div className="flex items-center justify-between mb-6">
-                        <button
+                    <div className="flex items-center justify-between mb-8">
+                        <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
                             onClick={() => setView('home')}
-                            className="flex items-center gap-2 text-purple-600 hover:text-purple-700 font-semibold"
+                            className="flex items-center gap-2 text-purple-600 hover:text-purple-700 font-bold bg-white px-6 py-3 rounded-2xl shadow-lg"
                         >
                             <ArrowLeft className="w-5 h-5" />
                             חזרה
-                        </button>
-                        <h2 className="text-2xl font-bold text-gray-800">בחר נושא לתרגול</h2>
-                        <div className="w-20" />
+                        </motion.button>
+                        <h2 className="text-3xl font-black text-gray-800">בחר נושא לתרגול 📚</h2>
+                        <div className="w-32" />
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {availableTopics.map((topic, index) => (
                             <motion.div
                                 key={topic.id}
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ delay: index * 0.05 }}
-                                className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all p-6 cursor-pointer border-2 border-transparent hover:border-purple-300"
+                                whileHover={{ scale: 1.03, y: -5 }}
+                                className="bg-white rounded-3xl shadow-xl hover:shadow-2xl transition-all p-8 cursor-pointer border-4 border-transparent hover:border-purple-300"
                                 onClick={() => {
                                     setSelectedTopic(topic);
                                     const subtopics = getSubtopics(gradeId, topic.id);
@@ -1269,15 +1506,15 @@ const MathTutor = () => {
                                     }
                                 }}
                             >
-                                <div className="text-5xl mb-3">{topic.icon}</div>
-                                <h3 className="text-xl font-bold text-gray-800 mb-2">{topic.name}</h3>
-                                <p className="text-sm text-gray-500 mb-4">{topic.nameEn}</p>
+                                <div className="text-6xl mb-4">{topic.icon}</div>
+                                <h3 className="text-2xl font-black text-gray-800 mb-2">{topic.name}</h3>
+                                <p className="text-base text-gray-500 mb-4 font-semibold">{topic.nameEn}</p>
 
                                 {selectedTopic?.id === topic.id && getSubtopics(gradeId, topic.id).length > 0 && (
                                     <motion.div
                                         initial={{ opacity: 0, height: 0 }}
                                         animate={{ opacity: 1, height: 'auto' }}
-                                        className="space-y-2 mt-4 pt-4 border-t"
+                                        className="space-y-2 mt-4 pt-4 border-t-2 border-gray-200"
                                     >
                                         {getSubtopics(gradeId, topic.id).map(subtopic => (
                                             <button
@@ -1286,7 +1523,7 @@ const MathTutor = () => {
                                                     e.stopPropagation();
                                                     startPractice(topic, subtopic);
                                                 }}
-                                                className="w-full text-right px-4 py-3 bg-purple-50 hover:bg-purple-100 rounded-xl transition-all text-sm font-medium text-gray-700 hover:text-purple-700"
+                                                className="w-full text-right px-4 py-3 bg-purple-50 hover:bg-purple-100 rounded-xl transition-all text-base font-bold text-gray-700 hover:text-purple-700"
                                             >
                                                 {subtopic.name}
                                             </button>
@@ -1295,8 +1532,8 @@ const MathTutor = () => {
                                 )}
 
                                 {getSubtopics(gradeId, topic.id).length > 0 && selectedTopic?.id !== topic.id && (
-                                    <div className="text-xs text-gray-400 flex items-center gap-1">
-                                        <ChevronRight className="w-3 h-3" />
+                                    <div className="text-sm text-gray-400 flex items-center gap-1 font-semibold">
+                                        <ChevronRight className="w-4 h-4" />
                                         {getSubtopics(gradeId, topic.id).length} תתי-נושאים
                                     </div>
                                 )}
@@ -1311,49 +1548,101 @@ const MathTutor = () => {
     // PRACTICE VIEW
     if (view === 'practice') {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 p-4" dir="rtl">
+            <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50 p-4" dir="rtl">
                 <div className="max-w-4xl mx-auto">
-                    {/* Header */}
-                    <div className="bg-white rounded-2xl shadow-lg p-4 mb-4 flex items-center justify-between">
-                        <button
-                            onClick={endSession}
-                            className="text-gray-600 hover:text-gray-800 font-medium"
-                        >
-                            סיים
-                        </button>
+                    {/* 🔥 ENHANCED HEADER */}
+                    <motion.div
+                        initial={{ y: -20, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        className="bg-gradient-to-r from-purple-500 via-pink-500 to-orange-400 rounded-3xl shadow-2xl p-5 mb-6"
+                    >
+                        <div className="flex items-center justify-between">
+                            <motion.button
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
+                                onClick={endSession}
+                                className="bg-white/20 backdrop-blur-md text-white px-6 py-3 rounded-2xl font-bold hover:bg-white/30 transition-all flex items-center gap-2 shadow-lg"
+                            >
+                                <ArrowLeft className="w-5 h-5" />
+                                סיים
+                            </motion.button>
 
-                        <div className="flex items-center gap-6">
-                            <div className="flex items-center gap-2">
-                                <Clock className="w-5 h-5 text-purple-600" />
-                                <span className="font-mono text-lg font-bold">{formatTime(timer)}</span>
-                            </div>
+                            <div className="flex items-center gap-4">
+                                {/* Timer */}
+                                <motion.div
+                                    animate={{ scale: [1, 1.05, 1] }}
+                                    transition={{ duration: 1, repeat: Infinity }}
+                                    className="flex items-center gap-2 bg-white/20 backdrop-blur-md px-5 py-3 rounded-2xl shadow-lg"
+                                >
+                                    <Clock className="w-6 h-6 text-white" />
+                                    <span className="font-mono text-2xl font-black text-white drop-shadow-lg">
+                                        {formatTime(timer)}
+                                    </span>
+                                </motion.div>
 
-                            <div className="flex items-center gap-2">
-                                <Flame className="w-5 h-5 text-orange-500" />
-                                <span className="font-bold text-orange-600">{sessionStats.streak}</span>
-                            </div>
+                                {/* Streak */}
+                                <motion.div
+                                    animate={sessionStats.streak > 0 ? { rotate: [0, 10, -10, 0] } : {}}
+                                    transition={{ duration: 0.5 }}
+                                    className="flex items-center gap-2 bg-gradient-to-r from-orange-400 to-red-500 px-5 py-3 rounded-2xl shadow-lg"
+                                >
+                                    <Flame className="w-6 h-6 text-white" />
+                                    <span className="text-2xl font-black text-white drop-shadow-lg">
+                                        {sessionStats.streak}
+                                    </span>
+                                </motion.div>
 
-                            <div className="flex items-center gap-2">
-                                <Star className="w-5 h-5 text-yellow-500" />
-                                <span className="font-bold text-yellow-600">{sessionStats.points}</span>
-                            </div>
+                                {/* Points */}
+                                <motion.div
+                                    animate={sessionStats.points > 0 ? { scale: [1, 1.1, 1] } : {}}
+                                    className="flex items-center gap-2 bg-gradient-to-r from-yellow-400 to-yellow-500 px-5 py-3 rounded-2xl shadow-lg"
+                                >
+                                    <Star className="w-6 h-6 text-white" />
+                                    <span className="text-2xl font-black text-white drop-shadow-lg">
+                                        {sessionStats.points}
+                                    </span>
+                                </motion.div>
 
-                            <div className="text-sm font-medium text-gray-600">
-                                {sessionStats.correct}/{sessionStats.total}
+                                {/* Progress */}
+                                <div className="bg-white/20 backdrop-blur-md px-5 py-3 rounded-2xl shadow-lg">
+                                    <div className="text-xl font-black text-white drop-shadow-lg">
+                                        {sessionStats.correct}/{sessionStats.total}
+                                    </div>
+                                    <div className="text-xs text-white/80 font-semibold">שאלות נכונות</div>
+                                </div>
                             </div>
                         </div>
-                    </div>
 
-                    {/* Question Card */}
+                        {/* Progress Bar */}
+                        {sessionStats.total > 0 && (
+                            <motion.div
+                                initial={{ width: 0 }}
+                                animate={{ width: '100%' }}
+                                className="mt-4 h-4 bg-white/20 rounded-full overflow-hidden"
+                            >
+                                <motion.div
+                                    initial={{ width: 0 }}
+                                    animate={{ width: `${(sessionStats.correct / sessionStats.total) * 100}%` }}
+                                    transition={{ duration: 0.5 }}
+                                    className="h-full bg-gradient-to-r from-green-400 to-emerald-500 rounded-full shadow-lg"
+                                />
+                            </motion.div>
+                        )}
+                    </motion.div>
+
+                    {/* 🔥 ENHANCED QUESTION CARD */}
                     <motion.div
                         key={currentQuestion?.question || 'loading'}
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        className="bg-white rounded-3xl shadow-2xl p-8 mb-4"
+                        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        className="bg-white rounded-3xl shadow-2xl p-10 mb-4 border-4 border-purple-200"
+                        style={{
+                            background: 'linear-gradient(135deg, #ffffff 0%, #faf5ff 50%, #fef3c7 100%)'
+                        }}
                     >
                         <AnimatePresence mode="wait">
                             {isGeneratingQuestion ? (
-                                <ThinkingAnimation message="נקסון מכין שאלה מיוחדת בשבילך..." />
+                                <ThinkingAnimation message="נקסון מכין שאלה מיוחדת בשבילך... ✨" />
                             ) : currentQuestion ? (
                                 <motion.div
                                     key="question-content"
@@ -1362,20 +1651,20 @@ const MathTutor = () => {
                                     exit={{ opacity: 0, y: -20 }}
                                 >
                                     <div className="flex items-center justify-between mb-6">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-3xl">{selectedTopic?.icon}</span>
+                                        <div className="flex items-center gap-3 bg-purple-100 px-5 py-3 rounded-2xl shadow-md">
+                                            <span className="text-4xl">{selectedTopic?.icon}</span>
                                             <div>
-                                                <div className="font-semibold text-gray-800">{selectedTopic?.name}</div>
+                                                <div className="font-black text-gray-800 text-lg">{selectedTopic?.name}</div>
                                                 {selectedSubtopic && (
-                                                    <div className="text-sm text-gray-500">{selectedSubtopic.name}</div>
+                                                    <div className="text-sm text-gray-500 font-semibold">{selectedSubtopic.name}</div>
                                                 )}
                                             </div>
                                         </div>
 
                                         {attemptCount > 0 && (
-                                            <div className="flex items-center gap-2 bg-orange-50 px-3 py-1 rounded-full">
-                                                <RefreshCw className="w-4 h-4 text-orange-600" />
-                                                <span className="text-sm font-medium text-orange-600">
+                                            <div className="flex items-center gap-2 bg-orange-100 px-4 py-2 rounded-full border-2 border-orange-300">
+                                                <RefreshCw className="w-5 h-5 text-orange-600" />
+                                                <span className="text-base font-bold text-orange-600">
                                                     ניסיון {attemptCount + 1}
                                                 </span>
                                             </div>
@@ -1383,12 +1672,11 @@ const MathTutor = () => {
                                     </div>
 
                                     <div className="mb-8">
-                                        <h3 className="text-2xl font-bold text-gray-800 mb-4 leading-relaxed">
-                                            {currentQuestion.question}
-                                        </h3>
+                                        <div className="text-3xl font-black text-gray-800 mb-4 leading-relaxed">
+                                            <MathDisplay>{currentQuestion.question}</MathDisplay>
+                                        </div>
                                     </div>
 
-                                    {/* 🔥 VISUAL GRAPH DISPLAY - THIS IS THE KEY PART! */}
                                     {currentQuestion.visualData && (
                                         <div className="mb-6">
                                             <VisualGraph visualData={currentQuestion.visualData} />
@@ -1396,27 +1684,30 @@ const MathTutor = () => {
                                     )}
 
                                     {currentHints.length > 0 && (
-                                        <div className="mb-6 space-y-2">
+                                        <div className="mb-6 space-y-3">
                                             {currentHints.map((hint, index) => (
                                                 <motion.div
                                                     key={index}
                                                     initial={{ opacity: 0, x: -20 }}
                                                     animate={{ opacity: 1, x: 0 }}
-                                                    className="bg-yellow-50 border-r-4 border-yellow-400 p-4 rounded-lg"
+                                                    className="bg-yellow-50 border-r-4 border-yellow-400 p-5 rounded-2xl shadow-md"
                                                 >
-                                                    <div className="flex items-start gap-2">
-                                                        <Lightbulb className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-1" />
-                                                        <div className="text-gray-700">{hint}</div>
+                                                    <div className="flex items-start gap-3">
+                                                        <Lightbulb className="w-6 h-6 text-yellow-600 flex-shrink-0 mt-1" />
+                                                        <div className="text-gray-700 text-lg font-semibold">
+                                                            <MathDisplay inline>{hint}</MathDisplay>
+                                                        </div>
                                                     </div>
                                                 </motion.div>
                                             ))}
                                         </div>
                                     )}
 
-                                    {liveFeedback && !finalFeedback && (<motion.div
+                                    {liveFeedback && !finalFeedback && (
+                                        <motion.div
                                             initial={{ opacity: 0, y: 10 }}
                                             animate={{ opacity: 1, y: 0 }}
-                                            className={`mb-6 p-4 rounded-xl border-2 ${
+                                            className={`mb-6 p-5 rounded-2xl border-3 ${
                                                 feedbackStatus === 'correct'
                                                     ? 'bg-green-50 border-green-300'
                                                     : feedbackStatus === 'partial'
@@ -1424,11 +1715,13 @@ const MathTutor = () => {
                                                         : 'bg-red-50 border-red-300'
                                             }`}
                                         >
-                                            <div className="flex items-center gap-2 text-sm">
-                                                {feedbackStatus === 'correct' && <CheckCircle2 className="w-4 h-4 text-green-600" />}
-                                                {feedbackStatus === 'partial' && <AlertCircle className="w-4 h-4 text-yellow-600" />}
-                                                {feedbackStatus === 'wrong' && <XCircle className="w-4 h-4 text-red-600" />}
-                                                <span className="font-medium text-gray-700">{liveFeedback.explanation}</span>
+                                            <div className="flex items-center gap-3 text-base">
+                                                {feedbackStatus === 'correct' && <CheckCircle2 className="w-6 h-6 text-green-600" />}
+                                                {feedbackStatus === 'partial' && <AlertCircle className="w-6 h-6 text-yellow-600" />}
+                                                {feedbackStatus === 'wrong' && <XCircle className="w-6 h-6 text-red-600" />}
+                                                <span className="font-bold text-gray-700">
+                                                    <MathDisplay inline>{liveFeedback.explanation}</MathDisplay>
+                                                </span>
                                             </div>
                                         </motion.div>
                                     )}
@@ -1437,24 +1730,26 @@ const MathTutor = () => {
                                         <motion.div
                                             initial={{ opacity: 0, y: 10 }}
                                             animate={{ opacity: 1, y: 0 }}
-                                            className={`mb-6 p-6 rounded-2xl ${
+                                            className={`mb-6 p-8 rounded-3xl ${
                                                 finalFeedback.isCorrect
-                                                    ? 'bg-green-50 border-2 border-green-200'
+                                                    ? 'bg-green-50 border-4 border-green-300'
                                                     : finalFeedback.isPartial
-                                                        ? 'bg-yellow-50 border-2 border-yellow-200'
-                                                        : 'bg-red-50 border-2 border-red-200'
+                                                        ? 'bg-yellow-50 border-4 border-yellow-300'
+                                                        : 'bg-red-50 border-4 border-red-300'
                                             }`}
                                         >
-                                            <div className="flex items-center gap-3 mb-3">
+                                            <div className="flex items-center gap-4 mb-4">
                                                 {finalFeedback.isCorrect ? (
-                                                    <CheckCircle2 className="w-8 h-8 text-green-600" />
+                                                    <CheckCircle2 className="w-10 h-10 text-green-600" />
                                                 ) : (
-                                                    <XCircle className="w-8 h-8 text-red-600" />
+                                                    <XCircle className="w-10 h-10 text-red-600" />
                                                 )}
                                                 <div className="flex-1">
-                                                    <div className="text-xl font-bold">{finalFeedback.feedback}</div>
+                                                    <div className="text-2xl font-black">
+                                                        <MathDisplay inline>{finalFeedback.feedback}</MathDisplay>
+                                                    </div>
                                                     {finalFeedback.isCorrect && finalFeedback.pointsEarned > 0 && (
-                                                        <div className="text-sm text-gray-600">
+                                                        <div className="text-base text-gray-600 font-bold">
                                                             +{finalFeedback.pointsEarned} נקודות • {formatTime(finalFeedback.timeTaken)}
                                                         </div>
                                                     )}
@@ -1462,16 +1757,22 @@ const MathTutor = () => {
                                             </div>
 
                                             {finalFeedback.explanation && (
-                                                <div className="bg-white/50 rounded-lg p-4 mb-3">
-                                                    <div className="font-semibold text-gray-700 mb-2">💡 הסבר:</div>
-                                                    <div className="text-gray-700">{finalFeedback.explanation}</div>
+                                                <div className="bg-white/70 rounded-2xl p-5 mb-4">
+                                                    <div className="font-black text-gray-700 mb-2 text-lg">💡 הסבר:</div>
+                                                    <div className="text-gray-700 text-base">
+                                                        <MathDisplay>{finalFeedback.explanation}</MathDisplay>
+                                                    </div>
                                                 </div>
                                             )}
 
                                             {!finalFeedback.isCorrect && (
-                                                <div className="bg-white/50 rounded-lg p-4">
-                                                    <div className="font-semibold text-gray-700 mb-1">התשובה הנכונה:</div>
-                                                    <div className="text-xl font-bold text-gray-800">{currentQuestion.correctAnswer}</div>
+                                                <div className="bg-white/70 rounded-2xl p-5">
+                                                    <div className="font-black text-gray-700 mb-2 text-lg">התשובה הנכונה:</div>
+                                                    <div className="text-3xl font-black text-gray-800">
+                                                        <MathDisplay className="text-4xl">
+                                                            {currentQuestion.correctAnswer}
+                                                        </MathDisplay>
+                                                    </div>
                                                 </div>
                                             )}
                                         </motion.div>
@@ -1486,63 +1787,73 @@ const MathTutor = () => {
                                                     value={userAnswer}
                                                     onChange={(e) => setUserAnswer(e.target.value)}
                                                     onKeyPress={(e) => e.key === 'Enter' && submitAnswer()}
-                                                    placeholder="כתוב/י את התשובה..."
-                                                    className="w-full px-6 py-4 pr-32 text-xl border-2 border-gray-200 rounded-2xl focus:ring-4 focus:ring-purple-200 focus:border-purple-400 transition-all"
+                                                    placeholder="כתוב/י את התשובה... ✍️"
+                                                    className="w-full px-8 py-5 pr-32 text-2xl border-4 border-purple-300 rounded-3xl focus:ring-4 focus:ring-purple-200 focus:border-purple-400 transition-all font-bold"
                                                 />
                                                 <LiveFeedbackIndicator status={feedbackStatus} />
                                             </div>
 
-                                            <div className="grid grid-cols-3 gap-3">
-                                                <button
+                                            <div className="grid grid-cols-3 gap-4">
+                                                <motion.button
+                                                    whileHover={{ scale: 1.05 }}
+                                                    whileTap={{ scale: 0.95 }}
                                                     onClick={() => setChatOpen(true)}
-                                                    className="flex items-center justify-center gap-2 px-4 py-4 bg-blue-500 text-white rounded-2xl font-bold hover:bg-blue-600 transition-all"
+                                                    className="flex items-center justify-center gap-2 px-4 py-5 bg-blue-500 text-white rounded-3xl font-black hover:bg-blue-600 transition-all text-lg shadow-xl"
                                                 >
-                                                    <MessageCircle className="w-5 h-5" />
+                                                    <MessageCircle className="w-6 h-6" />
                                                     שוחח עם נקסון
-                                                </button>
+                                                </motion.button>
 
-                                                <button
+                                                <motion.button
+                                                    whileHover={{ scale: 1.05 }}
+                                                    whileTap={{ scale: 0.95 }}
                                                     onClick={getHint}
                                                     disabled={hintCount >= 3}
-                                                    className="flex items-center justify-center gap-2 px-4 py-4 bg-yellow-500 text-white rounded-2xl font-bold hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                                                    className="flex items-center justify-center gap-2 px-4 py-5 bg-yellow-500 text-white rounded-3xl font-black hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-lg shadow-xl"
                                                 >
-                                                    <Lightbulb className="w-5 h-5" />
+                                                    <Lightbulb className="w-6 h-6" />
                                                     רמז ({3 - hintCount})
-                                                </button>
+                                                </motion.button>
 
-                                                <button
+                                                <motion.button
+                                                    whileHover={{ scale: 1.05 }}
+                                                    whileTap={{ scale: 0.95 }}
                                                     onClick={submitAnswer}
                                                     disabled={!userAnswer.trim()}
-                                                    className="flex items-center justify-center gap-2 px-4 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-2xl font-bold hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                                                    className="flex items-center justify-center gap-2 px-4 py-5 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-3xl font-black hover:shadow-2xl disabled:opacity-50 disabled:cursor-not-allowed transition-all text-lg shadow-xl"
                                                 >
-                                                    <CheckCircle2 className="w-5 h-5" />
+                                                    <CheckCircle2 className="w-6 h-6" />
                                                     שלח תשובה
-                                                </button>
+                                                </motion.button>
                                             </div>
                                         </div>
                                     )}
 
                                     {finalFeedback && (
-                                        <div className="flex gap-3">
+                                        <div className="flex gap-4">
                                             {!finalFeedback.isCorrect && (
-                                                <button
+                                                <motion.button
+                                                    whileHover={{ scale: 1.05 }}
+                                                    whileTap={{ scale: 0.95 }}
                                                     onClick={tryAgain}
-                                                    className="flex-1 flex items-center justify-center gap-2 px-6 py-4 bg-orange-500 text-white rounded-2xl font-bold hover:bg-orange-600 transition-all"
+                                                    className="flex-1 flex items-center justify-center gap-2 px-6 py-5 bg-orange-500 text-white rounded-3xl font-black hover:bg-orange-600 transition-all text-lg shadow-xl"
                                                 >
-                                                    <RefreshCw className="w-5 h-5" />
+                                                    <RefreshCw className="w-6 h-6" />
                                                     נסה שוב
-                                                </button>
+                                                </motion.button>
                                             )}
 
                                             {finalFeedback.isCorrect && (
-                                                <button
+                                                <motion.button
+                                                    whileHover={{ scale: 1.05 }}
+                                                    whileTap={{ scale: 0.95 }}
                                                     onClick={nextQuestion}
-                                                    className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-2xl font-bold hover:shadow-lg transition-all"
+                                                    className="w-full flex items-center justify-center gap-2 px-6 py-5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-3xl font-black hover:shadow-2xl transition-all text-lg shadow-xl"
                                                 >
-                                                    <Sparkles className="w-5 h-5" />
+                                                    <Sparkles className="w-6 h-6" />
                                                     שאלה הבאה
-                                                    <ChevronRight className="w-5 h-5" />
-                                                </button>
+                                                    <ChevronRight className="w-6 h-6" />
+                                                </motion.button>
                                             )}
                                         </div>
                                     )}
@@ -1552,7 +1863,6 @@ const MathTutor = () => {
                     </motion.div>
                 </div>
 
-                {/* AI Chat Sidebar */}
                 <AnimatePresence>
                     {currentQuestion && (
                         <AIChatSidebar
