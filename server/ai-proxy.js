@@ -18,7 +18,7 @@ import ISRAELI_CURRICULUM, {
     getClusters,
     getPedagogicalNote,
     CURRICULUM_METADATA
-} from '../src/config/israeliCurriculum.js';
+} from './config/israeliCurriculum.js';
 
 dotenv.config();
 
@@ -249,6 +249,7 @@ function buildEnhancedSystemPrompt(studentProfile, gradeId, topic, subtopic) {
 
     let prompt = '';
 
+    // Personality
     if (personalitySystem.loaded) {
         const personality = personalitySystem.data.corePersonality;
         prompt += `אתה ${personality.teacher_name}, ${personality.description}.\n`;
@@ -257,25 +258,25 @@ function buildEnhancedSystemPrompt(studentProfile, gradeId, topic, subtopic) {
         prompt += `אתה נקסון, מורה דיגיטלי למתמטיקה.\n\n`;
     }
 
-    prompt += buildCurriculumContext(gradeId, topic, subtopic);
-
+    // Student context
     if (grade) {
         prompt += `התלמיד בכיתה ${grade}.\n`;
     }
 
     if (mathFeeling === 'struggle') {
-        prompt += `התלמיד מתקשה - היה סבלני, תן הסברים צעד-צעד.\n`;
+        prompt += `התלמיד מתקשה - היה סבלני מאוד, תן הסברים צעד-צעד.\n`;
     } else if (mathFeeling === 'love') {
-        prompt += `התלמיד אוהב מתמטיקה - תן אתגרים מעניינים.\n`;
+        prompt += `התלמיד אוהב מתמטיקה - אתגר אותו!\n`;
     }
 
-    prompt += `\n🎯 General Principles:\n`;
-    prompt += `- Create questions aligned with Israeli curriculum standards\n`;
-    prompt += `- Use Hebrew naturally and clearly\n`;
-    prompt += `- Consider the reform changes (תשפ"ה)\n`;
-    prompt += `- Return VALID JSON only\n`;
-    prompt += `- Be encouraging and supportive\n`;
-    prompt += `- Create VARIED and UNIQUE questions every time\n\n`;
+    // 🔥 CRITICAL: Core principles
+    prompt += `\n🎯 עקרונות חובה:\n`;
+    prompt += `✓ יצור שאלות ייחודיות ומגוונות\n`;
+    prompt += `✓ עקוב אחר תכנית הלימודים הישראלית (תשפ"ה)\n`;
+    prompt += `✓ השתמש בעברית ברורה וטבעית\n`;
+    prompt += `✓ החזר JSON תקין בלבד\n`;
+    prompt += `✓ אל תחזור על שאלות קודמות\n`;
+    prompt += `✓ כל שאלה = חווייה חדשה\n\n`;
 
     return prompt;
 }
@@ -828,266 +829,147 @@ function buildDynamicQuestionPrompt(topic, subtopic, difficulty, studentProfile,
         }
 
         const topicName = String(topic?.name || 'Unknown Topic');
-        const topicNameEn = String(topic?.nameEn || '');
         const subtopicName = String(subtopic?.name || '');
-        const subtopicNameEn = String(subtopic?.nameEn || '');
         const studentGrade = String(studentProfile?.grade || '7');
 
-        console.log('✅ buildDynamicQuestionPrompt - Variables:');
-        console.log('   topicName:', topicName);
-        console.log('   subtopicName:', subtopicName);
+        console.log('✅ Building prompt - Topic:', topicName, '/ Subtopic:', subtopicName);
 
         const classification = classifyTopic(topicName, subtopicName);
-        console.log('   Classification:', classification);
 
-        let prompt = `צור שאלה במתמטיקה בעברית.\n\n`;
+        // 🔥 FIX 1: START WITH CURRICULUM CONTEXT
+        let prompt = buildCurriculumContext(gradeId, topic, subtopic);
 
         prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-        prompt += `🎯 MANDATORY TOPIC REQUIREMENTS\n`;
+        prompt += `🎯 יצירת שאלה חדשה ומקורית\n`;
         prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
         prompt += `נושא ראשי: ${topicName}\n`;
-
         if (subtopicName) {
-            prompt += `תת-נושא (MUST BE THE MAIN FOCUS): ${subtopicName}\n`;
-            prompt += `⚠️⚠️⚠️ השאלה חייבת להיות ישירות על "${subtopicName}"\n`;
+            prompt += `תת-נושא (זה המוקד העיקרי): ${subtopicName}\n`;
+            prompt += `⚠️ השאלה חייבת להיות ישירות על "${subtopicName}"\n`;
         }
-
         prompt += `רמת קושי: ${difficulty}\n`;
         prompt += `כיתה: ${studentGrade}\n`;
         prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
-        // 🔥 GEOMETRY SECTIONS
-        if (classification.isPureGeometry) {
+        // 🔥 FIX 2: SHOW RECENT QUESTIONS PROMINENTLY
+        const studentId = studentProfile?.studentId || studentProfile?.name || 'anonymous';
+        const topicId = topic?.id || topicName;
+        const recentQuestions = questionHistoryManager.getRecentQuestions(studentId, topicId, 10);
+
+        if (recentQuestions && recentQuestions.length > 0) {
+            prompt += `🚨 אסור לחזור על שאלות קודמות:\n`;
             prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-            prompt += `📐 PURE GEOMETRY MODE - נקודות, קווים ומישורים\n`;
-            prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-            prompt += `🚨 CRITICAL RULES:\n`;
-            prompt += `✓ השתמש בשפה גאומטרית טהורה בלבד\n`;
-            prompt += `✓ השאלה חייבת להתחיל ב: "נתון/נתונה/נתונים"\n`;
-            prompt += `✓ דוגמאות לפתיחה:\n`;
-            prompt += `  - "נתון מישור α וקו ישר l"\n`;
-            prompt += `  - "נתונות שתי נקודות A ו-B במישור"\n`;
-            prompt += `  - "נתונים שני קווים מקבילים m ו-n"\n\n`;
-            prompt += `❌ אסור בהחלט:\n`;
-            prompt += `  ❌ הקשרים מהחיים האמיתיים (גנים, בניינים וכו')\n`;
-            prompt += `  ❌ חישובי שטח, היקף\n`;
+            recentQuestions.forEach((q, idx) => {
+                const preview = q.question.substring(0, 100).replace(/\n/g, ' ');
+                prompt += `${idx + 1}. ${preview}...\n`;
+            });
+            prompt += `\n⚠️⚠️⚠️ צור משהו שונה לחלוטין:\n`;
+            prompt += `- הקשר שונה\n`;
+            prompt += `- מספרים שונים\n`;
+            prompt += `- זווית גישה שונה\n`;
+            prompt += `- נוסח שונה\n`;
             prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+        }
+
+        // 🔥 FIX 3: GEOMETRY RULES (if applicable)
+        if (classification.isPureGeometry) {
+            prompt += `📐 גאומטריה טהורה - חובה:\n`;
+            prompt += `✓ התחל ב"נתון/נתונה/נתונים"\n`;
+            prompt += `✓ אסור הקשרים מהחיים האמיתיים\n`;
+            prompt += `✓ דוגמאות: "נתון מישור α", "נתונות נקודות A, B"\n\n`;
         }
 
         if (classification.isAppliedGeometry) {
-            prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-            prompt += `📏 APPLIED GEOMETRY MODE - חישובי צורות\n`;
-            prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-            prompt += `✓ פתיחה: "נתון משולש...", "נתון ריבוע...", "נתון מעגל..."\n`;
-            prompt += `✓ שאל על: שטח, היקף, גובה, אורך צלע\n\n`;
+            prompt += `📏 גאומטריה יישומית:\n`;
+            prompt += `✓ התחל: "נתון משולש...", "נתון ריבוע..."\n`;
+            prompt += `✓ שאל על: שטח, היקף, גובה, צלע\n\n`;
 
-            prompt += `🚨 CRITICAL GEOMETRY VALIDATION RULES:\n`;
-            prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-
-            // 🔥🔥🔥 ULTRA-STRICT ISOSCELES SECTION - TRIPLE EMPHASIS
-            prompt += `╔════════════════════════════════════════════════════╗\n`;
-            prompt += `║  ⚠️  ABSOLUTE RULE FOR ISOSCELES TRIANGLES  ⚠️   ║\n`;
-            prompt += `╚════════════════════════════════════════════════════╝\n\n`;
-
-            prompt += `1. משולש שווה-שוקיים (Isosceles Triangle):\n`;
-            prompt += `   \n`;
-            prompt += `   🚨 READ THIS 5 TIMES BEFORE GENERATING:\n`;
-            prompt += `   • An isosceles triangle has EXACTLY 3 SIDES:\n`;
-            prompt += `     - Base (בסיס)\n`;
-            prompt += `     - Left Leg (שוק שמאלי)\n`;
-            prompt += `     - Right Leg (שוק ימני)\n`;
-            prompt += `   \n`;
-            prompt += `   • גובה (HEIGHT) is NOT A SIDE!\n`;
-            prompt += `   • Height is a LINE FROM apex TO base (perpendicular)\n`;
-            prompt += `   • Height is CALCULATED by student, NOT GIVEN\n`;
-            prompt += `   • If you give height, the visual generator BREAKS\n`;
-            prompt += `   \n`;
-            prompt += `   ✅ THE ONLY ALLOWED FORMAT:\n`;
-            prompt += `   "נתון משולש שווה-שוקיים ABC, שבו אורך הבסיס הוא X ס"מ,\n`;
-            prompt += `    ואורך השוקיים הוא Y ס"מ. מה שטח המשולש?"\n`;
-            prompt += `   \n`;
-            prompt += `   That's it. NOTHING ELSE. Period.\n`;
-            prompt += `   Just: Triangle definition + Base + Legs + Question.\n`;
-            prompt += `   NO height mentioned ANYWHERE.\n`;
-            prompt += `   \n`;
-            prompt += `   🚫 FORBIDDEN PHRASES (NEVER USE THESE):\n`;
-            prompt += `   ❌ "אם גובה המשולש לבסיס הוא" ← BREAKS THE SYSTEM!\n`;
-            prompt += `   ❌ "אם גובה המשולש הוא" ← BREAKS THE SYSTEM!\n`;
-            prompt += `   ❌ "גובה המשולש הוא" ← BREAKS THE SYSTEM!\n`;
-            prompt += `   ❌ "וגובה" ← BREAKS THE SYSTEM!\n`;
-            prompt += `   ❌ ", גובה" ← BREAKS THE SYSTEM!\n`;
-            prompt += `   ❌ ANY mention of גובה as given information ← FORBIDDEN!\n`;
-            prompt += `   \n`;
-            prompt += `   💡 WHY NEVER MENTION HEIGHT?\n`;
-            prompt += `   Because the student must LEARN to calculate it:\n`;
-            prompt += `   Step 1: Split triangle in half → creates right triangle\n`;
-            prompt += `   Step 2: Use Pythagorean theorem: h² + (base/2)² = leg²\n`;
-            prompt += `   Step 3: Solve for h\n`;
-            prompt += `   Step 4: Calculate area = ½ × base × h\n`;
-            prompt += `   \n`;
-            prompt += `   This is EDUCATIONAL. Giving height makes it trivial.\n`;
-            prompt += `   Also: Mentioning height confuses the visual generator (sees 3 numbers).\n`;
-            prompt += `   \n`;
-            prompt += `   ✅ CORRECT EXAMPLES (COPY THESE FORMATS):\n`;
-            prompt += `   1. "נתון משולש שווה-שוקיים ABC, בסיס 12 ס"מ, שוקיים 15 ס"מ. מה השטח?"\n`;
-            prompt += `   2. "נתון משולש שווה-שוקיים, בסיס 10 ס"מ, שוקיים 13 ס"מ. מה ההיקף?"\n`;
-            prompt += `   3. "נתון משולש שווה-שוקיים, בסיס 16 ס"מ, שוקיים 17 ס"מ. חשב את השטח."\n`;
-            prompt += `   4. "נתון משולש שווה-שוקיים ABC, בסיס 14 ס"מ, שוקיים 20 ס"מ. מצא את הגובה." ← Height is ANSWER!\n`;
-            prompt += `   \n`;
-            prompt += `   ❌ WRONG EXAMPLES (NEVER EVER USE THESE):\n`;
-            prompt += `   ❌ "בסיס 12, שוקיים 15, אם גובה 8, מה השטח?" ← 3 numbers = BROKEN VISUAL!\n`;
-            prompt += `   ❌ "בסיס 12, שוקיים 15, וגובה המשולש הוא 8" ← FORBIDDEN FORMAT!\n`;
-            prompt += `   ❌ "משולש עם צלעות 12, 15, 8" ← 8 is NOT a side!\n`;
-            prompt += `   ❌ "נתון משולש שווה-שוקיים, בסיס 12 ס"מ, שוקיים 15 ס"מ. אם גובה המשולש לבסיס הוא 8 ס"מ, מה שטח המשולש?"\n`;
-            prompt += `      ↑ THIS IS THE EXACT PHRASE YOU'VE BEEN GENERATING - STOP IT!\n`;
-            prompt += `   \n`;
-            prompt += `   📐 HOW TO SOLVE ISOSCELES AREA (Student's work):\n`;
-            prompt += `   Given: Base = 12 cm, Legs = 15 cm\n`;
-            prompt += `   Step 1: Height splits base in half → 6 cm each side\n`;
-            prompt += `   Step 2: Right triangle formed: h² + 6² = 15²\n`;
-            prompt += `   Step 3: h² = 225 - 36 = 189\n`;
-            prompt += `   Step 4: h = √189 ≈ 13.75 cm\n`;
-            prompt += `   Step 5: Area = ½ × 12 × 13.75 = 82.5 cm²\n`;
-            prompt += `   \n`;
-            prompt += `   See? Student calculates height! Don't give it!\n`;
-            prompt += `   \n`;
-            prompt += `   🎯 YOUR TASK: Create question with ONLY base + legs!\n`;
-            prompt += `   Format: "נתון משולש שווה-שוקיים, בסיס X, שוקיים Y. מה השטח?"\n`;
-            prompt += `   Two numbers only. Never three. Never mention גובה.\n\n`;
-
-            prompt += `2. משולש ישר-זווית (Right Triangle):\n`;
-            prompt += `   📋 Format: "נתון משולש ישר-זווית עם ניצב אחד X ס"מ וניצב שני Y ס"מ"\n`;
-            prompt += `   ✅ Example: "משולש ניצבים 4 ו-6. מה השטח?"\n`;
-            prompt += `   ✅ SAFE QUESTIONS: היתר, שטח, היקף\n\n`;
-
-            prompt += `3. משולש שווה-צלעות (Equilateral):\n`;
-            prompt += `   📋 Format: "נתון משולש שווה-צלעות שאורך צלעו X ס"מ"\n`;
-            prompt += `   ✅ SAFE QUESTIONS: היקף, שטח, גובה\n\n`;
-
-            prompt += `4. משולש כללי (General Triangle):\n`;
-            prompt += `   📋 Format: "משולש בסיס X, גובה Y. מה השטח?"\n`;
-            prompt += `   ✅ For general triangles, you CAN give both base AND height\n`;
-            prompt += `   ⚠️ But for ISOSCELES: base + legs only!\n\n`;
-
-            prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-            prompt += `🎯 PRE-GENERATION VALIDATION CHECKLIST:\n`;
-            prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-            prompt += `Before generating, mentally check:\n`;
-            prompt += `□ Am I creating an isosceles triangle question?\n`;
-            prompt += `□ If YES: Did I count the numbers in my question?\n`;
-            prompt += `□ For isosceles: Are there exactly 2 numbers (base + leg)?\n`;
-            prompt += `□ Did I use the word "גובה" anywhere? If YES → DELETE IT!\n`;
-            prompt += `□ Is my format: "נתון משולש שווה-שוקיים, בסיס X, שוקיים Y. מה..."?\n`;
-            prompt += `□ Am I asking for area, perimeter, or height calculation?\n`;
-            prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+            prompt += `🚨 חוקים למשולשים:\n`;
+            prompt += `• משולש שווה-שוקיים: רק בסיס + שוקיים (2 מספרים)\n`;
+            prompt += `  ❌ אסור לתת גובה!\n`;
+            prompt += `  ✅ "נתון משולש שווה-שוקיים, בסיס 12, שוקיים 15"\n`;
+            prompt += `• משולש ישר-זווית: שני ניצבים\n`;
+            prompt += `• משולש כללי: בסיס + גובה (מותר)\n\n`;
         }
 
-        // Load personality examples with filtering
-        const studentId = studentProfile?.studentId || studentProfile?.name || 'anonymous';
-        const topicId = topic?.id || topicName;
-        const avoidancePrompt = questionHistoryManager.buildAvoidancePrompt(studentId, topicId);
-        if (avoidancePrompt) {
-            prompt += avoidancePrompt;
-        }
-
-        if (!classification.isPureGeometry) {
-            const strategies = [
-                '1. Pure mathematical: "נתון..."',
-                '2. Real-world story',
-                '3. Multi-step challenge',
-                '4. Pattern discovery',
-                '5. Comparison'
-            ];
-            const randomStrategy = strategies[Math.floor(Math.random() * strategies.length)];
-            prompt += `🎲 VARIATION: ${randomStrategy}\n\n`;
-        }
-
-        prompt += `🔢 Use diverse, interesting numbers\n\n`;
-
-        if (classification.allowsRealWorld && !classification.isPureGeometry) {
-            const contexts = ['⚽ ספורט', '🏫 בית ספר', '🎨 אומנות', '🏗️ בנייה', '🌳 טבע'];
-            const randomContext = contexts[Math.floor(Math.random() * contexts.length)];
-            prompt += `🎨 אפשרי: ${randomContext}\n\n`;
-        }
-
-        // 🔥 PERSONALITY SYSTEM WITH SMART FILTERING
+        // 🔥 FIX 4: FILTER EXAMPLES AGGRESSIVELY
         if (personalitySystem.loaded) {
             const topicGuideline = personalitySystem.getTopicGuideline(topicName);
-            if (topicGuideline) {
-                prompt += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-                prompt += `📚 CURRICULUM GUIDELINES\n`;
-                prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-                if (topicGuideline.curriculum_requirements) {
-                    prompt += `⚠️ MANDATORY:\n${topicGuideline.curriculum_requirements}\n\n`;
-                }
-                prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+            if (topicGuideline?.curriculum_requirements) {
+                prompt += `📚 דרישות תכנית לימודים:\n${topicGuideline.curriculum_requirements}\n\n`;
             }
 
             try {
-                const examples = personalitySystem.getExamplesForTopic(topicName, difficulty);
-                if (examples && examples.length > 0) {
-                    let filteredExamples = examples;
+                let examples = personalitySystem.getExamplesForTopic(topicName, difficulty);
 
-                    // 🔥 FILTER EXAMPLES FOR TRIANGLE TOPICS
+                if (examples && examples.length > 0) {
+                    // 🔥 AGGRESSIVE FILTERING
                     const isTriangleTopic = topicName.includes('משולש') || topicName.includes('triangle') ||
-                        topicName.includes('גאומטריה') || topicName.includes('geometry') ||
-                        subtopicName.includes('משולש') || subtopicName.includes('triangle');
+                        topicName.includes('גאומטריה') || subtopicName.includes('משולש');
 
                     if (isTriangleTopic) {
-                        console.log('   🔍 Filtering triangle examples for topic:', topicName);
+                        console.log('   🔍 Filtering triangle examples...');
 
-                        filteredExamples = examples.filter(ex => {
-                            const question = String(ex?.question || '');
-                            if (!question) return false;
+                        examples = examples.filter(ex => {
+                            const q = String(ex?.question || '');
+                            if (!q) return false;
 
-                            // Check if isosceles
-                            const isIsosceles = question.includes('שווה-שוקיים') ||
-                                question.includes('שווה שוקיים') ||
-                                question.toLowerCase().includes('isosceles');
+                            const isIsosceles = /שווה[- ]?שוקיים|isosceles/i.test(q);
+                            if (!isIsosceles) return true;
 
-                            if (!isIsosceles) return true; // Keep non-isosceles
-
-                            // For isosceles: reject if mentions height as given info
+                            // Reject if mentions height as given
                             const badPatterns = [
                                 /אם\s+גובה/i,
                                 /וגובה\s+המשולש/i,
                                 /גובה\s+המשולש\s+(?:לבסיס\s+)?(?:הוא|הינו)\s+\d+/i,
                                 /,\s*גובה\s+\d+/i,
-                                /\.\s*גובה/i
+                                /\.\s*גובה\s+\d+/i
                             ];
 
-                            const hasBadPattern = badPatterns.some(pattern => pattern.test(question));
-
-                            if (hasBadPattern) {
-                                console.log('   ❌ Filtered bad example:', question.substring(0, 100));
+                            const isBad = badPatterns.some(p => p.test(q));
+                            if (isBad) {
+                                console.log('   ❌ Filtered:', q.substring(0, 60));
                                 return false;
                             }
-
-                            console.log('   ✅ Kept good example:', question.substring(0, 80));
                             return true;
                         });
 
-                        console.log(`   📊 Filtering: ${examples.length} → ${filteredExamples.length} examples`);
+                        console.log(`   📊 ${examples.length} examples after filtering`);
                     }
 
-                    if (filteredExamples.length > 0) {
-                        const shuffled = filteredExamples.sort(() => 0.5 - Math.random());
-                        const selected = shuffled.slice(0, Math.min(2, filteredExamples.length));
+                    // 🔥 ALSO FILTER BY RECENT QUESTIONS
+                    if (recentQuestions && recentQuestions.length > 0) {
+                        examples = examples.filter(ex => {
+                            const exQ = String(ex?.question || '').toLowerCase();
+                            return !recentQuestions.some(recent => {
+                                const recentQ = recent.question.toLowerCase();
+                                // Check for similar context/numbers
+                                const exNums = exQ.match(/\d+/g) || [];
+                                const recentNums = recentQ.match(/\d+/g) || [];
+                                const numOverlap = exNums.filter(n => recentNums.includes(n)).length;
+                                return numOverlap > 2; // More than 2 same numbers = too similar
+                            });
+                        });
+                    }
 
-                        prompt += `\n📚 EXAMPLE STYLES (create something DIFFERENT):\n`;
+                    if (examples.length > 0) {
+                        const shuffled = examples.sort(() => 0.5 - Math.random());
+                        const selected = shuffled.slice(0, Math.min(2, examples.length));
+
+                        prompt += `📚 סגנונות לדוגמה (צור משהו שונה!):\n`;
                         selected.forEach((ex, i) => {
                             prompt += `${i + 1}. ${ex.question}\n`;
                         });
-                        prompt += `\n⚠️ Your question must be UNIQUE!\n`;
+                        prompt += `\n⚠️ השאלה שלך חייבת להיות ייחודית לגמרי!\n`;
 
                         if (isTriangleTopic) {
-                            prompt += `\n🚨 CRITICAL OVERRIDE FOR ISOSCELES:\n`;
-                            prompt += `Even if you see old examples mentioning "גובה":\n`;
-                            prompt += `YOU MUST NOT COPY THAT FORMAT!\n`;
-                            prompt += `Use ONLY: "נתון משולש שווה-שוקיים, בסיס X, שוקיים Y"\n`;
-                            prompt += `TWO numbers ONLY. NO height!\n`;
+                            prompt += `\n🚨 למשולש שווה-שוקיים:\n`;
+                            prompt += `גם אם אתה רואה דוגמאות ישנות עם "גובה" - אל תחקה!\n`;
+                            prompt += `השתמש רק: "בסיס X, שוקיים Y" (2 מספרים)\n`;
                         }
                         prompt += `\n`;
+                    } else {
+                        console.log('   ⚠️ All examples filtered out - creating fresh');
                     }
                 }
             } catch (exampleError) {
@@ -1095,50 +977,44 @@ function buildDynamicQuestionPrompt(topic, subtopic, difficulty, studentProfile,
             }
         }
 
-        // Statistics formatting
-        if (classification.isStatistics) {
-            prompt += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-            prompt += `📊 DATA FORMATTING (MANDATORY)\n`;
-            prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-            prompt += `✅ REQUIRED: MINIMUM 20 data points\n`;
-            prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+        // 🔥 FIX 5: ADD VARIATION STRATEGIES
+        if (!classification.isPureGeometry) {
+            const strategies = [
+                'גישה מתמטית טהורה: "נתון..."',
+                'סיפור מהחיים: בית ספר, ספורט, קניות',
+                'אתגר רב-שלבי',
+                'גילוי תבנית',
+                'השוואה בין מצבים'
+            ];
+            const randomStrategy = strategies[Math.floor(Math.random() * strategies.length)];
+            prompt += `🎲 אסטרטגיה: ${randomStrategy}\n`;
+            prompt += `🔢 השתמש במספרים מעניינים ומגוונים\n\n`;
         }
 
-        // JSON formatting rules
-        prompt += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-        prompt += `🚨 CRITICAL JSON RULES:\n`;
-        prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-        prompt += `1. Return ONLY valid JSON\n`;
-        prompt += `2. Use \\n for newlines, NOT actual newlines\n`;
-        prompt += `3. Escape quotes: use \\" inside strings\n`;
-        prompt += `4. NO trailing commas\n`;
-        prompt += `5. NO comments\n\n`;
+        // Statistics requirements
+        if (classification.isStatistics) {
+            prompt += `📊 נתונים סטטיסטיים:\n`;
+            prompt += `✅ לפחות 20 נקודות מידע\n`;
+            prompt += `✅ פורמט: "משתנה X: 12, 15, 18, 21...\n`;
+            prompt += `          משתנה Y: 45, 52, 48, 55..."\n\n`;
+        }
 
-        prompt += `REQUIRED FORMAT:\n`;
+        // JSON format
+        prompt += `\n🚨 פורמט JSON חובה:\n`;
         prompt += `{\n`;
-        prompt += `  "question": "השאלה (NO actual newlines)",\n`;
+        prompt += `  "question": "השאלה (ללא שורות חדשות אמיתיות)",\n`;
         prompt += `  "correctAnswer": "התשובה",\n`;
         prompt += `  "hints": ["רמז 1", "רמז 2", "רמז 3"],\n`;
-        prompt += `  "explanation": "ההסבר"\n`;
+        prompt += `  "explanation": "הסבר"\n`;
         prompt += `}\n`;
-        prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+        prompt += `• השתמש ב-\\n לשורה חדשה, לא Enter\n`;
+        prompt += `• בדוק שאין פסיקים מיותרים\n`;
+        prompt += `• החזר רק JSON, ללא טקסט נוסף\n\n`;
 
-        prompt += `╔════════════════════════════════════════════════════╗\n`;
-        prompt += `║  🔥 FINAL REMINDER FOR ISOSCELES TRIANGLES 🔥    ║\n`;
-        prompt += `╚════════════════════════════════════════════════════╝\n`;
-        prompt += `If creating isosceles triangle question:\n`;
-        prompt += `- Give ONLY base and legs (2 numbers)\n`;
-        prompt += `- Format: "נתון משולש שווה-שוקיים, בסיס X, שוקיים Y"\n`;
-        prompt += `- DO NOT EVER mention גובה (height)\n`;
-        prompt += `- Let student calculate height themselves\n`;
-        prompt += `- This prevents visual errors AND teaches properly\n\n`;
-
-        console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('📝 COMPLETE PROMPT TO CLAUDE');
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log('📝 PROMPT READY');
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
         console.log(prompt);
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-
         return prompt;
 
     } catch (error) {
@@ -1371,6 +1247,70 @@ app.post('/api/ai/verify-answer', async (req, res) => {
 });
 
 // ==================== GET HINT ====================
+
+// ==================== ADMIN: UPLOAD PERSONALITY FILE ====================
+app.post('/api/admin/upload-personality', upload.single('file'), async (req, res) => {
+    try {
+        console.log('📤 PERSONALITY FILE UPLOAD');
+
+        if (!req.file) {
+            return res.status(400).json({
+                success: false,
+                error: 'No file uploaded'
+            });
+        }
+
+        console.log('   File:', req.file.originalname);
+        console.log('   Size:', req.file.size, 'bytes');
+
+        // Save to local uploads directory
+        const uploadsDir = path.join(__dirname, '../uploads');
+        if (!fs.existsSync(uploadsDir)) {
+            fs.mkdirSync(uploadsDir, { recursive: true });
+        }
+
+        const localPath = path.join(uploadsDir, 'personality-system.xlsx');
+        fs.writeFileSync(localPath, req.file.buffer);
+        console.log('   ✅ Saved locally:', localPath);
+
+        // Upload to Firebase Storage if available
+        if (bucket) {
+            const file = bucket.file('personality-system.xlsx');
+            await file.save(req.file.buffer, {
+                metadata: {
+                    contentType: req.file.mimetype,
+                    metadata: {
+                        uploadedAt: new Date().toISOString()
+                    }
+                }
+            });
+            console.log('   ✅ Uploaded to Firebase Storage');
+        } else {
+            console.log('   ⚠️ Firebase not configured - local only');
+        }
+
+        // Reload personality system
+        personalitySystem.loadFromExcel(localPath);
+        console.log('   ✅ Personality system reloaded');
+
+        res.json({
+            success: true,
+            message: 'Personality file uploaded and loaded successfully',
+            filename: req.file.originalname,
+            size: req.file.size,
+            firebaseUploaded: !!bucket,
+            personalityLoaded: personalitySystem.loaded
+        });
+
+    } catch (error) {
+        console.error('❌ Upload error:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
 app.post('/api/ai/get-hint', async (req, res) => {
     try {
         const { question, hintIndex } = req.body;
