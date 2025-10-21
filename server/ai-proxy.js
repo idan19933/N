@@ -1023,6 +1023,7 @@ function buildDynamicQuestionPrompt(topic, subtopic, difficulty, studentProfile,
     }
 }
 // ==================== GENERATE QUESTION ENDPOINT ====================
+// ==================== GENERATE QUESTION ENDPOINT WITH RETRY LOGIC ====================
 app.post('/api/ai/generate-question', async (req, res) => {
     try {
         const { topic, subtopic, difficulty, studentProfile } = req.body;
@@ -1063,34 +1064,88 @@ app.post('/api/ai/generate-question', async (req, res) => {
             if (process.env.ANTHROPIC_API_KEY) {
                 console.log(`   🔄 Attempt ${attempts}/${maxAttempts}`);
 
-                const response = await fetch('https://api.anthropic.com/v1/messages', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'x-api-key': process.env.ANTHROPIC_API_KEY,
-                        'anthropic-version': '2023-06-01'
-                    },
-                    body: JSON.stringify({
-                        model: 'claude-3-5-haiku-20241022',
-                        max_tokens: 3000,
-                        temperature: 0.8 + (attempts * 0.1),
-                        system: systemPrompt,
-                        messages: [{ role: 'user', content: prompt }]
-                    })
-                });
+                // 🔥 RETRY LOGIC WITH EXPONENTIAL BACKOFF
+                let apiSuccess = false;
+                let lastError = null;
 
-                const data = await response.json();
+                for (let retryAttempt = 0; retryAttempt < 3; retryAttempt++) {
+                    try {
+                        // Wait before retry (exponential backoff: 2s, 4s, 8s)
+                        if (retryAttempt > 0) {
+                            const waitTime = Math.pow(2, retryAttempt) * 1000;
+                            console.log(`   ⏳ API Retry ${retryAttempt}/3 - waiting ${waitTime}ms...`);
+                            await new Promise(resolve => setTimeout(resolve, waitTime));
+                        }
 
-                if (!response.ok) {
-                    throw new Error(data.error?.message || 'API error');
+                        const response = await fetch('https://api.anthropic.com/v1/messages', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'x-api-key': process.env.ANTHROPIC_API_KEY,
+                                'anthropic-version': '2023-06-01'
+                            },
+                            body: JSON.stringify({
+                                model: 'claude-3-5-haiku-20241022',
+                                max_tokens: 3000,
+                                temperature: 0.8 + (attempts * 0.1),
+                                system: systemPrompt,
+                                messages: [{ role: 'user', content: prompt }]
+                            })
+                        });
+
+                        const data = await response.json();
+
+                        // Handle 529 Overloaded error
+                        if (response.status === 529) {
+                            lastError = new Error('Overloaded');
+                            console.log(`   ⚠️ API Overloaded (retry ${retryAttempt + 1}/3)`);
+                            continue; // Try again
+                        }
+
+                        // Handle other errors
+                        if (!response.ok) {
+                            lastError = new Error(data.error?.message || `API error: ${response.status}`);
+                            console.log(`   ❌ API Error: ${lastError.message}`);
+
+                            // If it's a rate limit or server error, retry
+                            if (response.status >= 500 || response.status === 429) {
+                                continue;
+                            }
+
+                            // For other errors (like auth), don't retry
+                            throw lastError;
+                        }
+
+                        // Success! Parse the response
+                        const rawText = data.content[0].text;
+                        const jsonText = cleanJsonText(rawText);
+                        parsed = JSON.parse(jsonText);
+
+                        console.log('   ✅ API call successful');
+                        apiSuccess = true;
+                        break; // Exit retry loop
+
+                    } catch (error) {
+                        lastError = error;
+                        console.error(`   ❌ API attempt ${retryAttempt + 1} failed:`, error.message);
+
+                        // If it's the last retry attempt, throw
+                        if (retryAttempt === 2) {
+                            throw error;
+                        }
+
+                        // Otherwise, continue to next retry
+                    }
                 }
 
-                const rawText = data.content[0].text;
-                const jsonText = cleanJsonText(rawText);
-                parsed = JSON.parse(jsonText);
+                // If all retries failed, throw the last error
+                if (!apiSuccess) {
+                    throw lastError || new Error('All API retry attempts failed');
+                }
 
                 console.log('   ✅ Parsed successfully');
 
+                // Check for similarity with recent questions
                 const topicId = topic.id || topic.name;
                 const recentQuestions = questionHistoryManager.getRecentQuestions(studentId, topicId, 5);
                 const isSimilar = questionHistoryManager.isSimilar(parsed.question, recentQuestions);
@@ -1108,6 +1163,7 @@ app.post('/api/ai/generate-question', async (req, res) => {
             }
         }
 
+        // Validate and process the question
         const validation = validateQuestionHasRawData(parsed, topic, subtopic);
         if (!validation.valid) {
             console.log('   ⚠️ Validation failed - rewriting');
@@ -1170,9 +1226,16 @@ app.post('/api/ai/generate-question', async (req, res) => {
 
     } catch (error) {
         console.error('❌ Error:', error);
+
+        // Provide user-friendly error messages
+        let errorMessage = error.message;
+        if (error.message === 'Overloaded') {
+            errorMessage = 'השרת עמוס כרגע. אנא נסה שוב בעוד כמה שניות.';
+        }
+
         res.status(500).json({
             success: false,
-            error: error.message
+            error: errorMessage
         });
     }
 });

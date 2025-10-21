@@ -5,8 +5,8 @@
   "type": "module",
   "main": "server/ai-proxy.js",
   "scripts": {
-    "start": "node server/ai-proxy.js",
-    "dev": "nodemon server/ai-proxy.js"
+    "start": "node ai-proxy.js",
+    "dev": "nodemon ai-proxy.js"
   },
   "engines": {
     "node": ">=18.0.0",
