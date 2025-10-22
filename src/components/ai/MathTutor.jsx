@@ -1,11 +1,12 @@
-// src/components/ai/MathTutor.jsx - COMPLETE WITH PROPS SUPPORT
+// src/components/ai/MathTutor.jsx - COMPLETE WITH IMAGE UPLOAD
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Brain, Send, BookOpen, Target, Sparkles, ChevronRight,
     Loader2, Lightbulb, CheckCircle2, XCircle, ArrowLeft,
     Trophy, Star, Zap, Flame, Clock, BarChart3, Award, Play,
-    AlertCircle, RefreshCw, TrendingUp, MessageCircle, X, LineChart, Box
+    AlertCircle, RefreshCw, TrendingUp, MessageCircle, X, LineChart, Box,
+    Camera, Upload
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import { getUserGradeId, getGradeConfig, getSubtopics } from '../../config/israeliCurriculum';
@@ -393,7 +394,6 @@ const VisualGraph = ({ visualData }) => {
 
     const { type } = visualData;
 
-    // Priority: Handle SVG types first
     if (type?.startsWith('svg-')) {
         return <SVGVisual visualData={visualData} />;
     }
@@ -436,7 +436,6 @@ const VisualGraph = ({ visualData }) => {
         );
     }
 
-    // Line/function graphs
     const generateGraphData = () => {
         if (points && points.length > 0) return points;
 
@@ -707,12 +706,13 @@ const LiveFeedbackIndicator = ({ status }) => {
             </motion.div>
         </AnimatePresence>
     );
-};// ==================== MAIN MATH TUTOR COMPONENT ====================
+};
+
+// ==================== MAIN MATH TUTOR COMPONENT ====================
 const MathTutor = ({ topicId: propTopicId, gradeId: propGradeId, onClose }) => {
     const user = useAuthStore(state => state.user);
     const nexonProfile = useAuthStore(state => state.nexonProfile);
 
-    // 🔥 Determine initial view based on props
     const [view, setView] = useState(() => {
         if (propTopicId) {
             return 'subtopic-select';
@@ -736,6 +736,13 @@ const MathTutor = ({ topicId: propTopicId, gradeId: propGradeId, onClose }) => {
 
     const [chatOpen, setChatOpen] = useState(false);
 
+    // 🔥 IMAGE UPLOAD STATES
+    const [uploadedImage, setUploadedImage] = useState(null);
+    const [imagePreview, setImagePreview] = useState(null);
+    const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
+    const [imageAnalysisResult, setImageAnalysisResult] = useState(null);
+    const fileInputRef = useRef(null);
+
     const autoCheckTimerRef = useRef(null);
     const lastCheckedAnswerRef = useRef('');
 
@@ -755,7 +762,6 @@ const MathTutor = ({ topicId: propTopicId, gradeId: propGradeId, onClose }) => {
     const timerRef = useRef(null);
     const inputRef = useRef(null);
 
-    // 🔥 Grade and curriculum resolution with props support
     const currentGrade = propGradeId || nexonProfile?.grade || user?.grade || '8';
     const currentTrack = nexonProfile?.track || user?.track;
     const gradeId = getUserGradeId(currentGrade, currentTrack);
@@ -770,7 +776,6 @@ const MathTutor = ({ topicId: propTopicId, gradeId: propGradeId, onClose }) => {
         initialView: view
     });
 
-    // 🔥 CRITICAL: Handle direct topic navigation from dashboard
     useEffect(() => {
         if (propTopicId && availableTopics.length > 0 && !selectedTopic) {
             console.log('🔍 Looking for topic:', propTopicId);
@@ -851,6 +856,149 @@ const MathTutor = ({ topicId: propTopicId, gradeId: propGradeId, onClose }) => {
         };
     }, [userAnswer, finalFeedback]);
 
+    // 🔥 IMAGE UPLOAD HANDLERS
+    const handleImageUpload = (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        if (!file.type.startsWith('image/')) {
+            toast.error('נא להעלות קובץ תמונה בלבד');
+            return;
+        }
+
+        if (file.size > 10 * 1024 * 1024) {
+            toast.error('גודל הקובץ חייב להיות פחות מ-10MB');
+            return;
+        }
+
+        setUploadedImage(file);
+        const reader = new FileReader();
+        reader.onloadend = () => setImagePreview(reader.result);
+        reader.readAsDataURL(file);
+        toast.success('תמונה הועלתה בהצלחה! 📸');
+    };
+
+    const analyzeUploadedWork = async () => {
+        if (!uploadedImage || !currentQuestion) {
+            toast.error('אין תמונה להעלות או שאלה פעילה');
+            return;
+        }
+
+        setIsAnalyzingImage(true);
+        setImageAnalysisResult(null);
+
+        try {
+            const formData = new FormData();
+            formData.append('image', uploadedImage);
+            formData.append('question', currentQuestion.question);
+            formData.append('correctAnswer', currentQuestion.correctAnswer);
+            formData.append('studentName', nexonProfile?.name || user?.name || 'תלמיד');
+            formData.append('grade', currentGrade);
+            formData.append('topic', selectedTopic?.name || '');
+            formData.append('personality', nexonProfile?.personality || 'nexon');
+            formData.append('mathFeeling', nexonProfile?.mathFeeling || 'okay');
+            formData.append('learningStyle', nexonProfile?.learningStyle || 'visual');
+
+            console.log('📤 Sending image for analysis...');
+            console.log('   URL:', `${API_URL}/api/ai/analyze-handwritten-work`);
+            console.log('   Image:', uploadedImage.name, uploadedImage.size, 'bytes');
+
+            const response = await fetch(`${API_URL}/api/ai/analyze-handwritten-work`, {
+                method: 'POST',
+                body: formData
+            });
+
+            console.log('📥 Response status:', response.status, response.statusText);
+
+            // Check if response is JSON
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                console.error('❌ Non-JSON response:', contentType);
+                const textResponse = await response.text();
+                console.error('Response text:', textResponse.substring(0, 200));
+                throw new Error('שרת החזיר תשובה לא תקינה');
+            }
+
+            const data = await response.json();
+            console.log('📊 Response data:', data);
+
+            // Check for success
+            if (!response.ok) {
+                console.error('❌ HTTP Error:', response.status, data);
+                throw new Error(data.error || `שגיאת שרת: ${response.status}`);
+            }
+
+            if (!data.success) {
+                console.error('❌ API Error:', data.error);
+                throw new Error(data.error || 'שגיאה בניתוח התמונה');
+            }
+
+            // Validate analysis structure
+            if (!data.analysis) {
+                console.error('❌ Missing analysis in response:', data);
+                throw new Error('התשובה מהשרת לא תקינה');
+            }
+
+            console.log('✅ Analysis received:', data.analysis);
+            setImageAnalysisResult(data.analysis);
+
+            // Update stats if correct
+            if (data.analysis.isCorrect) {
+                const pointsEarned = Math.max(100 - (hintCount * 10) - (attemptCount * 20), 10);
+                setSessionStats(prev => {
+                    const newStreak = prev.streak + 1;
+                    return {
+                        ...prev,
+                        correct: prev.correct + 1,
+                        total: prev.total + 1,
+                        attempts: prev.attempts + attemptCount + 1,
+                        streak: newStreak,
+                        maxStreak: Math.max(newStreak, prev.maxStreak),
+                        points: prev.points + pointsEarned,
+                        questionTimes: [...prev.questionTimes, timer]
+                    };
+                });
+                toast.success('🎉 תשובה נכונה! מעולה!');
+                setIsTimerRunning(false);
+            } else {
+                toast.error('התשובה לא נכונה, נסה שוב');
+                setAttemptCount(prev => prev + 1);
+                setSessionStats(prev => ({
+                    ...prev,
+                    streak: 0
+                }));
+            }
+
+        } catch (error) {
+            console.error('❌ Image analysis error:', error);
+
+            // User-friendly error messages
+            let errorMessage = 'שגיאה בניתוח התמונה';
+
+            if (error.message.includes('fetch')) {
+                errorMessage = 'לא ניתן להתחבר לשרת. בדוק את החיבור לאינטרנט.';
+            } else if (error.message.includes('JSON')) {
+                errorMessage = 'שגיאה בקריאת תשובה מהשרת. נסה שוב.';
+            } else if (error.message) {
+                errorMessage = error.message;
+            }
+
+            toast.error(errorMessage, { duration: 5000 });
+
+        } finally {
+            setIsAnalyzingImage(false);
+        }
+    };
+
+    const clearUploadedImage = () => {
+        setUploadedImage(null);
+        setImagePreview(null);
+        setImageAnalysisResult(null);
+        if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+        }
+    };
+
     const formatTime = (seconds) => {
         const mins = Math.floor(seconds / 60);
         const secs = seconds % 60;
@@ -889,6 +1037,7 @@ const MathTutor = ({ topicId: propTopicId, gradeId: propGradeId, onClose }) => {
         setAttemptCount(0);
         setChatOpen(false);
         lastCheckedAnswerRef.current = '';
+        clearUploadedImage();
 
         try {
             if (!topic || typeof topic !== 'object' || !topic.name) {
@@ -1137,6 +1286,7 @@ const MathTutor = ({ topicId: propTopicId, gradeId: propGradeId, onClose }) => {
         setFeedbackStatus('idle');
         lastCheckedAnswerRef.current = '';
         setIsTimerRunning(true);
+        clearUploadedImage();
         inputRef.current?.focus();
     };
 
@@ -1145,7 +1295,6 @@ const MathTutor = ({ topicId: propTopicId, gradeId: propGradeId, onClose }) => {
         setIsTimerRunning(false);
     };
 
-    // 🔥 Smart back navigation
     const handleBackNavigation = () => {
         if (onClose) {
             onClose();
@@ -1324,7 +1473,7 @@ const MathTutor = ({ topicId: propTopicId, gradeId: propGradeId, onClose }) => {
         );
     }
 
-    // ==================== VIEW: PRACTICE ====================
+    // ==================== VIEW: PRACTICE (WITH IMAGE UPLOAD) ====================
     if (view === 'practice') {
         return (
             <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50 p-4" dir="rtl">
@@ -1463,25 +1612,188 @@ const MathTutor = ({ topicId: propTopicId, gradeId: propGradeId, onClose }) => {
                                         </motion.div>
                                     )}
 
+                                    {/* 🔥 IMAGE ANALYSIS RESULT */}
+                                    {imageAnalysisResult && (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            className={`mb-6 p-6 rounded-2xl border-4 ${
+                                                imageAnalysisResult.isCorrect
+                                                    ? 'bg-green-50 border-green-300'
+                                                    : 'bg-orange-50 border-orange-300'
+                                            }`}
+                                        >
+                                            <div className="flex items-center gap-3 mb-4">
+                                                {imageAnalysisResult.isCorrect ? (
+                                                    <CheckCircle2 className="w-8 h-8 text-green-600" />
+                                                ) : (
+                                                    <AlertCircle className="w-8 h-8 text-orange-600" />
+                                                )}
+                                                <h3 className="text-xl font-bold text-gray-800">
+                                                    {imageAnalysisResult.isCorrect ? '🎉 מעולה!' : '🤔 כמעט!'}
+                                                </h3>
+                                            </div>
+
+                                            {imageAnalysisResult.detectedAnswer && (
+                                                <div className="bg-white/70 rounded-xl p-4 mb-4">
+                                                    <div className="font-bold text-gray-700 mb-2">מה שזיהיתי:</div>
+                                                    <div className="text-2xl font-black text-gray-800">
+                                                        {imageAnalysisResult.detectedAnswer}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            <div className="bg-white/70 rounded-xl p-4 mb-4">
+                                                <div className="font-bold text-gray-700 mb-2">משוב:</div>
+                                                <div className="text-base text-gray-800 whitespace-pre-wrap">
+                                                    {imageAnalysisResult.feedback}
+                                                </div>
+                                            </div>
+
+                                            {imageAnalysisResult.stepsAnalysis && imageAnalysisResult.stepsAnalysis.length > 0 && (
+                                                <div className="bg-white/70 rounded-xl p-4">
+                                                    <div className="font-bold text-gray-700 mb-2">ניתוח השלבים שלך:</div>
+                                                    <div className="text-sm text-gray-700 space-y-2">
+                                                        {imageAnalysisResult.stepsAnalysis.map((step, index) => (
+                                                            <div key={index} className="flex items-start gap-2">
+                                                                <span className="font-bold">{index + 1}.</span>
+                                                                <span>{step}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {!imageAnalysisResult.matchesQuestion && (
+                                                <div className="bg-red-100 rounded-xl p-4 mt-4 border-2 border-red-300">
+                                                    <div className="font-bold text-red-700 mb-2">⚠️ שים לב!</div>
+                                                    <div className="text-sm text-red-700">
+                                                        נראה שפתרת שאלה אחרת. וודא שאתה פותר את השאלה הנוכחית!
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </motion.div>
+                                    )}
+
+                                    {/* 🔥 ANSWER INPUT SECTION WITH IMAGE UPLOAD */}
                                     {!finalFeedback && (
                                         <div className="space-y-4">
+                                            {/* Text Input */}
                                             <div className="relative">
-                                                <input ref={inputRef} type="text" value={userAnswer} onChange={(e) => setUserAnswer(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && submitAnswer()} placeholder="כתוב/י את התשובה... ✍️" className="w-full px-8 py-5 pr-32 text-2xl border-4 border-purple-300 rounded-3xl focus:ring-4 focus:ring-purple-200 focus:border-purple-400 transition-all font-bold" />
+                                                <input
+                                                    ref={inputRef}
+                                                    type="text"
+                                                    value={userAnswer}
+                                                    onChange={(e) => setUserAnswer(e.target.value)}
+                                                    onKeyPress={(e) => e.key === 'Enter' && submitAnswer()}
+                                                    placeholder="כתוב/י את התשובה... ✍️"
+                                                    className="w-full px-8 py-5 pr-32 text-2xl border-4 border-purple-300 rounded-3xl focus:ring-4 focus:ring-purple-200 focus:border-purple-400 transition-all font-bold"
+                                                />
                                                 <LiveFeedbackIndicator status={feedbackStatus} />
                                             </div>
 
+                                            {/* OR Divider */}
+                                            <div className="flex items-center gap-4">
+                                                <div className="flex-1 h-px bg-gray-300"></div>
+                                                <span className="text-gray-500 font-bold">או</span>
+                                                <div className="flex-1 h-px bg-gray-300"></div>
+                                            </div>
+
+                                            {/* 🔥 IMAGE UPLOAD SECTION */}
+                                            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-6 border-2 border-blue-200">
+                                                <div className="flex items-center gap-3 mb-4">
+                                                    <Camera className="w-6 h-6 text-blue-600" />
+                                                    <h3 className="text-lg font-bold text-gray-800">צלם את הפתרון שלך 📸</h3>
+                                                </div>
+
+                                                {!imagePreview ? (
+                                                    <div className="text-center">
+                                                        <input
+                                                            ref={fileInputRef}
+                                                            type="file"
+                                                            accept="image/*"
+                                                            capture="environment"
+                                                            onChange={handleImageUpload}
+                                                            className="hidden"
+                                                        />
+                                                        <button
+                                                            onClick={() => fileInputRef.current?.click()}
+                                                            className="w-full px-6 py-4 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl font-bold hover:shadow-lg transition-all flex items-center justify-center gap-3"
+                                                        >
+                                                            <Upload className="w-5 h-5" />
+                                                            העלה תמונה של הפתרון
+                                                        </button>
+                                                        <p className="text-sm text-gray-600 mt-2">
+                                                            צלם את הפתרון שלך בכתב יד והעלה כאן 📝
+                                                        </p>
+                                                    </div>
+                                                ) : (
+                                                    <div className="space-y-4">
+                                                        <div className="relative rounded-xl overflow-hidden border-4 border-blue-300">
+                                                            <img
+                                                                src={imagePreview}
+                                                                alt="Uploaded work"
+                                                                className="w-full max-h-96 object-contain bg-white"
+                                                            />
+                                                            <button
+                                                                onClick={clearUploadedImage}
+                                                                className="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full hover:bg-red-600 transition-all shadow-lg"
+                                                            >
+                                                                <X className="w-5 h-5" />
+                                                            </button>
+                                                        </div>
+
+                                                        <button
+                                                            onClick={analyzeUploadedWork}
+                                                            disabled={isAnalyzingImage}
+                                                            className="w-full px-6 py-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-bold hover:shadow-lg transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                                                        >
+                                                            {isAnalyzingImage ? (
+                                                                <>
+                                                                    <Loader2 className="w-5 h-5 animate-spin" />
+                                                                    מנתח את הפתרון...
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <Sparkles className="w-5 h-5" />
+                                                                    בדוק את הפתרון שלי
+                                                                </>
+                                                            )}
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Regular Action Buttons */}
                                             <div className="grid grid-cols-3 gap-4">
-                                                <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setChatOpen(true)} className="flex items-center justify-center gap-2 px-4 py-5 bg-blue-500 text-white rounded-3xl font-black hover:bg-blue-600 transition-all text-lg shadow-xl">
+                                                <motion.button
+                                                    whileHover={{ scale: 1.05 }}
+                                                    whileTap={{ scale: 0.95 }}
+                                                    onClick={() => setChatOpen(true)}
+                                                    className="flex items-center justify-center gap-2 px-4 py-5 bg-blue-500 text-white rounded-3xl font-black hover:bg-blue-600 transition-all text-lg shadow-xl"
+                                                >
                                                     <MessageCircle className="w-6 h-6" />
                                                     שוחח עם נקסון
                                                 </motion.button>
 
-                                                <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={getHint} disabled={hintCount >= 3} className="flex items-center justify-center gap-2 px-4 py-5 bg-yellow-500 text-white rounded-3xl font-black hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-lg shadow-xl">
+                                                <motion.button
+                                                    whileHover={{ scale: 1.05 }}
+                                                    whileTap={{ scale: 0.95 }}
+                                                    onClick={getHint}
+                                                    disabled={hintCount >= 3}
+                                                    className="flex items-center justify-center gap-2 px-4 py-5 bg-yellow-500 text-white rounded-3xl font-black hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-lg shadow-xl"
+                                                >
                                                     <Lightbulb className="w-6 h-6" />
                                                     רמז ({3 - hintCount})
                                                 </motion.button>
 
-                                                <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={submitAnswer} disabled={!userAnswer.trim()} className="flex items-center justify-center gap-2 px-4 py-5 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-3xl font-black hover:shadow-2xl disabled:opacity-50 disabled:cursor-not-allowed transition-all text-lg shadow-xl">
+                                                <motion.button
+                                                    whileHover={{ scale: 1.05 }}
+                                                    whileTap={{ scale: 0.95 }}
+                                                    onClick={submitAnswer}
+                                                    disabled={!userAnswer.trim()}
+                                                    className="flex items-center justify-center gap-2 px-4 py-5 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-3xl font-black hover:shadow-2xl disabled:opacity-50 disabled:cursor-not-allowed transition-all text-lg shadow-xl"
+                                                >
                                                     <CheckCircle2 className="w-6 h-6" />
                                                     שלח תשובה
                                                 </motion.button>

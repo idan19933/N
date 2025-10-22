@@ -32,33 +32,50 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
 // ==================== MULTER CONFIGURATION ====================
+// ==================== MULTER CONFIGURATION - ENHANCED ====================
 const storage = multer.memoryStorage();
 
 const upload = multer({
     storage,
+    limits: {
+        fileSize: 10 * 1024 * 1024 // 10MB limit
+    },
     fileFilter: (req, file, cb) => {
         console.log('📁 File upload attempt:');
         console.log('   Original name:', file.originalname);
         console.log('   MIME type:', file.mimetype);
 
+        // Check if it's an Excel file
         const isExcel = file.originalname.toLowerCase().endsWith('.xlsx') ||
             file.originalname.toLowerCase().endsWith('.xls');
 
-        const validMimeTypes = [
+        const excelMimeTypes = [
             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             'application/vnd.ms-excel',
             'application/octet-stream',
             'application/zip'
         ];
 
-        const validMime = validMimeTypes.includes(file.mimetype);
+        // Check if it's an image file
+        const isImage = file.mimetype.startsWith('image/');
 
-        if (isExcel || validMime) {
+        const imageMimeTypes = [
+            'image/jpeg',
+            'image/jpg',
+            'image/png',
+            'image/webp',
+            'image/gif'
+        ];
+
+        const validExcel = isExcel || excelMimeTypes.includes(file.mimetype);
+        const validImage = isImage || imageMimeTypes.includes(file.mimetype);
+
+        if (validExcel || validImage) {
             console.log('   ✅ File accepted');
             cb(null, true);
         } else {
             console.log('   ❌ File rejected');
-            cb(new Error('Only Excel files allowed!'), false);
+            cb(new Error('Only Excel and Image files allowed!'), false);
         }
     }
 });
@@ -1467,6 +1484,271 @@ app.post('/api/ai/chat', async (req, res) => {
         res.status(500).json({
             success: false,
             error: error.message
+        });
+    }
+});
+
+// ==================== 🔥 IMAGE ANALYSIS FOR HANDWRITTEN WORK ====================
+app.post('/api/ai/analyze-handwritten-work', upload.single('image'), async (req, res) => {
+    console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('📸 ANALYZING HANDWRITTEN WORK');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+    try {
+        if (!req.file) {
+            return res.status(400).json({
+                success: false,
+                error: 'No image file uploaded'
+            });
+        }
+
+        const {
+            question,
+            correctAnswer,
+            studentName = 'תלמיד',
+            grade = '8',
+            topic = '',
+            personality = 'nexon',
+            mathFeeling = 'okay',
+            learningStyle = 'visual'
+        } = req.body;
+
+        console.log('   Question:', question?.substring(0, 60) + '...');
+        console.log('   Correct Answer:', correctAnswer);
+        console.log('   Student:', studentName);
+        console.log('   File:', req.file.originalname);
+        console.log('   Size:', (req.file.size / 1024).toFixed(2), 'KB');
+
+        if (!question || !correctAnswer) {
+            return res.status(400).json({
+                success: false,
+                error: 'Missing required fields: question and correctAnswer'
+            });
+        }
+
+        // Get base64 image from buffer
+        const base64Image = req.file.buffer.toString('base64');
+
+        // Determine media type
+        const mediaTypeMap = {
+            'image/jpeg': 'image/jpeg',
+            'image/jpg': 'image/jpeg',
+            'image/png': 'image/png',
+            'image/webp': 'image/webp',
+            'image/gif': 'image/gif'
+        };
+        const mediaType = mediaTypeMap[req.file.mimetype] || 'image/jpeg';
+
+        console.log('   Media Type:', mediaType);
+
+        // Build personality context
+        let personalityContext = 'אתה נקסון - מורה דיגיטלי ידידותי, אופטימי ומעודד. השתמש באימוג׳ים והיה חיובי.';
+
+        if (personalitySystem.loaded) {
+            const corePersonality = personalitySystem.data.corePersonality;
+            personalityContext = `אתה ${corePersonality.teacher_name}, ${corePersonality.description}. ${corePersonality.teaching_approach}`;
+        }
+
+        // Student feeling context
+        let feelingContext = '';
+        if (mathFeeling === 'struggle') {
+            feelingContext = 'התלמיד מתקשה - היה סבלני מאוד ומעודד.';
+        } else if (mathFeeling === 'love') {
+            feelingContext = 'התלמיד אוהב מתמטיקה - עודד אותו להמשיך!';
+        }
+
+        const analysisPrompt = `${personalityContext}
+
+${feelingContext ? feelingContext + '\n' : ''}
+אתה בודק את הפתרון בכתב יד של ${studentName} (כיתה ${grade}).
+${topic ? `נושא: ${topic}\n` : ''}
+
+**השאלה המקורית:**
+${question}
+
+**התשובה הנכונה:**
+${correctAnswer}
+
+**המשימה שלך:**
+1. זהה את התשובה הסופית שהתלמיד כתב בתמונה
+2. בדוק אם התשובה נכונה (השווה לתשובה הנכונה)
+3. נתח את השלבים שהתלמיד ביצע (אם נראים)
+4. תן משוב מעודד ומועיל בעברית
+
+**חשוב מאוד:**
+- אם התלמיד פתר שאלה אחרת (לא את השאלה המקורית), ציין זאת במפורש!
+- התעלם מהבדלים קלים בכתיב (למשל: 42 זהה ל-42.0, 1/2 זהה ל-0.5)
+- אם אתה רואה רק תשובה סופית ללא שלבים, זה בסדר - נתח מה שאתה רואה
+- היה סבלני וחיובי - זה תלמיד שמנסה!
+
+השב במבנה JSON הבא (בדיוק כך):
+{
+  "detectedAnswer": "התשובה המדויקת שזיהית מהתמונה (טקסט)",
+  "isCorrect": true או false,
+  "matchesQuestion": true או false (האם התלמיד פתר את השאלה הנכונה),
+  "feedback": "משוב מפורט בעברית עם אימוג'ים - עודד את התלמיד ותן טיפים",
+  "stepsAnalysis": ["שלב 1 שהתלמיד ביצע", "שלב 2...", "שלב 3..."] או [] אם לא נראים שלבים
+}
+
+אם לא מצאת פתרון בתמונה או שהתמונה לא ברורה, ציין זאת ב-feedback ו-detectedAnswer יהיה ריק.
+החזר **רק JSON** - ללא טקסט נוסף לפני או אחרי!`;
+
+        console.log('   📤 Sending to Claude Sonnet Vision API...');
+
+        // 🔥 RETRY LOGIC WITH EXPONENTIAL BACKOFF
+        let apiSuccess = false;
+        let claudeResponse = null;
+        let lastError = null;
+
+        for (let retryAttempt = 0; retryAttempt < 3; retryAttempt++) {
+            try {
+                // Wait before retry (exponential backoff: 2s, 4s, 8s)
+                if (retryAttempt > 0) {
+                    const waitTime = Math.pow(2, retryAttempt) * 1000;
+                    console.log(`   ⏳ API Retry ${retryAttempt}/3 - waiting ${waitTime}ms...`);
+                    await new Promise(resolve => setTimeout(resolve, waitTime));
+                }
+
+                const response = await fetch('https://api.anthropic.com/v1/messages', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-api-key': process.env.ANTHROPIC_API_KEY,
+                        'anthropic-version': '2023-06-01'
+                    },
+                    body: JSON.stringify({
+                        model: 'claude-3-5-haiku-20241022',  // ✅ MUST USE SONNET FOR VISION
+                        max_tokens: 2000,
+                        temperature: 0.5,
+                        messages: [{
+                            role: 'user',
+                            content: [
+                                {
+                                    type: 'image',
+                                    source: {
+                                        type: 'base64',
+                                        media_type: mediaType,
+                                        data: base64Image
+                                    }
+                                },
+                                {
+                                    type: 'text',
+                                    text: analysisPrompt
+                                }
+                            ]
+                        }]
+                    })
+                });
+
+                const data = await response.json();
+
+                // Handle 529 Overloaded error
+                if (response.status === 529) {
+                    lastError = new Error('Overloaded');
+                    console.log(`   ⚠️ API Overloaded (retry ${retryAttempt + 1}/3)`);
+                    continue;
+                }
+
+                // Handle other errors
+                if (!response.ok) {
+                    lastError = new Error(data.error?.message || `API error: ${response.status}`);
+                    console.log(`   ❌ API Error: ${lastError.message}`);
+                    console.log('   Full error:', JSON.stringify(data, null, 2));
+
+                    // If it's a rate limit or server error, retry
+                    if (response.status >= 500 || response.status === 429) {
+                        continue;
+                    }
+
+                    throw lastError;
+                }
+
+                // Success!
+                claudeResponse = data;
+                console.log('   ✅ API call successful');
+                apiSuccess = true;
+                break;
+
+            } catch (error) {
+                lastError = error;
+                console.error(`   ❌ API attempt ${retryAttempt + 1} failed:`, error.message);
+
+                if (retryAttempt === 2) {
+                    throw error;
+                }
+            }
+        }
+
+        if (!apiSuccess) {
+            throw lastError || new Error('All API retry attempts failed');
+        }
+
+        // Parse Claude's response
+        const claudeText = claudeResponse.content[0].text;
+        console.log('   📥 Raw response (first 200):', claudeText.substring(0, 200));
+
+        // Extract JSON from response
+        let analysis;
+        try {
+            const jsonText = cleanJsonText(claudeText);
+            analysis = JSON.parse(jsonText);
+            console.log('   ✅ JSON parsed successfully');
+        } catch (parseError) {
+            console.error('   ❌ JSON parse error:', parseError.message);
+
+            // Fallback analysis
+            analysis = {
+                detectedAnswer: '',
+                isCorrect: false,
+                matchesQuestion: true,
+                feedback: claudeText.includes('לא') ? claudeText : 'לא הצלחתי לנתח את התמונה בצורה מלאה. נסה לצלם שוב עם תאורה טובה יותר! 📸',
+                stepsAnalysis: []
+            };
+        }
+
+        // Validate and clean analysis
+        const cleanedAnalysis = {
+            detectedAnswer: String(analysis.detectedAnswer || '').trim(),
+            isCorrect: Boolean(analysis.isCorrect),
+            matchesQuestion: analysis.matchesQuestion !== false,
+            feedback: String(analysis.feedback || 'לא הצלחתי לנתח את התמונה. נסה שוב! 📸').trim(),
+            stepsAnalysis: Array.isArray(analysis.stepsAnalysis) ? analysis.stepsAnalysis : []
+        };
+
+        console.log('   📊 Analysis Result:');
+        console.log('      Detected:', cleanedAnalysis.detectedAnswer);
+        console.log('      Correct:', cleanedAnalysis.isCorrect ? '✅' : '❌');
+        console.log('      Matches Question:', cleanedAnalysis.matchesQuestion ? '✅' : '⚠️');
+        console.log('      Steps:', cleanedAnalysis.stepsAnalysis.length);
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+        // Return analysis
+        res.json({
+            success: true,
+            analysis: cleanedAnalysis,
+            model: 'claude-3-5-haiku-20241022',  // ✅ SONNET FOR VISION
+            timestamp: new Date().toISOString()
+        });
+
+    } catch (error) {
+        console.error('❌ CRITICAL ERROR:', error);
+        console.error('   Error details:', error.message);
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+        // User-friendly error messages
+        let errorMessage = error.message;
+        if (error.message === 'Overloaded') {
+            errorMessage = 'השרת עמוס כרגע. אנא נסה שוב בעוד כמה שניות.';
+        } else if (error.message.includes('API key')) {
+            errorMessage = 'שגיאת הגדרות שרת. אנא פנה למנהל המערכת.';
+        } else if (error.message.includes('model')) {
+            errorMessage = 'שגיאה במודל AI. מנסה שוב...';
+        }
+
+        res.status(500).json({
+            success: false,
+            error: errorMessage,
+            timestamp: new Date().toISOString()
         });
     }
 });
