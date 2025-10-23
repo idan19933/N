@@ -1,4 +1,4 @@
-// src/components/ai/MathTutor.jsx - COMPLETE WITH IMAGE UPLOAD
+// src/components/ai/MathTutor.jsx - COMPLETE WITH VOICE SUPPORT 🎤🔊
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -6,14 +6,13 @@ import {
     Loader2, Lightbulb, CheckCircle2, XCircle, ArrowLeft,
     Trophy, Star, Zap, Flame, Clock, BarChart3, Award, Play,
     AlertCircle, RefreshCw, TrendingUp, MessageCircle, X, LineChart, Box,
-    Camera, Upload
+    Camera, Upload, Mic, Volume2, VolumeX
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 import { getUserGradeId, getGradeConfig, getSubtopics } from '../../config/israeliCurriculum';
 import toast from 'react-hot-toast';
 import { aiVerification } from '../../services/aiAnswerVerification';
-import axios from 'axios'; // 📊 CURRICULUM TRACKING
-// 🔥 NOTEBOOK INTEGRATION
+import axios from 'axios';
 import notebookAPI from '../../services/notebookService';
 import {
     LineChart as RechartsLineChart,
@@ -36,7 +35,102 @@ import {
 
 const API_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 
+// ==================== 🎤 VOICE SUPPORT HOOK ====================
+const useVoiceSupport = () => {
+    const [isListening, setIsListening] = useState(false);
+    const [isSpeaking, setIsSpeaking] = useState(false);
+    const [voiceEnabled, setVoiceEnabled] = useState(true);
+    const recognitionRef = useRef(null);
+    const synthRef = useRef(window.speechSynthesis);
 
+    useEffect(() => {
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognitionRef.current = new SpeechRecognition();
+            recognitionRef.current.continuous = false;
+            recognitionRef.current.interimResults = false;
+            recognitionRef.current.lang = 'he-IL';
+        }
+
+        return () => {
+            if (recognitionRef.current) recognitionRef.current.stop();
+            synthRef.current.cancel();
+        };
+    }, []);
+
+    const speak = (text) => {
+        if (!voiceEnabled || !text) return;
+        synthRef.current.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'he-IL';
+        utterance.rate = 0.9;
+        utterance.pitch = 1;
+        utterance.onstart = () => setIsSpeaking(true);
+        utterance.onend = () => setIsSpeaking(false);
+        utterance.onerror = () => setIsSpeaking(false);
+        synthRef.current.speak(utterance);
+    };
+
+    const stopSpeaking = () => {
+        synthRef.current.cancel();
+        setIsSpeaking(false);
+    };
+
+    const startListening = (onResult, onError) => {
+        if (!recognitionRef.current) {
+            toast.error('הדפדפן לא תומך בזיהוי קול');
+            return;
+        }
+
+        setIsListening(true);
+
+        recognitionRef.current.onresult = (event) => {
+            const transcript = event.results[0][0].transcript;
+            onResult(transcript);
+            setIsListening(false);
+        };
+
+        recognitionRef.current.onerror = (event) => {
+            console.error('Speech recognition error:', event.error);
+            if (onError) onError(event.error);
+            setIsListening(false);
+        };
+
+        recognitionRef.current.onend = () => setIsListening(false);
+
+        try {
+            recognitionRef.current.start();
+            toast.success('מקשיב... דבר עכשיו 🎤');
+        } catch (error) {
+            console.error('Error starting recognition:', error);
+            setIsListening(false);
+        }
+    };
+
+    const stopListening = () => {
+        if (recognitionRef.current) recognitionRef.current.stop();
+        setIsListening(false);
+    };
+
+    const toggleVoice = () => {
+        setVoiceEnabled(prev => {
+            if (prev) synthRef.current.cancel();
+            toast.success(prev ? '🔇 קול כובה' : '🔊 קול הופעל');
+            return !prev;
+        });
+    };
+
+    return {
+        isListening,
+        isSpeaking,
+        voiceEnabled,
+        speak,
+        stopSpeaking,
+        startListening,
+        stopListening,
+        toggleVoice
+    };
+};
 // ==================== 📊 CURRICULUM TRACKING FUNCTION ====================
 const trackCurriculumProgress = async (userId, exerciseData) => {
     if (!userId) {
@@ -578,6 +672,7 @@ const VisualGraph = ({ visualData }) => {
 };
 
 // ==================== AI CHAT SIDEBAR ====================
+// ==================== AI CHAT SIDEBAR ====================
 const AIChatSidebar = ({ question, studentProfile, isOpen, onToggle, currentAnswer }) => {
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
@@ -813,14 +908,34 @@ const MathTutor = ({
 
 
     const [view, setView] = useState(() => {
-        // Skip to practice if we have topic/mode from dashboard
-        if (propSelectedTopic || propMode) {
+        console.log('🔍 INITIAL VIEW DECISION:', {
+            propMode,
+            propSelectedTopic,
+            propSelectedSubtopic,
+            propTopicId
+        });
+
+        // If coming from dashboard with specific mode (random, adaptive, etc), go straight to practice
+        if (propMode && propMode !== 'normal') {
+            console.log('✅ Going to PRACTICE (special mode)');
             return 'practice';
+        }
+        // If coming with topic AND subtopic, go to practice
+        if (propSelectedTopic && propSelectedSubtopic) {
+            console.log('✅ Going to PRACTICE (topic + subtopic)');
+            return 'practice';
+        }
+        // If coming with just a topic, go to subtopic-select so user can choose "Learn First" or practice
+        if (propSelectedTopic) {
+            console.log('✅ Going to SUBTOPIC-SELECT (topic only)');
+            return 'subtopic-select';
         }
         // Backward compatibility
         if (propTopicId) {
+            console.log('✅ Going to SUBTOPIC-SELECT (topicId)');
             return 'subtopic-select';
         }
+        console.log('✅ Going to HOME (no props)');
         return 'home';
     });
 
@@ -847,6 +962,9 @@ const MathTutor = ({
     const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
     const [imageAnalysisResult, setImageAnalysisResult] = useState(null);
     const fileInputRef = useRef(null);
+
+    // 🎤 VOICE SUPPORT
+    const voice = useVoiceSupport();
 
     const autoCheckTimerRef = useRef(null);
     const lastCheckedAnswerRef = useRef('');
@@ -918,14 +1036,16 @@ const MathTutor = ({
     }, [propTopicId, availableTopics, selectedTopic, gradeId]);
 
     useEffect(() => {
-        if (view === 'practice' && !currentQuestion && (propSelectedTopic || propMode)) {
-            console.log('🚀 Auto-starting practice from dashboard props');
+        // Auto-start practice ONLY for special modes (random, adaptive, weakness)
+        // NOT for normal topic selection (they should choose "Learn First" or practice manually)
+        if (view === 'practice' && !currentQuestion && propMode && propMode !== 'normal') {
+            console.log('🚀 Auto-starting practice from dashboard props with mode:', propMode);
 
             let topicToUse = propSelectedTopic;
             let subtopicToUse = propSelectedSubtopic;
 
             // For modes without specific topic, pick random topic
-            if (!topicToUse && propMode && availableTopics.length > 0) {
+            if (!topicToUse && availableTopics.length > 0) {
                 if (propMode === 'random' || propMode === 'ai-adaptive') {
                     // Pick random topic
                     const randomIndex = Math.floor(Math.random() * availableTopics.length);
@@ -958,7 +1078,7 @@ const MathTutor = ({
                 startPractice(topicToUse, subtopicToUse);
             }, 100);
         }
-    }, [view, propSelectedTopic, propSelectedSubtopic, propMode, availableTopics]);
+    }, [view, propMode, availableTopics]);
 
     useEffect(() => {
         if (isTimerRunning) {
@@ -970,6 +1090,25 @@ const MathTutor = ({
             if (timerRef.current) clearInterval(timerRef.current);
         };
     }, [isTimerRunning]);
+
+    // 🎤 Auto-read questions when they load
+    useEffect(() => {
+        if (currentQuestion && voice.voiceEnabled) {
+            setTimeout(() => {
+                voice.speak(currentQuestion.question);
+            }, 500);
+        }
+    }, [currentQuestion]);
+
+    // 🎤 Auto-read feedback when received
+    useEffect(() => {
+        if (finalFeedback && voice.voiceEnabled) {
+            const feedbackText = finalFeedback.isCorrect
+                ? `מעולה! התשובה נכונה. ${finalFeedback.feedback || ''}`
+                : `התשובה לא נכונה. ${finalFeedback.feedback || ''}`;
+            voice.speak(feedbackText);
+        }
+    }, [finalFeedback]);
 
     useEffect(() => {
         if (!userAnswer.trim() || finalFeedback?.isCorrect) {
@@ -1648,6 +1787,26 @@ const MathTutor = ({
                     {subtopics.length > 0 ? (
                         <>
                             <h2 className="text-2xl font-black text-gray-800 mb-6">בחר תת-נושא:</h2>
+
+                            {/* LEARNING SPACE BUTTON */}
+                            <motion.button
+                                initial={{ opacity: 0, scale: 0.9 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                whileHover={{ scale: 1.03 }}
+                                whileTap={{ scale: 0.97 }}
+                                onClick={() => setView('learning-space')}
+                                className="w-full bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-2xl p-6 shadow-xl hover:shadow-2xl transition-all mb-6"
+                            >
+                                <div className="flex items-center justify-center gap-4">
+                                    <BookOpen className="w-8 h-8" />
+                                    <div>
+                                        <h3 className="text-2xl font-black mb-1">📚 למד תחילה</h3>
+                                        <p className="text-white/90 text-sm">למד את החומר עם הסברים ודוגמאות לפני התרגול</p>
+                                    </div>
+                                    <Sparkles className="w-8 h-8" />
+                                </div>
+                            </motion.button>
+
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <motion.button initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={() => startPractice(selectedTopic, null)} className="bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-2xl p-6 shadow-xl hover:shadow-2xl transition-all">
                                     <div className="flex items-center gap-4">
@@ -1681,6 +1840,188 @@ const MathTutor = ({
                             <Sparkles className="w-8 h-8" />
                         </motion.button>
                     )}
+                </div>
+            </div>
+        );
+    }
+
+    // ==================== VIEW: LEARNING SPACE ====================
+    if (view === 'learning-space' && selectedTopic) {
+        const subtopics = getSubtopics(gradeId, selectedTopic.id);
+
+        return (
+            <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 p-4" dir="rtl">
+                <div className="max-w-5xl mx-auto">
+                    {/* Header */}
+                    <div className="flex items-center justify-between mb-8">
+                        <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => setView('subtopic-select')}
+                            className="flex items-center gap-2 text-blue-600 hover:text-blue-700 font-bold bg-white px-6 py-3 rounded-2xl shadow-lg"
+                        >
+                            <ArrowLeft className="w-5 h-5" />
+                            חזרה לבחירת נושאים
+                        </motion.button>
+
+                        <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => startPractice(selectedTopic, null)}
+                            className="flex items-center gap-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white px-6 py-3 rounded-2xl font-bold shadow-lg hover:shadow-xl"
+                        >
+                            <Target className="w-5 h-5" />
+                            עבור לתרגול
+                        </motion.button>
+                    </div>
+
+                    {/* Title */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-3xl p-8 mb-8 shadow-2xl"
+                    >
+                        <div className="flex items-center gap-4 text-white">
+                            <div className="text-6xl">{selectedTopic.icon}</div>
+                            <div className="flex-1">
+                                <h1 className="text-4xl font-black mb-2">📚 מרחב למידה: {selectedTopic.name}</h1>
+                                <p className="text-white/90 text-lg">למד את החומר בצורה מעניינת עם דוגמאות ותרגילים</p>
+                            </div>
+                        </div>
+                    </motion.div>
+
+                    {/* Learning Sections */}
+                    <div className="space-y-6">
+                        {subtopics.length > 0 ? (
+                            subtopics.map((subtopic, index) => (
+                                <motion.div
+                                    key={subtopic.id}
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: index * 0.1 }}
+                                    className="bg-white rounded-3xl shadow-xl overflow-hidden border-2 border-blue-200"
+                                >
+                                    {/* Section Header */}
+                                    <div className="bg-gradient-to-r from-blue-500 to-indigo-500 p-6">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center text-2xl font-black text-white">
+                                                {index + 1}
+                                            </div>
+                                            <div className="flex-1">
+                                                <h2 className="text-2xl font-black text-white">{subtopic.name}</h2>
+                                                {subtopic.nameEn && <p className="text-white/80">{subtopic.nameEn}</p>}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Explanation Section */}
+                                    <div className="p-8">
+                                        <div className="mb-6">
+                                            <div className="flex items-center gap-3 mb-4">
+                                                <Lightbulb className="w-6 h-6 text-yellow-500" />
+                                                <h3 className="text-xl font-bold text-gray-800">💡 הסבר</h3>
+                                            </div>
+                                            <div className="bg-blue-50 rounded-2xl p-6 text-gray-700 text-lg leading-relaxed">
+                                                <p className="mb-4">
+                                                    {subtopic.name === 'פיתגורס' && 'משפט פיתגורס הוא אחד הכלים החשובים בגאומטריה! הוא עוזר לנו למצוא את אורך הצלעות במשולש ישר-זווית.'}
+                                                    {subtopic.name === 'שטח משולש' && 'שטח המשולש הוא הגודל של המשטח שהמשולש תופס. זה כמו לשאול - כמה אריחים קטנים צריך כדי לכסות את המשולש?'}
+                                                    {subtopic.name === 'היקף משולש' && 'היקף המשולש הוא סך כל אורכי הצלעות. זה כמו ללכת סביב המשולש ולמדוד את כל הדרך!'}
+                                                    {!['פיתגורס', 'שטח משולש', 'היקף משולש'].includes(subtopic.name) && `${subtopic.name} הוא נושא מרכזי במתמטיקה. בואו נלמד אותו יחד צעד אחר צעד!`}
+                                                </p>
+                                                <div className="bg-white rounded-xl p-4 border-2 border-blue-300">
+                                                    <p className="font-bold text-blue-700 mb-2">🎯 הנוסחה:</p>
+                                                    <p className="text-2xl font-black text-center text-blue-900">
+                                                        {subtopic.name === 'פיתגורס' && 'a² + b² = c²'}
+                                                        {subtopic.name === 'שטח משולש' && 'שטח = (בסיס × גובה) ÷ 2'}
+                                                        {subtopic.name === 'היקף משולש' && 'היקף = a + b + c'}
+                                                        {!['פיתגורס', 'שטח משולש', 'היקף משולש'].includes(subtopic.name) && 'נוסחה בהסבר'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Example Section */}
+                                        <div className="mb-6">
+                                            <div className="flex items-center gap-3 mb-4">
+                                                <Star className="w-6 h-6 text-yellow-500" />
+                                                <h3 className="text-xl font-bold text-gray-800">⭐ דוגמה</h3>
+                                            </div>
+                                            <div className="bg-yellow-50 rounded-2xl p-6">
+                                                <p className="text-gray-700 text-lg mb-3">
+                                                    {subtopic.name === 'פיתגורס' && '📐 משולש עם צלעות a=3 ס"מ, b=4 ס"מ. מה אורך c?'}
+                                                    {subtopic.name === 'שטח משולש' && '📐 משולש עם בסיס 8 ס"מ וגובה 5 ס"מ. מה השטח?'}
+                                                    {subtopic.name === 'היקף משולש' && '📐 משולש עם צלעות 5 ס"מ, 7 ס"מ, 9 ס"מ. מה ההיקף?'}
+                                                    {!['פיתגורס', 'שטח משולש', 'היקף משולש'].includes(subtopic.name) && '📐 דוגמה לנושא זה'}
+                                                </p>
+                                                <div className="bg-white rounded-xl p-4 border-2 border-yellow-400">
+                                                    <p className="font-bold text-yellow-700 mb-2">✅ פתרון:</p>
+                                                    <div className="text-gray-800 space-y-2">
+                                                        {subtopic.name === 'פיתגורס' && (
+                                                            <>
+                                                                <p>1. נציב בנוסחה: 3² + 4² = c²</p>
+                                                                <p>2. נחשב: 9 + 16 = c²</p>
+                                                                <p>3. נקבל: 25 = c²</p>
+                                                                <p className="font-bold text-green-600">4. תשובה: c = 5 ס"מ ✨</p>
+                                                            </>
+                                                        )}
+                                                        {subtopic.name === 'שטח משולש' && (
+                                                            <>
+                                                                <p>1. נציב בנוסחה: (8 × 5) ÷ 2</p>
+                                                                <p>2. נכפול: 40 ÷ 2</p>
+                                                                <p className="font-bold text-green-600">3. תשובה: שטח = 20 סמ"ר ✨</p>
+                                                            </>
+                                                        )}
+                                                        {subtopic.name === 'היקף משולש' && (
+                                                            <>
+                                                                <p>1. נחבר את כל הצלעות: 5 + 7 + 9</p>
+                                                                <p className="font-bold text-green-600">2. תשובה: היקף = 21 ס"מ ✨</p>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Practice Button */}
+                                        <motion.button
+                                            whileHover={{ scale: 1.02 }}
+                                            whileTap={{ scale: 0.98 }}
+                                            onClick={() => startPractice(selectedTopic, subtopic)}
+                                            className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-2xl py-5 font-bold text-lg shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-3"
+                                        >
+                                            <Target className="w-6 h-6" />
+                                            תרגל את {subtopic.name}
+                                            <ChevronRight className="w-6 h-6" />
+                                        </motion.button>
+                                    </div>
+                                </motion.div>
+                            ))
+                        ) : (
+                            // No subtopics - general topic explanation
+                            <motion.div
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className="bg-white rounded-3xl shadow-xl p-8"
+                            >
+                                <div className="text-center mb-6">
+                                    <div className="text-6xl mb-4">{selectedTopic.icon}</div>
+                                    <h2 className="text-3xl font-black text-gray-800 mb-4">למד את {selectedTopic.name}</h2>
+                                    <p className="text-gray-600 text-lg">נושא מרכזי במתמטיקה - בואו נתרגל!</p>
+                                </div>
+
+                                <motion.button
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    onClick={() => startPractice(selectedTopic, null)}
+                                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-3xl py-6 font-black text-2xl shadow-2xl hover:shadow-3xl transition-all flex items-center justify-center gap-4"
+                                >
+                                    <Play className="w-8 h-8" />
+                                    התחל תרגול
+                                    <Sparkles className="w-8 h-8" />
+                                </motion.button>
+                            </motion.div>
+                        )}
+                    </div>
                 </div>
             </div>
         );
@@ -1891,7 +2232,7 @@ const MathTutor = ({
                                     {/* 🔥 ANSWER INPUT SECTION WITH IMAGE UPLOAD */}
                                     {!finalFeedback && (
                                         <div className="space-y-4">
-                                            {/* Text Input */}
+                                            {/* Text Input with Voice */}
                                             <div className="relative">
                                                 <input
                                                     ref={inputRef}
@@ -1900,8 +2241,28 @@ const MathTutor = ({
                                                     onChange={(e) => setUserAnswer(e.target.value)}
                                                     onKeyPress={(e) => e.key === 'Enter' && submitAnswer()}
                                                     placeholder="כתוב/י את התשובה... ✍️"
-                                                    className="w-full px-8 py-5 pr-32 text-2xl border-4 border-purple-300 rounded-3xl focus:ring-4 focus:ring-purple-200 focus:border-purple-400 transition-all font-bold"
+                                                    className="w-full px-8 py-5 pr-20 text-2xl border-4 border-purple-300 rounded-3xl focus:ring-4 focus:ring-purple-200 focus:border-purple-400 transition-all font-bold"
                                                 />
+                                                {/* 🎤 Voice Input Button */}
+                                                <motion.button
+                                                    whileHover={{ scale: 1.1 }}
+                                                    whileTap={{ scale: 0.9 }}
+                                                    onClick={() => voice.startListening(
+                                                        (transcript) => {
+                                                            setUserAnswer(transcript);
+                                                            toast.success('התשובה הוקלדה! 📝');
+                                                        },
+                                                        (error) => toast.error('שגיאה בזיהוי הקול, נסה שוב')
+                                                    )}
+                                                    disabled={voice.isListening}
+                                                    className={`absolute left-4 top-1/2 -translate-y-1/2 p-3 rounded-full ${
+                                                        voice.isListening
+                                                            ? 'bg-red-500 animate-pulse'
+                                                            : 'bg-gradient-to-r from-purple-500 to-pink-500 hover:shadow-lg'
+                                                    } text-white transition-all disabled:opacity-50`}
+                                                >
+                                                    <Mic className={`w-6 h-6 ${voice.isListening ? 'animate-bounce' : ''}`} />
+                                                </motion.button>
                                                 <LiveFeedbackIndicator status={feedbackStatus} />
                                             </div>
 
@@ -1975,6 +2336,32 @@ const MathTutor = ({
                                                         </button>
                                                     </div>
                                                 )}
+                                            </div>
+
+                                            {/* 🎤 Voice Control Button */}
+                                            <div className="flex justify-end mb-4">
+                                                <motion.button
+                                                    whileHover={{ scale: 1.05 }}
+                                                    whileTap={{ scale: 0.95 }}
+                                                    onClick={voice.toggleVoice}
+                                                    className={`flex items-center gap-2 px-4 py-3 rounded-2xl font-bold transition-all shadow-lg ${
+                                                        voice.voiceEnabled
+                                                            ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white'
+                                                            : 'bg-gray-200 text-gray-600'
+                                                    }`}
+                                                >
+                                                    {voice.voiceEnabled ? (
+                                                        <>
+                                                            <Volume2 className="w-5 h-5" />
+                                                            קול פעיל 🔊
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <VolumeX className="w-5 h-5" />
+                                                            קול כבוי 🔇
+                                                        </>
+                                                    )}
+                                                </motion.button>
                                             </div>
 
                                             {/* Regular Action Buttons */}
@@ -2113,5 +2500,6 @@ const MathTutor = ({
 
     return null;
 };
+
 
 export default MathTutor;
