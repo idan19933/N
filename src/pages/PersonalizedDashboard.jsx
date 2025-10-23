@@ -108,6 +108,31 @@ const PersonalizedDashboard = () => {
     };
 
     const handleQuickStart = (topic, subtopic = null, mode = 'normal', showLearningFirst = false) => {
+        // If no topic provided (for random/ai-adaptive/weakness modes), select one
+        if (!topic) {
+            if (mode === 'random' || mode === 'ai-adaptive') {
+                // Select random topic from all available topics
+                if (availableTopics.length === 0) {
+                    toast.error('אין נושאים זמינים');
+                    return;
+                }
+                topic = availableTopics[Math.floor(Math.random() * availableTopics.length)];
+                console.log('🎲 Selected random topic:', topic.name);
+            } else if (mode === 'weakness-only') {
+                // Select from weakness topics
+                if (weaknessTopics.length === 0) {
+                    toast.error('אין נושאים לחיזוק כרגע - נבחר נושא אקראי');
+                    topic = availableTopics[Math.floor(Math.random() * availableTopics.length)];
+                } else {
+                    topic = weaknessTopics[Math.floor(Math.random() * weaknessTopics.length)];
+                    console.log('🎯 Selected weakness topic:', topic.name);
+                }
+            } else {
+                toast.error('חסר נושא לתרגול');
+                return;
+            }
+        }
+
         console.log('🚀 Dashboard launching:', {
             topic: topic?.name,
             subtopic: subtopic?.name,

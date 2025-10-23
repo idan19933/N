@@ -1010,7 +1010,7 @@ const MathTutor = ({
                 console.log('✅ Found topic:', topic);
                 setSelectedTopic(topic);
 
-                const subtopics = getSubtopics(gradeId, topic.id);
+                const subtopics = getSubtopics(gradeId, topic.id) || [];
                 console.log('📚 Subtopics:', subtopics.length);
 
                 if (subtopics.length === 0) {
@@ -1651,7 +1651,7 @@ const MathTutor = ({
         if (onClose) {
             handleExitPractice();
         } else if (view === 'practice') {
-            const subtopics = getSubtopics(gradeId, selectedTopic?.id);
+            const subtopics = getSubtopics(gradeId, selectedTopic?.id) || [];
             if (subtopics.length > 0) {
                 setView('subtopic-select');
             } else {
@@ -1729,7 +1729,7 @@ const MathTutor = ({
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {availableTopics.map((topic, index) => {
-                            const subtopics = getSubtopics(gradeId, topic.id);
+                            const subtopics = getSubtopics(gradeId, topic.id) || [];
                             const hasSubtopics = subtopics.length > 0;
 
                             return (
@@ -1762,7 +1762,7 @@ const MathTutor = ({
 
     // ==================== VIEW: SUBTOPIC SELECT ====================
     if (view === 'subtopic-select' && selectedTopic) {
-        const subtopics = getSubtopics(gradeId, selectedTopic.id);
+        const subtopics = getSubtopics(gradeId, selectedTopic.id) || [];
 
         return (
             <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50 p-4" dir="rtl">
@@ -1847,7 +1847,7 @@ const MathTutor = ({
 
     // ==================== VIEW: LEARNING SPACE ====================
     if (view === 'learning-space' && selectedTopic) {
-        const subtopics = getSubtopics(gradeId, selectedTopic.id);
+        const subtopics = getSubtopics(gradeId, selectedTopic.id) || [];
 
         return (
             <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 p-4" dir="rtl">
