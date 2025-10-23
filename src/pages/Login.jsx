@@ -1,4 +1,4 @@
-// src/pages/Login.jsx - COMPLETE FIXED VERSION
+// src/pages/Login.jsx - FIXED VERSION (no infinite render)
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -7,7 +7,8 @@ import useAuthStore from '../store/authStore';
 import toast from 'react-hot-toast';
 
 const Login = () => {
-    console.log('🔐 Login component rendering');
+    // 🔥 REMOVED: console.log('🔐 Login component rendering');
+    // This was causing infinite logs and making debugging harder
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -19,26 +20,23 @@ const Login = () => {
     // Redirect if already logged in
     useEffect(() => {
         if (isAuthenticated) {
-            console.log('🔐 Already authenticated in Login - redirecting to dashboard');
+            console.log('✅ Already authenticated - redirecting to dashboard');
             navigate('/dashboard', { replace: true });
         }
     }, [isAuthenticated, navigate]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        console.log('🔐 Login form submitted:', email);
+        console.log('🔐 Login attempt:', email);
         setLoading(true);
 
         const result = await login(email, password);
-        console.log('🔐 Login result:', result);
 
         if (result.success) {
             toast.success('Welcome back! 🎉');
-            console.log('🔐 Login successful - about to navigate');
-
+            console.log('✅ Login successful');
             // Small delay to ensure state updates
             setTimeout(() => {
-                console.log('🚀 Navigating to /dashboard');
                 navigate('/dashboard', { replace: true });
             }, 100);
         } else {

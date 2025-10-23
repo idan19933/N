@@ -12,6 +12,8 @@ import useAuthStore from '../../store/authStore';
 import { getUserGradeId, getGradeConfig, getSubtopics } from '../../config/israeliCurriculum';
 import toast from 'react-hot-toast';
 import { aiVerification } from '../../services/aiAnswerVerification';
+// 🔥 NOTEBOOK INTEGRATION
+import notebookAPI from '../../services/notebookService';
 import {
     LineChart as RechartsLineChart,
     Line,
@@ -32,6 +34,41 @@ import {
 } from 'recharts';
 
 const API_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+
+// ==================== NOTEBOOK SAVE FUNCTION ====================
+const saveExerciseToNotebook = async (userId, exerciseData) => {
+    if (!userId) {
+        console.warn('⚠️ No user ID - skipping notebook save');
+        return { success: false };
+    }
+
+    try {
+        console.log('📝 Saving to notebook:', {
+            userId,
+            isCorrect: exerciseData.isCorrect,
+            topic: exerciseData.topic
+        });
+
+        const result = await notebookAPI.saveExercise(userId, {
+            question: exerciseData.question,
+            answer: exerciseData.correctAnswer,
+            studentAnswer: exerciseData.userAnswer,
+            isCorrect: exerciseData.isCorrect,
+            topic: exerciseData.topic || 'כללי',
+            subtopic: exerciseData.subtopic || ''
+        });
+
+        if (result.success) {
+            console.log('✅ Saved to notebook');
+        }
+
+        return result;
+    } catch (error) {
+        console.error('❌ Notebook save error:', error);
+        return { success: false };
+    }
+};
+
 
 // ==================== MATH FORMATTER UTILITY ====================
 const formatMathText = (text) => {
@@ -713,6 +750,18 @@ const MathTutor = ({ topicId: propTopicId, gradeId: propGradeId, onClose }) => {
     const user = useAuthStore(state => state.user);
     const nexonProfile = useAuthStore(state => state.nexonProfile);
 
+    // 🔥 HELPER: Get user ID as integer for database
+    const getUserId = () => {
+        if (!user) return null;
+        // Try different possible ID fields
+        const id = user.id || user.uid || user.userId || user.student_id;
+        if (!id) return null;
+        // Convert to integer
+        const numId = parseInt(id);
+        return isNaN(numId) ? null : numId;
+    };
+
+
     const [view, setView] = useState(() => {
         if (propTopicId) {
             return 'subtopic-select';
@@ -941,6 +990,19 @@ const MathTutor = ({ topicId: propTopicId, gradeId: propGradeId, onClose }) => {
 
             console.log('✅ Analysis received:', data.analysis);
             setImageAnalysisResult(data.analysis);
+
+            // 🔥 SAVE TO NOTEBOOK
+            const userId = getUserId();
+            if (userId) {
+                await saveExerciseToNotebook(userId, {
+                    question: currentQuestion.question,
+                    correctAnswer: currentQuestion.correctAnswer,
+                    userAnswer: data.analysis.detectedAnswer || 'תשובה מתמונה',
+                    isCorrect: data.analysis.isCorrect,
+                    topic: selectedTopic?.name || 'כללי',
+                    subtopic: selectedSubtopic?.name || ''
+                });
+            }
 
             // Update stats if correct
             if (data.analysis.isCorrect) {
@@ -1200,6 +1262,19 @@ const MathTutor = ({ topicId: propTopicId, gradeId: propGradeId, onClose }) => {
 
         const isCorrect = result.isCorrect;
 
+        // 🔥 SAVE TO NOTEBOOK
+        const userId = getUserId();
+        if (userId) {
+            await saveExerciseToNotebook(userId, {
+                question: currentQuestion.question,
+                correctAnswer: currentQuestion.correctAnswer,
+                userAnswer: userAnswer,
+                isCorrect: isCorrect,
+                topic: selectedTopic?.name || 'כללי',
+                subtopic: selectedSubtopic?.name || ''
+            });
+        }
+
         let pointsEarned = 0;
         if (isCorrect) {
             if (attemptCount === 0) {
@@ -1295,9 +1370,17 @@ const MathTutor = ({ topicId: propTopicId, gradeId: propGradeId, onClose }) => {
         setIsTimerRunning(false);
     };
 
+    const handleExitPractice = () => {
+        const confirmed = window.confirm('האם אתה בטוח שברצונך לצאת מהתרגול?');
+        if (confirmed && onClose) {
+            console.log('🔙 User confirmed exit');
+            onClose();
+        }
+    };
+
     const handleBackNavigation = () => {
         if (onClose) {
-            onClose();
+            handleExitPractice();
         } else if (view === 'practice') {
             const subtopics = getSubtopics(gradeId, selectedTopic?.id);
             if (subtopics.length > 0) {
@@ -1877,7 +1960,7 @@ const MathTutor = ({ topicId: propTopicId, gradeId: propGradeId, onClose }) => {
 
                         <button onClick={() => {
                             if (onClose) {
-                                onClose();
+                                handleExitPractice();
                             } else {
                                 setView('topic-select');
                                 setSelectedTopic(null);

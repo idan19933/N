@@ -1,4 +1,4 @@
-// src/store/authStore.js - COMPLETE FIXED VERSION
+// src/store/authStore.js - WITH DATABASE ID MAPPING
 import { create } from 'zustand';
 import {
     signInWithEmailAndPassword,
@@ -10,6 +10,31 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
 import { profileService } from '../services/profileService';
 
+// 🔥 HELPER: Fetch database ID from Firebase UID
+const fetchDatabaseUserId = async (firebaseUid) => {
+    try {
+        const API_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+        console.log(`🔍 Fetching database ID for Firebase UID: ${firebaseUid}`);
+
+        const response = await fetch(`${API_URL}/api/users/db-id/${firebaseUid}`);
+        const data = await response.json();
+
+        if (data.success) {
+            console.log(`✅ Database ID: ${data.userId} for Firebase UID: ${firebaseUid}`);
+            return data.userId;
+        }
+
+        console.warn('⚠️ No database user found for Firebase UID:', firebaseUid);
+        return null;
+    } catch (error) {
+        console.error('❌ Error fetching DB user ID:', error);
+        return null;
+    }
+};
+
+// 🔥 CRITICAL FIX: Add debounce helper
+let checkOnboardingTimeout = null;
+
 const useAuthStore = create((set, get) => ({
     user: null,
     isAuthenticated: false,
@@ -17,38 +42,43 @@ const useAuthStore = create((set, get) => ({
     loading: false,
     sessionValid: false,
 
-    // Nexon-enhanced profile
     studentProfile: null,
     needsOnboarding: false,
     onboardingComplete: false,
     nexonProfile: null,
 
+    // 🔥 FIX: Prevent concurrent execution
+    _checkingOnboarding: false,
+
     initAuth: () => {
-        console.log('🔧 initAuth: Setting up auth listener with Nexon support...');
+        console.log('🔧 initAuth: Setting up auth listener...');
 
         onAuthStateChanged(auth, async (firebaseUser) => {
-            console.log('👤 onAuthStateChanged triggered:', firebaseUser?.email || 'no user');
+            console.log('👤 Auth state changed:', firebaseUser?.email || 'logged out');
 
             if (firebaseUser) {
                 try {
-                    console.log('📄 Fetching user document from Firestore...');
                     const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
 
                     if (!userDoc.exists()) {
-                        console.error('❌ User document NOT FOUND in Firestore!');
+                        console.error('❌ User document not found');
                         return;
                     }
 
                     const userData = userDoc.data();
-                    console.log('✅ User document loaded:', userData);
+
+                    // 🔥 FETCH DATABASE ID
+                    const dbId = await fetchDatabaseUserId(firebaseUser.uid);
 
                     const userObj = {
                         uid: firebaseUser.uid,
+                        id: dbId,  // ← Database ID (integer)
                         email: firebaseUser.email,
                         displayName: firebaseUser.displayName || userData.displayName,
                         ...userData
                     };
 
+                    // 🔥 FIX: Single set() call with all updates
                     set({
                         user: userObj,
                         isAuthenticated: true,
@@ -57,20 +87,24 @@ const useAuthStore = create((set, get) => ({
                         loading: false
                     });
 
-                    console.log('📊 User state set:', {
-                        email: userObj.email,
-                        role: userData?.role,
-                        isAdmin: userData?.role === 'admin'
-                    });
+                    console.log('✅ User state set with DB ID:', dbId);
 
-                    console.log('🔍 Calling checkOnboarding...');
-                    await get().checkOnboarding();
+                    // 🔥 FIX: Debounce the onboarding check
+                    if (checkOnboardingTimeout) {
+                        clearTimeout(checkOnboardingTimeout);
+                    }
+
+                    checkOnboardingTimeout = setTimeout(() => {
+                        console.log('🔍 Running checkOnboarding (debounced)');
+                        get().checkOnboarding();
+                    }, 300);
 
                 } catch (error) {
-                    console.error('❌ Error in onAuthStateChanged:', error);
+                    console.error('❌ Error in auth listener:', error);
+                    set({ loading: false });
                 }
             } else {
-                console.log('🚪 No user - clearing state');
+                // 🔥 FIX: Single set() call for logout
                 set({
                     user: null,
                     isAuthenticated: false,
@@ -80,7 +114,8 @@ const useAuthStore = create((set, get) => ({
                     studentProfile: null,
                     nexonProfile: null,
                     needsOnboarding: false,
-                    onboardingComplete: false
+                    onboardingComplete: false,
+                    _checkingOnboarding: false
                 });
             }
         });
@@ -88,102 +123,85 @@ const useAuthStore = create((set, get) => ({
 
     checkOnboarding: async () => {
         const state = get();
-        const user = state.user;
 
-        if (!user) {
-            console.log('⚠️ No user - skipping onboarding check');
+        // 🔥 FIX: Prevent concurrent calls
+        if (state._checkingOnboarding) {
+            console.log('⏭️ checkOnboarding already running, skipping');
             return;
         }
 
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('🔍 CHECKING ONBOARDING (Nexon Enhanced)');
-        console.log('   User:', user.email);
-        console.log('   UID:', user.uid);
-        console.log('   Role:', user.role);
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        const user = state.user;
+        if (!user) {
+            console.log('⚠️ No user, skipping onboarding check');
+            return;
+        }
 
-        // Admins skip onboarding
+        console.log('━━━ CHECKING ONBOARDING ━━━');
+
+        // 🔥 FIX: Set flag immediately
+        set({ _checkingOnboarding: true });
+
+        // Admin skip
         if (user.role === 'admin') {
-            console.log('👑 Admin user - SKIP onboarding');
+            console.log('👑 Admin - skip onboarding');
             set({
                 studentProfile: null,
                 nexonProfile: null,
                 needsOnboarding: false,
-                onboardingComplete: true
+                onboardingComplete: true,
+                _checkingOnboarding: false
             });
             return;
         }
 
         try {
-            console.log('📡 Fetching profile from Firestore...');
             const profile = await profileService.getProfile(user.uid);
 
-            console.log('📦 Profile retrieved:', profile);
-            console.log('   onboardingCompleted:', profile?.onboardingCompleted);
-            console.log('   grade:', profile?.grade);
-            console.log('   weakTopics:', profile?.weakTopics?.length || 0);
+            console.log('📦 Profile:', profile?.onboardingCompleted ? 'Complete' : 'Incomplete');
 
             if (profile && profile.onboardingCompleted) {
-                console.log('✅ ONBOARDING COMPLETED - User has valid profile');
-
-                // 🔥 FIX: Set BOTH studentProfile AND nexonProfile to the same object
+                // 🔥 FIX: Single set() call
                 set({
                     studentProfile: profile,
-                    nexonProfile: profile,  // ← This was missing!
+                    nexonProfile: profile,
                     onboardingComplete: true,
-                    needsOnboarding: false
+                    needsOnboarding: false,
+                    _checkingOnboarding: false
                 });
-
-                console.log('📊 State updated: needsOnboarding = false');
-                console.log('   ✅ Both studentProfile and nexonProfile set');
+                console.log('✅ Onboarding complete');
             } else {
-                console.log('⚠️ ONBOARDING NEEDED - No valid profile found');
+                // 🔥 FIX: Single set() call
                 set({
                     studentProfile: null,
                     nexonProfile: null,
                     onboardingComplete: false,
-                    needsOnboarding: true
+                    needsOnboarding: true,
+                    _checkingOnboarding: false
                 });
+                console.log('⚠️ Onboarding needed');
             }
 
-            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-            console.log('📊 FINAL STATE:');
-            console.log('   needsOnboarding:', get().needsOnboarding);
-            console.log('   onboardingComplete:', get().onboardingComplete);
-            console.log('   hasProfile:', !!get().studentProfile);
-            console.log('   hasNexonProfile:', !!get().nexonProfile);
-            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-
         } catch (error) {
-            console.error('❌ Error checking onboarding:', error);
+            console.error('❌ Onboarding check error:', error);
             set({
                 needsOnboarding: true,
-                onboardingComplete: false
+                onboardingComplete: false,
+                _checkingOnboarding: false
             });
         }
     },
 
     completeOnboarding: async (data) => {
         const user = get().user;
-        if (!user) throw new Error('No user logged in');
+        if (!user) throw new Error('No user');
 
         try {
-            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-            console.log('💾 COMPLETE ONBOARDING STARTING');
-            console.log('   User:', user.email);
-            console.log('   Input data:', data);
-            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-
-            // Build complete profile object
             const profileData = {
-                // User identification
                 uid: user.uid,
                 email: user.email,
                 displayName: user.displayName || data.name,
-
-                // Nexon onboarding data
                 name: data.name || user.displayName,
-                grade: data.grade,  // Already in 'grade7' format from onboarding
+                grade: data.grade,
                 gradeLevel: data.grade,
                 educationLevel: data.educationLevel || (parseInt(data.grade.replace('grade', '')) <= 9 ? 'middle' : 'high'),
                 track: data.track || 'standard',
@@ -192,105 +210,76 @@ const useAuthStore = create((set, get) => ({
                 goalFocus: data.goalFocus,
                 weakTopics: data.weakTopics || [],
                 strugglesText: data.strugglesText || '',
-
-                // Flags
                 onboardingCompleted: true,
                 nexonProfile: true,
                 role: 'user',
-
-                // Timestamps
                 createdAt: data.createdAt || new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
                 completedAt: new Date().toISOString()
             };
 
-            console.log('📝 Prepared profile data:', profileData);
-
-            // Save to Firestore - BOTH locations
-            console.log('💾 Saving to Firestore...');
+            // Save to Firestore
             const userRef = doc(db, 'users', user.uid);
             const profileRef = doc(db, 'studentProfiles', user.uid);
 
             await setDoc(userRef, profileData, { merge: true });
             await setDoc(profileRef, profileData, { merge: true });
 
-            console.log('✅ Profile saved to Firebase successfully');
-
-            // Update Zustand state - SET BOTH!
+            // 🔥 FIX: Single set() call
             set({
                 studentProfile: profileData,
-                nexonProfile: profileData,  // ← Set both to same object
+                nexonProfile: profileData,
                 onboardingComplete: true,
                 needsOnboarding: false
             });
 
-            console.log('✅ Local state updated');
-            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-
+            console.log('✅ Onboarding completed');
             return profileData;
         } catch (error) {
-            console.error('❌ Error in completeOnboarding:', error);
+            console.error('❌ completeOnboarding error:', error);
             throw error;
         }
     },
 
     login: async (email, password) => {
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('🔐 LOGIN STARTING');
-        console.log('   Email:', email);
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log('🔐 LOGIN:', email);
 
         try {
-            set({ loading: true });
-
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
-            console.log('✅ Firebase auth successful');
-            console.log('   UID:', userCredential.user.uid);
-
             const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
             const userData = userDoc.exists() ? userDoc.data() : {};
-            console.log('📄 User data loaded:', userData);
 
+            // 🔥 FETCH DATABASE ID
+            const dbId = await fetchDatabaseUserId(userCredential.user.uid);
+
+            // 🔥 FIX: Single set() call with database ID
             set({
                 user: {
                     uid: userCredential.user.uid,
+                    id: dbId,  // ← Database ID (integer)
                     email: userCredential.user.email,
                     displayName: userCredential.user.displayName || userData.displayName,
                     ...userData
                 },
                 isAuthenticated: true,
                 isAdmin: userData?.role === 'admin',
-                sessionValid: true,
-                loading: false
+                sessionValid: true
             });
 
-            console.log('🔍 Calling checkOnboarding after login...');
-            await get().checkOnboarding();
-
-            console.log('✅ Login complete');
-            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+            console.log('✅ Login successful with DB ID:', dbId);
             return { success: true };
 
         } catch (error) {
-            console.error('❌ Login failed:', error);
-            set({ loading: false });
+            console.error('❌ Login error:', error);
             return { success: false, error: error.message };
         }
     },
 
     register: async (email, password, displayName = '') => {
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('📝 REGISTRATION STARTING');
-        console.log('   Email:', email);
-        console.log('   Name:', displayName);
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log('📝 REGISTER:', email);
 
         try {
-            set({ loading: true });
-
             const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-            console.log('✅ Firebase user created');
-            console.log('   UID:', userCredential.user.uid);
 
             await setDoc(doc(db, 'users', userCredential.user.uid), {
                 email: email,
@@ -300,31 +289,29 @@ const useAuthStore = create((set, get) => ({
                 emailVerified: false,
                 onboardingCompleted: false
             });
-            console.log('📄 User document created in Firestore');
 
+            // 🔥 FETCH DATABASE ID (or create if not exists)
+            const dbId = await fetchDatabaseUserId(userCredential.user.uid);
+
+            // 🔥 FIX: Single set() call with database ID
             set({
                 user: {
                     uid: userCredential.user.uid,
+                    id: dbId,  // ← Database ID (integer)
                     email: userCredential.user.email,
                     displayName: displayName || email.split('@')[0],
                     role: 'user'
                 },
                 isAuthenticated: true,
                 isAdmin: false,
-                sessionValid: true,
-                loading: false
+                sessionValid: true
             });
 
-            console.log('🔍 Calling checkOnboarding after registration...');
-            await get().checkOnboarding();
-
-            console.log('✅ Registration complete');
-            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+            console.log('✅ Registration successful with DB ID:', dbId);
             return { success: true };
 
         } catch (error) {
-            console.error('❌ Registration failed:', error);
-            set({ loading: false });
+            console.error('❌ Registration error:', error);
             return { success: false, error: error.message };
         }
     },
@@ -343,7 +330,6 @@ const useAuthStore = create((set, get) => ({
                 needsOnboarding: false,
                 onboardingComplete: false
             });
-            console.log('✅ Logout successful');
             return { success: true };
         } catch (error) {
             console.error('❌ Logout error:', error);
@@ -351,7 +337,6 @@ const useAuthStore = create((set, get) => ({
         }
     },
 
-    // Helper methods
     getStudentGrade: () => {
         const state = get();
         return state.nexonProfile?.grade || state.studentProfile?.grade || 'grade7';
@@ -366,10 +351,8 @@ const useAuthStore = create((set, get) => ({
     getNexonLevel: () => {
         const nexonProfile = get().nexonProfile;
         if (!nexonProfile?.grade || !nexonProfile?.track) return 'intermediate';
-
         const grade = parseInt(nexonProfile.grade.replace('grade', ''));
         if (grade <= 9) return 'intermediate';
-
         if (nexonProfile.track.includes('5')) return 'advanced';
         if (nexonProfile.track.includes('4')) return 'intermediate';
         return 'beginner';

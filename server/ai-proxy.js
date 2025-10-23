@@ -11,6 +11,11 @@ import personalitySystem from './services/personalityLoader.js';
 import questionHistoryManager from './services/questionHistory.js';
 import SVGGenerator from './services/svgGenerator.js';
 import { bucket } from './config/firebase-admin.js';
+import nexonRoutes from './routes/nexonRoutes.js';
+import notebookService from './services/notebookService.js';
+import notebookRoutes from './routes/notebookRoutes.js';
+import userRoutes from './routes/userRoutes.js';
+
 import ISRAELI_CURRICULUM, {
     getGradeConfig,
     getReformNotes,
@@ -1257,65 +1262,101 @@ app.post('/api/ai/generate-question', async (req, res) => {
     }
 });
 // ==================== VERIFY ANSWER ====================
+
+
+// Replace your existing endpoint with this:
 app.post('/api/ai/verify-answer', async (req, res) => {
     try {
-        const { question, userAnswer, correctAnswer, studentName, topic } = req.body;
+        const { question, userAnswer, correctAnswer, studentName, topic, subtopic, userId } = req.body;
 
         console.log('🔍 VERIFYING ANSWER');
 
+        let isCorrect = false;
+        let feedback = '';
+        let explanation = '';
+        let confidence = 0;
+        let model = '';
+
+        // Check for exact match first
         if (compareMathExpressions(userAnswer, correctAnswer)) {
             console.log('✅ EXACT MATCH');
 
-            return res.json({
-                success: true,
-                isCorrect: true,
-                confidence: 100,
-                feedback: 'נכון מצוין! 🎉',
-                explanation: 'התשובה שלך נכונה!',
-                model: 'exact-match'
-            });
-        }
+            isCorrect = true;
+            confidence = 100;
+            feedback = 'נכון מצוין! 🎉';
+            explanation = 'התשובה שלך נכונה!';
+            model = 'exact-match';
 
-        const prompt = `בדוק:\n\nשאלה: ${question}\nתלמיד: ${userAnswer}\nנכון: ${correctAnswer}\n\nJSON:\n{"isCorrect":true/false,"feedback":"...","explanation":"..."}`;
+        } else {
+            // Use AI verification
+            const prompt = `בדוק:\n\nשאלה: ${question}\nתלמיד: ${userAnswer}\nנכון: ${correctAnswer}\n\nJSON:\n{"isCorrect":true/false,"feedback":"...","explanation":"..."}`;
 
-        if (process.env.ANTHROPIC_API_KEY) {
-            const response = await fetch('https://api.anthropic.com/v1/messages', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-api-key': process.env.ANTHROPIC_API_KEY,
-                    'anthropic-version': '2023-06-01'
-                },
-                body: JSON.stringify({
-                    model: 'claude-3-5-haiku-20241022',
-                    max_tokens: 1500,
-                    temperature: 0.3,
-                    system: 'אתה נקסון. בדוק שקילות מתמטית. JSON בלבד.',
-                    messages: [{ role: 'user', content: prompt }]
-                })
-            });
+            if (process.env.ANTHROPIC_API_KEY) {
+                const response = await fetch('https://api.anthropic.com/v1/messages', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-api-key': process.env.ANTHROPIC_API_KEY,
+                        'anthropic-version': '2023-06-01'
+                    },
+                    body: JSON.stringify({
+                        model: 'claude-3-5-haiku-20241022',
+                        max_tokens: 1500,
+                        temperature: 0.3,
+                        system: 'אתה נקסון. בדוק שקילות מתמטית. JSON בלבד.',
+                        messages: [{ role: 'user', content: prompt }]
+                    })
+                });
 
-            const data = await response.json();
+                const data = await response.json();
 
-            if (!response.ok) {
-                throw new Error(data.error?.message || 'API error');
+                if (!response.ok) {
+                    throw new Error(data.error?.message || 'API error');
+                }
+
+                const rawText = data.content[0].text;
+                const jsonText = cleanJsonText(rawText);
+                const parsed = JSON.parse(jsonText);
+
+                isCorrect = parsed.isCorrect;
+                confidence = 95;
+                feedback = parsed.feedback;
+                explanation = parsed.explanation;
+                model = 'claude-3.5-haiku';
+            } else {
+                throw new Error('No AI configured');
             }
-
-            const rawText = data.content[0].text;
-            const jsonText = cleanJsonText(rawText);
-            const parsed = JSON.parse(jsonText);
-
-            return res.json({
-                success: true,
-                isCorrect: parsed.isCorrect,
-                confidence: 95,
-                feedback: parsed.feedback,
-                explanation: parsed.explanation,
-                model: 'claude-3.5-haiku'
-            });
         }
 
-        throw new Error('No AI configured');
+        // ✨ AUTO-SAVE TO NOTEBOOK IF CORRECT
+        if (isCorrect && userId) {
+            try {
+                console.log('📓 Saving to notebook...');
+                await notebookService.saveExerciseToNotebook(userId, {
+                    question: question,
+                    answer: correctAnswer,
+                    studentAnswer: userAnswer,
+                    isCorrect: true,
+                    topic: topic || 'כללי',
+                    subtopic: subtopic || ''
+                });
+                console.log('✅ Saved to notebook successfully');
+            } catch (notebookError) {
+                // Don't fail the request if notebook save fails
+                console.error('⚠️ Failed to save to notebook:', notebookError.message);
+                // Continue anyway - the answer verification is still valid
+            }
+        }
+
+        // Return the verification result
+        return res.json({
+            success: true,
+            isCorrect,
+            confidence,
+            feedback,
+            explanation,
+            model
+        });
 
     } catch (error) {
         console.error('❌ Error:', error);
@@ -1325,7 +1366,6 @@ app.post('/api/ai/verify-answer', async (req, res) => {
         });
     }
 });
-
 // ==================== GET HINT ====================
 
 // ==================== ADMIN: UPLOAD PERSONALITY FILE ====================
@@ -1778,6 +1818,12 @@ async function loadPersonalityFromStorage() {
         console.error('❌ Error loading personality:', error.message);
     }
 }
+app.use('/api/users', userRoutes);
+
+app.use('/api/notebook', notebookRoutes);
+
+// ADD NEXON ROUTES TO YOUR EXISTING SERVER
+app.use('/api', nexonRoutes);
 
 app.listen(PORT, async () => {
     await loadPersonalityFromStorage();

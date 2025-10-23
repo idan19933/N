@@ -5,7 +5,7 @@ import useAuthStore from '../../store/authStore';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import NotificationBell from '../common/NotificationBell';
-import { Menu, X, User, LogOut, LayoutDashboard, Users, Moon, Sun, ChevronLeft, Brain, Sparkles, BookOpen } from 'lucide-react';
+import { Menu, X, User, LogOut, LayoutDashboard, Users, Moon, Sun, ChevronLeft, Brain, Sparkles, BookOpen, NotebookPen } from 'lucide-react';
 
 const Navbar = () => {
     const { user, isAuthenticated, isAdmin, logout } = useAuthStore();
@@ -125,10 +125,19 @@ const Navbar = () => {
                                         {/* Dashboard/Learning Area Button */}
                                         <Link
                                             to="/dashboard"
-                                            className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-purple-100 to-pink-100 dark:from-purple-900/30 dark:to-pink-900/30 hover:from-purple-600 hover:to-pink-600 text-purple-700 dark:text-purple-300 hover:text-white rounded-2xl font-bold transition-all duration-300 shadow-md hover:shadow-xl border-2 border-purple-200 dark:border-purple-700 hover:border-transparent"
+                                            className="flex items-center gap-2 px-4 py-2.5 text-purple-700 dark:text-purple-300 hover:text-white hover:bg-gradient-to-r hover:from-purple-600 hover:to-pink-600 font-bold rounded-2xl transition-all border-2 border-transparent hover:border-purple-300 dark:hover:border-purple-700 shadow-md hover:shadow-xl"
                                         >
                                             <BookOpen size={18} />
                                             <span className="hidden lg:inline">איזור למידה</span>
+                                        </Link>
+
+                                        {/* ✅ NEW: Notebook Button */}
+                                        <Link
+                                            to="/notebook"
+                                            className="flex items-center gap-2 px-4 py-2.5 text-indigo-700 dark:text-indigo-300 hover:text-white hover:bg-gradient-to-r hover:from-indigo-600 hover:to-purple-600 font-bold rounded-2xl transition-all border-2 border-transparent hover:border-indigo-300 dark:hover:border-indigo-700 shadow-md hover:shadow-xl"
+                                        >
+                                            <NotebookPen size={18} />
+                                            <span className="hidden lg:inline">המחברת שלי</span>
                                         </Link>
                                     </>
                                 )}
@@ -137,93 +146,75 @@ const Navbar = () => {
                                     <>
                                         <Link
                                             to="/admin"
-                                            className="flex items-center gap-2 px-5 py-2.5 text-gray-700 dark:text-gray-300 hover:text-white hover:bg-gradient-to-r hover:from-indigo-600 hover:to-purple-600 rounded-2xl font-bold transition-all duration-300 shadow-md hover:shadow-xl"
+                                            className="flex items-center gap-2 px-4 py-2.5 text-indigo-700 dark:text-indigo-300 hover:text-white hover:bg-gradient-to-r hover:from-indigo-600 hover:to-purple-600 font-bold rounded-2xl transition-all border-2 border-transparent hover:border-indigo-300 dark:hover:border-indigo-700 shadow-md hover:shadow-xl"
                                         >
                                             <LayoutDashboard size={18} />
-                                            <span className="hidden lg:inline">ניהול</span>
+                                            <span className="hidden lg:inline">ניהול קורסים</span>
                                         </Link>
                                         <Link
                                             to="/admin/users"
-                                            className="flex items-center gap-2 px-5 py-2.5 text-gray-700 dark:text-gray-300 hover:text-white hover:bg-gradient-to-r hover:from-purple-600 hover:to-pink-600 rounded-2xl font-bold transition-all duration-300 shadow-md hover:shadow-xl"
+                                            className="flex items-center gap-2 px-4 py-2.5 text-purple-700 dark:text-purple-300 hover:text-white hover:bg-gradient-to-r hover:from-purple-600 hover:to-pink-600 font-bold rounded-2xl transition-all border-2 border-transparent hover:border-purple-300 dark:hover:border-purple-700 shadow-md hover:shadow-xl"
                                         >
                                             <Users size={18} />
-                                            <span className="hidden lg:inline">משתמשים</span>
+                                            <span className="hidden lg:inline">ניהול משתמשים</span>
                                         </Link>
                                     </>
                                 )}
 
-                                {/* Theme Toggle + Notifications */}
-                                <div className="flex items-center gap-2 mr-2">
-                                    <NotificationBell />
-
-                                    <button
-                                        onClick={toggleTheme}
-                                        className="p-3 rounded-2xl bg-gradient-to-br from-yellow-100 to-orange-100 dark:from-gray-800 dark:to-gray-700 hover:shadow-xl transition-all duration-300 group border-2 border-yellow-200 dark:border-gray-600"
-                                    >
-                                        {isDark ? (
-                                            <Sun size={20} className="text-yellow-500 group-hover:text-yellow-400 group-hover:rotate-180 transition-all duration-500" />
-                                        ) : (
-                                            <Moon size={20} className="text-gray-700 group-hover:text-gray-900 group-hover:-rotate-12 transition-all duration-300" />
-                                        )}
-                                    </button>
-                                </div>
+                                {/* Notification Bell - only for authenticated users */}
+                                <NotificationBell />
 
                                 {/* User Menu */}
-                                <div className="flex items-center gap-3 mr-2 pr-4 border-r-2 border-purple-200 dark:border-purple-700">
-                                    <div className="hidden lg:flex items-center gap-3 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 px-4 py-2 rounded-2xl border-2 border-purple-200 dark:border-purple-700">
-                                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 via-pink-500 to-orange-500 flex items-center justify-center text-white font-black text-lg shadow-lg">
+                                <div className="relative group">
+                                    <button className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-100 to-pink-100 dark:from-purple-900/30 dark:to-pink-900/30 rounded-2xl border-2 border-purple-200 dark:border-purple-700 hover:border-purple-300 dark:hover:border-purple-600 transition-all shadow-md hover:shadow-xl">
+                                        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-purple-500 via-pink-500 to-orange-500 flex items-center justify-center text-white font-black text-sm shadow-lg">
                                             {user?.email?.charAt(0).toUpperCase() || 'U'}
                                         </div>
-                                        <span className="text-gray-800 dark:text-gray-200 font-bold text-sm">
+                                        <span className="hidden xl:block text-sm font-bold text-gray-700 dark:text-gray-300">
                                             {user?.email?.split('@')[0]}
                                         </span>
-                                    </div>
-                                    <button
-                                        onClick={handleLogout}
-                                        className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-2xl hover:from-red-600 hover:to-red-700 hover:shadow-xl transition-all duration-300 font-bold shadow-md"
-                                    >
-                                        <LogOut size={18} />
-                                        <span className="hidden lg:inline">יציאה</span>
                                     </button>
+
+                                    {/* Dropdown */}
+                                    <div className="absolute left-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 border-2 border-purple-200 dark:border-purple-700 overflow-hidden">
+                                        <div className="p-4 border-b-2 border-purple-100 dark:border-purple-800 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/30 dark:to-pink-900/30">
+                                            <p className="text-sm font-black text-gray-800 dark:text-gray-200">
+                                                {user?.email?.split('@')[0]}
+                                            </p>
+                                            <p className="text-xs text-gray-600 dark:text-gray-400 truncate">
+                                                {user?.email}
+                                            </p>
+                                        </div>
+                                        <div className="p-2">
+                                            <button
+                                                onClick={handleLogout}
+                                                className="w-full flex items-center gap-3 px-4 py-3 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all font-bold"
+                                            >
+                                                <LogOut size={18} />
+                                                התנתק
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
                             </>
                         ) : (
                             <>
-                                {/* Theme Toggle (Not Authenticated) */}
-                                <button
-                                    onClick={toggleTheme}
-                                    className="p-3 rounded-2xl bg-gradient-to-br from-yellow-100 to-orange-100 dark:from-gray-800 dark:to-gray-700 hover:shadow-xl transition-all duration-300 group border-2 border-yellow-200 dark:border-gray-600"
+                                <Link
+                                    to="/login"
+                                    className="px-4 py-2.5 text-gray-700 dark:text-gray-300 hover:text-purple-600 dark:hover:text-purple-400 font-bold rounded-2xl hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-all"
                                 >
-                                    {isDark ? (
-                                        <Sun size={20} className="text-yellow-500 group-hover:rotate-180 transition-transform duration-500" />
-                                    ) : (
-                                        <Moon size={20} className="text-gray-700 group-hover:-rotate-12 transition-transform duration-300" />
-                                    )}
-                                </button>
-
-                                {/* Auth Buttons */}
-                                <div className="flex items-center gap-3 mr-2">
-                                    <Link
-                                        to="/login"
-                                        className="px-5 py-2.5 text-gray-700 dark:text-gray-300 hover:text-purple-600 dark:hover:text-purple-400 font-bold transition-colors rounded-2xl hover:bg-purple-50 dark:hover:bg-purple-900/20"
-                                    >
-                                        התחבר
-                                    </Link>
-                                    <Link
-                                        to="/register"
-                                        className="px-6 py-3 bg-gradient-to-r from-purple-600 via-pink-600 to-orange-600 text-white rounded-2xl hover:shadow-2xl hover:scale-105 transition-all duration-300 font-black shadow-lg"
-                                    >
-                                        הצטרף עכשיו
-                                    </Link>
-                                </div>
+                                    התחבר
+                                </Link>
+                                <Link
+                                    to="/register"
+                                    className="px-6 py-2.5 bg-gradient-to-r from-purple-600 via-pink-600 to-orange-600 text-white rounded-2xl hover:shadow-2xl transition-all font-black shadow-lg"
+                                >
+                                    הצטרף עכשיו
+                                </Link>
                             </>
                         )}
-                    </div>
 
-                    {/* Mobile Menu Button */}
-                    <div className="md:hidden flex items-center gap-2">
-                        {isAuthenticated && <NotificationBell />}
-
+                        {/* Theme Toggle */}
                         <button
                             onClick={toggleTheme}
                             className="p-2.5 rounded-xl bg-gradient-to-br from-yellow-100 to-orange-100 dark:from-gray-800 dark:to-gray-700 transition-colors border-2 border-yellow-200 dark:border-gray-600"
@@ -277,6 +268,16 @@ const Navbar = () => {
                                             >
                                                 <BookOpen size={18} />
                                                 איזור למידה
+                                            </Link>
+
+                                            {/* ✅ NEW: Notebook Link in Mobile Menu */}
+                                            <Link
+                                                to="/notebook"
+                                                className="flex items-center gap-2 text-indigo-700 dark:text-indigo-300 hover:text-white hover:bg-gradient-to-r hover:from-indigo-600 hover:to-purple-600 font-bold py-3 px-4 rounded-2xl transition-all border-2 border-indigo-200 dark:border-indigo-700 shadow-md"
+                                                onClick={() => setIsMenuOpen(false)}
+                                            >
+                                                <NotebookPen size={18} />
+                                                המחברת שלי
                                             </Link>
                                         </>
                                     )}

@@ -1,4 +1,4 @@
-// src/App.jsx - UPDATED WITH PERSONALITY UPLOADER
+// src/App.jsx - UPDATED WITH NOTEBOOK ROUTE
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
@@ -20,6 +20,7 @@ import UserDashboard from './pages/UserDashboard';
 import Notifications from './pages/Notifications';
 import PaymentSuccess from './pages/PaymentSuccess';
 import PaymentCancel from './pages/PaymentCancel';
+import NotebookPage from './pages/NotebookPage';  // ✅ NEW: Notebook Page
 
 // AI & Practice
 import Practice from './pages/Practice';
@@ -38,7 +39,7 @@ import ManageCurriculum from './pages/ManageCurriculum';
 import AddLesson from './pages/AddLesson';
 import AdminNotifications from './pages/AdminNotifications';
 import AdminProblemUploader from './pages/AdminProblemUploader';
-import PersonalityUploader from './pages/PersonalityUploader';  // ✅ NEW: AI Personality Uploader
+import PersonalityUploader from './pages/PersonalityUploader';  // ✅ AI Personality Uploader
 
 function App() {
     const initAuth = useAuthStore(state => state.initAuth);
@@ -140,6 +141,16 @@ function App() {
                         }
                     />
 
+                    {/* ✅ NEW: NOTEBOOK ROUTE */}
+                    <Route
+                        path="notebook"
+                        element={
+                            <PrivateRoute>
+                                <NotebookPage />
+                            </PrivateRoute>
+                        }
+                    />
+
                     {/* Admin Routes */}
                     <Route
                         path="admin"
@@ -195,7 +206,7 @@ function App() {
                         }
                     />
 
-                    {/* ✅ NEW: AI PERSONALITY UPLOADER ROUTE */}
+                    {/* ✅ AI PERSONALITY UPLOADER ROUTE */}
                     <Route
                         path="admin/ai-upload"
                         element={
