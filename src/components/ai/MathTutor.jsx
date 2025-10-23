@@ -12,6 +12,7 @@ import useAuthStore from '../../store/authStore';
 import { getUserGradeId, getGradeConfig, getSubtopics } from '../../config/israeliCurriculum';
 import toast from 'react-hot-toast';
 import { aiVerification } from '../../services/aiAnswerVerification';
+import axios from 'axios'; // 📊 CURRICULUM TRACKING
 // 🔥 NOTEBOOK INTEGRATION
 import notebookAPI from '../../services/notebookService';
 import {
@@ -34,6 +35,45 @@ import {
 } from 'recharts';
 
 const API_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+
+
+// ==================== 📊 CURRICULUM TRACKING FUNCTION ====================
+const trackCurriculumProgress = async (userId, exerciseData) => {
+    if (!userId) {
+        console.warn('⚠️ No user ID - skipping curriculum tracking');
+        return { success: false };
+    }
+
+    try {
+        console.log('📊 Tracking curriculum progress:', {
+            userId,
+            topic: exerciseData.topic,
+            subtopic: exerciseData.subtopic,
+            isCorrect: exerciseData.isCorrect
+        });
+
+        const response = await axios.post(`${API_URL}/api/curriculum/progress/record`, {
+            userId: userId,
+            topicId: exerciseData.topicId || null,
+            subtopicId: exerciseData.subtopicId || null,
+            topic: exerciseData.topic || 'כללי',
+            subtopic: exerciseData.subtopic || '',
+            correct: exerciseData.isCorrect,
+            timeSpent: exerciseData.timeSpent || 0,
+            hintsUsed: exerciseData.hintsUsed || 0,
+            attempts: exerciseData.attempts || 1
+        });
+
+        if (response.data.success) {
+            console.log('✅ Curriculum progress tracked successfully');
+        }
+
+        return response.data;
+    } catch (error) {
+        console.error('❌ Curriculum tracking error:', error);
+        return { success: false };
+    }
+};
 
 // ==================== NOTEBOOK SAVE FUNCTION ====================
 const saveExerciseToNotebook = async (userId, exerciseData) => {
@@ -746,12 +786,22 @@ const LiveFeedbackIndicator = ({ status }) => {
 };
 
 // ==================== MAIN MATH TUTOR COMPONENT ====================
-const MathTutor = ({ topicId: propTopicId, gradeId: propGradeId, onClose }) => {
+const MathTutor = ({
+                       topicId: propTopicId,
+                       gradeId: propGradeId,
+                       selectedTopic: propSelectedTopic,
+                       selectedSubtopic: propSelectedSubtopic,
+                       mode: propMode,
+                       userId: propUserId,
+                       onClose
+                   }) => {
     const user = useAuthStore(state => state.user);
     const nexonProfile = useAuthStore(state => state.nexonProfile);
 
     // 🔥 HELPER: Get user ID as integer for database
     const getUserId = () => {
+        // Use prop userId first
+        if (propUserId) return propUserId;
         if (!user) return null;
         // Try different possible ID fields
         const id = user.id || user.uid || user.userId || user.student_id;
@@ -763,14 +813,20 @@ const MathTutor = ({ topicId: propTopicId, gradeId: propGradeId, onClose }) => {
 
 
     const [view, setView] = useState(() => {
+        // Skip to practice if we have topic/mode from dashboard
+        if (propSelectedTopic || propMode) {
+            return 'practice';
+        }
+        // Backward compatibility
         if (propTopicId) {
             return 'subtopic-select';
         }
         return 'home';
     });
 
-    const [selectedTopic, setSelectedTopic] = useState(null);
-    const [selectedSubtopic, setSelectedSubtopic] = useState(null);
+    const [selectedTopic, setSelectedTopic] = useState(propSelectedTopic || null);
+    const [selectedSubtopic, setSelectedSubtopic] = useState(propSelectedSubtopic || null);
+    const [practiceMode, setPracticeMode] = useState(propMode || 'normal');
 
     const [currentQuestion, setCurrentQuestion] = useState(null);
     const [userAnswer, setUserAnswer] = useState('');
@@ -817,12 +873,13 @@ const MathTutor = ({ topicId: propTopicId, gradeId: propGradeId, onClose }) => {
     const gradeConfig = getGradeConfig(gradeId);
     const availableTopics = gradeConfig?.topics || [];
 
-    console.log('🎯 MathTutor initialized:', {
-        propTopicId,
-        propGradeId,
-        gradeId,
-        availableTopics: availableTopics.length,
-        initialView: view
+    console.log('🎯 MathTutor STREAMLINED initialized:', {
+        propSelectedTopic: propSelectedTopic?.name,
+        propSelectedSubtopic: propSelectedSubtopic?.name,
+        propMode,
+        propUserId,
+        initialView: view,
+        skippingIntermediateScreens: !!(propSelectedTopic || propMode)
     });
 
     useEffect(() => {
@@ -859,6 +916,49 @@ const MathTutor = ({ topicId: propTopicId, gradeId: propGradeId, onClose }) => {
             }
         }
     }, [propTopicId, availableTopics, selectedTopic, gradeId]);
+
+    useEffect(() => {
+        if (view === 'practice' && !currentQuestion && (propSelectedTopic || propMode)) {
+            console.log('🚀 Auto-starting practice from dashboard props');
+
+            let topicToUse = propSelectedTopic;
+            let subtopicToUse = propSelectedSubtopic;
+
+            // For modes without specific topic, pick random topic
+            if (!topicToUse && propMode && availableTopics.length > 0) {
+                if (propMode === 'random' || propMode === 'ai-adaptive') {
+                    // Pick random topic
+                    const randomIndex = Math.floor(Math.random() * availableTopics.length);
+                    topicToUse = availableTopics[randomIndex];
+                    console.log('🎲 Selected random topic:', topicToUse.name);
+                } else if (propMode === 'weakness-only') {
+                    // For weakness mode, pick from weakness topics if available
+                    const profileData = nexonProfile || user;
+                    const weakTopics = profileData?.weakTopics || [];
+                    if (weakTopics.length > 0) {
+                        const weakTopicObjs = weakTopics
+                            .map(id => availableTopics.find(t => t.id === id))
+                            .filter(Boolean);
+                        if (weakTopicObjs.length > 0) {
+                            const randomIndex = Math.floor(Math.random() * weakTopicObjs.length);
+                            topicToUse = weakTopicObjs[randomIndex];
+                            console.log('🎯 Selected weakness topic:', topicToUse.name);
+                        }
+                    }
+                    // Fallback to random topic if no weakness topics
+                    if (!topicToUse) {
+                        const randomIndex = Math.floor(Math.random() * availableTopics.length);
+                        topicToUse = availableTopics[randomIndex];
+                        console.log('🎲 Fallback to random topic:', topicToUse.name);
+                    }
+                }
+            }
+
+            setTimeout(() => {
+                startPractice(topicToUse, subtopicToUse);
+            }, 100);
+        }
+    }, [view, propSelectedTopic, propSelectedSubtopic, propMode, availableTopics]);
 
     useEffect(() => {
         if (isTimerRunning) {
@@ -1001,6 +1101,21 @@ const MathTutor = ({ topicId: propTopicId, gradeId: propGradeId, onClose }) => {
                     isCorrect: data.analysis.isCorrect,
                     topic: selectedTopic?.name || 'כללי',
                     subtopic: selectedSubtopic?.name || ''
+                });
+            }
+
+            // 📊 TRACK CURRICULUM PROGRESS
+            console.log('🔍 About to track progress (image), userId:', userId, 'isCorrect:', data.analysis.isCorrect);
+            if (userId) {
+                await trackCurriculumProgress(userId, {
+                    topicId: selectedTopic?.id,
+                    subtopicId: selectedSubtopic?.id,
+                    topic: selectedTopic?.name || 'כללי',
+                    subtopic: selectedSubtopic?.name || '',
+                    isCorrect: data.analysis.isCorrect,
+                    timeSpent: timer * 1000,
+                    hintsUsed: hintCount,
+                    attempts: attemptCount + 1
                 });
             }
 
@@ -1272,6 +1387,21 @@ const MathTutor = ({ topicId: propTopicId, gradeId: propGradeId, onClose }) => {
                 isCorrect: isCorrect,
                 topic: selectedTopic?.name || 'כללי',
                 subtopic: selectedSubtopic?.name || ''
+            });
+        }
+
+        // 📊 TRACK CURRICULUM PROGRESS
+        console.log('🔍 About to track progress, userId:', userId, 'isCorrect:', isCorrect);
+        if (userId) {
+            await trackCurriculumProgress(userId, {
+                topicId: selectedTopic?.id,
+                subtopicId: selectedSubtopic?.id,
+                topic: selectedTopic?.name || 'כללי',
+                subtopic: selectedSubtopic?.name || '',
+                isCorrect: isCorrect,
+                timeSpent: timer * 1000,
+                hintsUsed: hintCount,
+                attempts: attemptCount + 1
             });
         }
 

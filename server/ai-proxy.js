@@ -15,6 +15,8 @@ import nexonRoutes from './routes/nexonRoutes.js';
 import notebookService from './services/notebookService.js';
 import notebookRoutes from './routes/notebookRoutes.js';
 import userRoutes from './routes/userRoutes.js';
+import curriculumRoutes from './routes/curriculumRoutes.js';
+
 
 import ISRAELI_CURRICULUM, {
     getGradeConfig,
@@ -1821,6 +1823,8 @@ async function loadPersonalityFromStorage() {
 app.use('/api/users', userRoutes);
 
 app.use('/api/notebook', notebookRoutes);
+
+app.use('/api/curriculum', curriculumRoutes);
 
 // ADD NEXON ROUTES TO YOUR EXISTING SERVER
 app.use('/api', nexonRoutes);
