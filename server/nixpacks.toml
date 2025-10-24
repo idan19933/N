@@ -5,4 +5,4 @@ nixPkgs = ["nodejs_20"]
 cmds = ["npm ci --legacy-peer-deps"]
 
 [start]
-cmd = "node server/ai-proxy.js"
+cmd = "node ai-proxy.js"
