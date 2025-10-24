@@ -17,7 +17,7 @@ import notebookRoutes from './routes/notebookRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import curriculumRoutes from './routes/curriculumRoutes.js';
 import learningRoutes from './routes/learningRoutes.js';
-
+import chatRoutes from './routes/chatRoutes.js';
 
 import ISRAELI_CURRICULUM, {
     getGradeConfig,
@@ -1830,6 +1830,8 @@ app.use('/api/curriculum', curriculumRoutes);
 app.use('/api', nexonRoutes);
 
 app.use('/api/learning', learningRoutes);
+
+app.use('/api/chat', chatRoutes);
 
 
 app.listen(PORT, async () => {

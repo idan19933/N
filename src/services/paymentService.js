@@ -1,7 +1,7 @@
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
-import { notifyPurchase } from './notificationService'; // ✅ ADD THIS
+import { notifyPurchase } from './notificationService';
 
 const functions = getFunctions();
 const createCheckoutSessionFunction = httpsCallable(functions, 'createCheckoutSession');
@@ -50,7 +50,7 @@ export const createCheckoutSession = async (courseId, price, codeId = null) => {
             origin: window.location.origin
         };
 
-        // ✅ הוסף codeId אם קיים
+        // Add codeId if exists
         if (codeId) {
             requestData.codeId = codeId;
             console.log('🎟️ Code ID included:', codeId);
@@ -81,12 +81,11 @@ export const createCheckoutSession = async (courseId, price, codeId = null) => {
     }
 };
 
-// ✅ תוקן - Get user's purchased courses (כולל רכישות עם קופון)
+// Get user's purchased courses (including promo codes)
 export const getUserPurchases = async (userId) => {
     try {
         console.log('📦 Getting purchases for user:', userId);
 
-        // ✅ הסרנו את התנאי status כדי לתפוס את כל הרכישות
         const purchasesQuery = query(
             collection(db, 'purchases'),
             where('userId', '==', userId)
@@ -120,12 +119,11 @@ export const getUserPurchases = async (userId) => {
     }
 };
 
-// ✅ תוקן - Check if user purchased a specific course (כולל רכישות עם קופון)
+// Check if user purchased a specific course (including promo codes)
 export const hasUserPurchasedCourse = async (userId, courseId) => {
     try {
         console.log('🔍 Checking purchase for:', { userId, courseId });
 
-        // ✅ הסרנו את התנאי status
         const purchasesQuery = query(
             collection(db, 'purchases'),
             where('userId', '==', userId),
@@ -156,14 +154,13 @@ export const hasUserPurchasedCourse = async (userId, courseId) => {
     }
 };
 
-// ✅ חדש - פונקציה לסינון רכישות תקפות בלבד
+// Filter valid purchases only
 export const getValidUserPurchases = async (userId) => {
     try {
         console.log('📦 Getting valid purchases for user:', userId);
 
         const allPurchases = await getUserPurchases(userId);
 
-        // סנן רק רכישות תקפות (completed או עם amount >= 0)
         const validPurchases = allPurchases.filter(purchase => {
             const isValid =
                 purchase.status === 'completed' ||
@@ -185,7 +182,7 @@ export const getValidUserPurchases = async (userId) => {
     }
 };
 
-// ✅ NEW - Handle successful purchase and send notification
+// Handle successful purchase and send notification
 export const handleSuccessfulPurchase = async (
     userId,
     userName,
@@ -206,7 +203,6 @@ export const handleSuccessfulPurchase = async (
             userEmail
         });
 
-        // Send notification with all details
         await notifyPurchase(
             userId,
             userName,
@@ -222,5 +218,66 @@ export const handleSuccessfulPurchase = async (
     } catch (error) {
         console.error('❌ Error sending purchase notification:', error);
         return { success: false, error: error.message };
+    }
+};
+
+// ✅ NEW: Handle Premium Purchase
+export const handlePremiumPurchase = async (userId, userName, planType, amount, userEmail) => {
+    try {
+        console.log('🎉 Handling premium purchase');
+
+        await handleSuccessfulPurchase(
+            userId,
+            userName,
+            planType, // 'premium_monthly' or 'premium_yearly'
+            planType === 'premium_monthly' ? 'נקסון פרימיום - חודשי' : 'נקסון פרימיום - שנתי',
+            '', // No image for premium
+            amount,
+            userEmail
+        );
+
+        return { success: true };
+    } catch (error) {
+        console.error('Error handling premium purchase:', error);
+        return { success: false, error: error.message };
+    }
+};
+
+// ✅ NEW: Check if user has active premium
+export const checkUserPremiumStatus = async (userId) => {
+    try {
+        const purchases = await getUserPurchases(userId);
+
+        const premiumPurchases = purchases.filter(p =>
+            (p.courseId === 'premium_monthly' || p.courseId === 'premium_yearly') &&
+            (p.status === 'completed' || p.paymentMethod === 'promo_code')
+        );
+
+        if (premiumPurchases.length > 0) {
+            const latestPremium = premiumPurchases.sort((a, b) =>
+                (b.purchaseDate || b.purchasedAt || 0) - (a.purchaseDate || a.purchasedAt || 0)
+            )[0];
+
+            // Check expiration if exists
+            if (latestPremium.expiresAt) {
+                const expiresAt = new Date(latestPremium.expiresAt);
+                const isExpired = expiresAt < new Date();
+
+                if (isExpired) {
+                    return { isPremium: false, plan: null, expiresAt: null };
+                }
+            }
+
+            return {
+                isPremium: true,
+                plan: latestPremium.courseId === 'premium_monthly' ? 'monthly' : 'yearly',
+                expiresAt: latestPremium.expiresAt ? new Date(latestPremium.expiresAt) : null
+            };
+        }
+
+        return { isPremium: false, plan: null, expiresAt: null };
+    } catch (error) {
+        console.error('Error checking premium status:', error);
+        return { isPremium: false, plan: null, expiresAt: null };
     }
 };

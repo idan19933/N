@@ -1036,10 +1036,15 @@ const MathTutor = ({
     }, [propTopicId, availableTopics, selectedTopic, gradeId]);
 
     useEffect(() => {
-        // Auto-start practice ONLY for special modes (random, adaptive, weakness)
-        // NOT for normal topic selection (they should choose "Learn First" or practice manually)
-        if (view === 'practice' && !currentQuestion && propMode && propMode !== 'normal') {
-            console.log('🚀 Auto-starting practice from dashboard props with mode:', propMode);
+        // Auto-start practice when view is 'practice' and no question exists
+        if (view === 'practice' && !currentQuestion) {
+            // Skip auto-start only if normal mode WITHOUT subtopic (user needs to pick subtopic)
+            if (propMode === 'normal' && propSelectedTopic && !propSelectedSubtopic) {
+                console.log('⏸️ Normal mode with topic only - waiting for subtopic selection');
+                return;
+            }
+
+            console.log('🚀 Auto-starting practice from dashboard props');
 
             let topicToUse = propSelectedTopic;
             let subtopicToUse = propSelectedSubtopic;
@@ -1047,12 +1052,10 @@ const MathTutor = ({
             // For modes without specific topic, pick random topic
             if (!topicToUse && availableTopics.length > 0) {
                 if (propMode === 'random' || propMode === 'ai-adaptive') {
-                    // Pick random topic
                     const randomIndex = Math.floor(Math.random() * availableTopics.length);
                     topicToUse = availableTopics[randomIndex];
                     console.log('🎲 Selected random topic:', topicToUse.name);
                 } else if (propMode === 'weakness-only') {
-                    // For weakness mode, pick from weakness topics if available
                     const profileData = nexonProfile || user;
                     const weakTopics = profileData?.weakTopics || [];
                     if (weakTopics.length > 0) {
@@ -1065,7 +1068,6 @@ const MathTutor = ({
                             console.log('🎯 Selected weakness topic:', topicToUse.name);
                         }
                     }
-                    // Fallback to random topic if no weakness topics
                     if (!topicToUse) {
                         const randomIndex = Math.floor(Math.random() * availableTopics.length);
                         topicToUse = availableTopics[randomIndex];
@@ -1078,7 +1080,7 @@ const MathTutor = ({
                 startPractice(topicToUse, subtopicToUse);
             }, 100);
         }
-    }, [view, propMode, availableTopics]);
+    }, [view, propMode, propSelectedTopic, propSelectedSubtopic, availableTopics, currentQuestion]);
 
     useEffect(() => {
         if (isTimerRunning) {

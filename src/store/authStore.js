@@ -1,4 +1,4 @@
-// src/store/authStore.js - WITH DATABASE ID MAPPING
+// src/store/authStore.js - WITH DATABASE ID MAPPING & PREMIUM
 import { create } from 'zustand';
 import {
     signInWithEmailAndPassword,
@@ -9,6 +9,7 @@ import {
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
 import { profileService } from '../services/profileService';
+import { getUserPurchases } from '../services/paymentService';
 
 // 🔥 HELPER: Fetch database ID from Firebase UID
 const fetchDatabaseUserId = async (firebaseUid) => {
@@ -47,8 +48,65 @@ const useAuthStore = create((set, get) => ({
     onboardingComplete: false,
     nexonProfile: null,
 
+    // ✅ NEW: Premium state
+    isPremium: false,
+    premiumExpiresAt: null,
+    premiumPlan: null, // 'monthly' or 'yearly'
+
     // 🔥 FIX: Prevent concurrent execution
     _checkingOnboarding: false,
+
+    // ✅ NEW: Check Premium Status
+    checkPremiumStatus: async () => {
+        const { user } = get();
+        if (!user) {
+            set({ isPremium: false, premiumExpiresAt: null, premiumPlan: null });
+            return false;
+        }
+
+        try {
+            console.log('🔍 Checking premium status for:', user.uid);
+
+            const purchases = await getUserPurchases(user.uid);
+
+            const premiumPurchases = purchases.filter(p =>
+                (p.courseId === 'premium_monthly' || p.courseId === 'premium_yearly') &&
+                (p.status === 'completed' || p.paymentMethod === 'promo_code')
+            );
+
+            if (premiumPurchases.length > 0) {
+                const latestPremium = premiumPurchases.sort((a, b) =>
+                    (b.purchaseDate || b.purchasedAt || 0) - (a.purchaseDate || a.purchasedAt || 0)
+                )[0];
+
+                let expiresAt = null;
+                let plan = latestPremium.courseId === 'premium_monthly' ? 'monthly' : 'yearly';
+
+                if (latestPremium.expiresAt) {
+                    expiresAt = new Date(latestPremium.expiresAt);
+                    const isExpired = expiresAt < new Date();
+
+                    if (isExpired) {
+                        console.log('❌ Premium subscription expired');
+                        set({ isPremium: false, premiumExpiresAt: null, premiumPlan: null });
+                        return false;
+                    }
+                }
+
+                console.log('✅ User has active premium:', plan);
+                set({ isPremium: true, premiumExpiresAt: expiresAt, premiumPlan: plan });
+                return true;
+            }
+
+            console.log('❌ No premium subscription found');
+            set({ isPremium: false, premiumExpiresAt: null, premiumPlan: null });
+            return false;
+        } catch (error) {
+            console.error('Error checking premium status:', error);
+            set({ isPremium: false, premiumExpiresAt: null, premiumPlan: null });
+            return false;
+        }
+    },
 
     initAuth: () => {
         console.log('🔧 initAuth: Setting up auth listener...');
@@ -89,6 +147,9 @@ const useAuthStore = create((set, get) => ({
 
                     console.log('✅ User state set with DB ID:', dbId);
 
+                    // ✅ NEW: Check premium status
+                    await get().checkPremiumStatus();
+
                     // 🔥 FIX: Debounce the onboarding check
                     if (checkOnboardingTimeout) {
                         clearTimeout(checkOnboardingTimeout);
@@ -115,7 +176,10 @@ const useAuthStore = create((set, get) => ({
                     nexonProfile: null,
                     needsOnboarding: false,
                     onboardingComplete: false,
-                    _checkingOnboarding: false
+                    _checkingOnboarding: false,
+                    isPremium: false,
+                    premiumExpiresAt: null,
+                    premiumPlan: null
                 });
             }
         });
@@ -267,6 +331,10 @@ const useAuthStore = create((set, get) => ({
             });
 
             console.log('✅ Login successful with DB ID:', dbId);
+
+            // ✅ NEW: Check premium status after login
+            await get().checkPremiumStatus();
+
             return { success: true };
 
         } catch (error) {
@@ -328,7 +396,10 @@ const useAuthStore = create((set, get) => ({
                 studentProfile: null,
                 nexonProfile: null,
                 needsOnboarding: false,
-                onboardingComplete: false
+                onboardingComplete: false,
+                isPremium: false,
+                premiumExpiresAt: null,
+                premiumPlan: null
             });
             return { success: true };
         } catch (error) {

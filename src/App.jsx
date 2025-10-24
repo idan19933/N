@@ -1,6 +1,6 @@
-// src/App.jsx - UPDATED WITH NOTEBOOK ROUTE
+// src/App.jsx - CLEANED VERSION
 import React, { useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import useAuthStore from './store/authStore';
 
@@ -8,22 +8,20 @@ import useAuthStore from './store/authStore';
 import Layout from './components/layout/Layout';
 import PrivateRoute from './components/auth/PrivateRoute';
 import AdminRoute from './components/auth/AdminRoute';
+import NexonAsk from './components/ai/NexonAsk';
 
 // Pages
 import Home from './pages/Home';
-import Courses from './pages/Courses';
-import CourseDetail from './pages/CourseDetail';
-import MyCourses from './pages/MyCourses';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import UserDashboard from './pages/UserDashboard';
-import Notifications from './pages/Notifications';
 import PaymentSuccess from './pages/PaymentSuccess';
 import PaymentCancel from './pages/PaymentCancel';
-import NotebookPage from './pages/NotebookPage';  // ✅ NEW: Notebook Page
+import NotebookPage from './pages/NotebookPage';
+import PlansPage from './pages/PlansPage';
+import PremiumSuccess from './pages/PremiumSuccess';
 
 // AI & Practice
-import Practice from './pages/Practice';
 import MathTutor from './components/ai/MathTutor';
 
 // Onboarding & Personalized
@@ -39,7 +37,23 @@ import ManageCurriculum from './pages/ManageCurriculum';
 import AddLesson from './pages/AddLesson';
 import AdminNotifications from './pages/AdminNotifications';
 import AdminProblemUploader from './pages/AdminProblemUploader';
-import PersonalityUploader from './pages/PersonalityUploader';  // ✅ AI Personality Uploader
+import PersonalityUploader from './pages/PersonalityUploader';
+
+// ✅ Component to conditionally show NexonAsk
+function GlobalNexonAsk() {
+    const location = useLocation();
+    const user = useAuthStore(state => state.user);
+    const isPremium = useAuthStore(state => state.isPremium);
+
+    const hiddenPaths = ['/onboarding', '/login', '/register', '/math-tutor'];
+    const shouldHide = hiddenPaths.some(path => location.pathname.startsWith(path));
+
+    if (!user || shouldHide || !isPremium) {
+        return null;
+    }
+
+    return <NexonAsk />;
+}
 
 function App() {
     const initAuth = useAuthStore(state => state.initAuth);
@@ -79,41 +93,16 @@ function App() {
                 <Route path="/" element={<Layout />}>
                     {/* Public Routes */}
                     <Route index element={<Home />} />
-                    <Route path="courses" element={<Courses />} />
-                    <Route path="courses/:id" element={<CourseDetail />} />
                     <Route path="login" element={<Login />} />
                     <Route path="register" element={<Register />} />
                     <Route path="payment-success" element={<PaymentSuccess />} />
                     <Route path="payment-cancel" element={<PaymentCancel />} />
 
+                    {/* Premium Routes */}
+                    <Route path="plans" element={<PlansPage />} />
+                    <Route path="premium-success" element={<PremiumSuccess />} />
+
                     {/* Protected User Routes */}
-                    <Route
-                        path="notifications"
-                        element={
-                            <PrivateRoute>
-                                <Notifications />
-                            </PrivateRoute>
-                        }
-                    />
-
-                    <Route
-                        path="my-courses"
-                        element={
-                            <PrivateRoute>
-                                <MyCourses />
-                            </PrivateRoute>
-                        }
-                    />
-
-                    <Route
-                        path="practice"
-                        element={
-                            <PrivateRoute>
-                                <Practice />
-                            </PrivateRoute>
-                        }
-                    />
-
                     <Route
                         path="math-tutor"
                         element={
@@ -141,7 +130,6 @@ function App() {
                         }
                     />
 
-                    {/* ✅ NEW: NOTEBOOK ROUTE */}
                     <Route
                         path="notebook"
                         element={
@@ -206,7 +194,6 @@ function App() {
                         }
                     />
 
-                    {/* ✅ AI PERSONALITY UPLOADER ROUTE */}
                     <Route
                         path="admin/ai-upload"
                         element={
@@ -235,6 +222,9 @@ function App() {
                     />
                 </Route>
             </Routes>
+
+            {/* Global NexonAsk Chat */}
+            <GlobalNexonAsk />
         </Router>
     );
 }
