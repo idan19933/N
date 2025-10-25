@@ -1,18 +1,13 @@
+// src/pages/HomePage.jsx - MODERN NEXON HOMEPAGE WITH ANIMATIONS
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, useScroll, useTransform, useSpring, useInView } from 'framer-motion';
-import { Swiper, SwiperSlide } from 'swiper/react';
-import { Autoplay, Pagination, Navigation } from 'swiper/modules';
-import { BookOpen, Users, Award, TrendingUp, Sparkles, Zap, ArrowLeft, Star, CheckCircle, Shield, Clock, Trophy, Rocket, Flame, Target, PlayCircle } from 'lucide-react';
-import { collection, query, where, getDocs, limit, orderBy } from 'firebase/firestore';
-import { db } from '../config/firebase';
-import CourseCard from '../components/courses/CourseCard';
-import { fetchCourses } from '../services/courseService';
+import {
+    Brain, Zap, Target, TrendingUp, Sparkles, Star, CheckCircle,
+    Trophy, Rocket, Flame, PlayCircle, BookOpen, Award, Users,
+    Clock, Shield, ArrowLeft, ChevronLeft
+} from 'lucide-react';
 import useAuthStore from '../store/authStore';
-
-import 'swiper/css';
-import 'swiper/css/pagination';
-import 'swiper/css/navigation';
 
 // Smooth scroll animation variants
 const fadeInUpVariants = {
@@ -24,14 +19,6 @@ const fadeInUpVariants = {
             duration: 0.8,
             ease: [0.25, 0.46, 0.45, 0.94],
         },
-    },
-};
-
-const fadeInVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-        opacity: 1,
-        transition: { duration: 1, ease: 'easeOut' },
     },
 };
 
@@ -58,20 +45,8 @@ const staggerItemVariants = {
     },
 };
 
-const scaleInVariants = {
-    hidden: { opacity: 0, scale: 0.8 },
-    visible: {
-        opacity: 1,
-        scale: 1,
-        transition: {
-            duration: 0.8,
-            ease: [0.25, 0.46, 0.45, 0.94],
-        },
-    },
-};
-
-// Section wrapper with smooth transitions
-const SmoothSection = ({ children, className, delay = 0 }) => {
+// Section wrapper
+const SmoothSection = ({ children, className }) => {
     const ref = useRef(null);
     const isInView = useInView(ref, { once: true, margin: "-100px" });
 
@@ -97,7 +72,7 @@ const FloatingParticles = () => {
                     key={i}
                     className="absolute w-2 h-2 rounded-full"
                     style={{
-                        background: i % 3 === 0 ? '#667eea' : i % 3 === 1 ? '#764ba2' : '#f093fb',
+                        background: i % 3 === 0 ? '#8b5cf6' : i % 3 === 1 ? '#ec4899' : '#f59e0b',
                         left: `${Math.random() * 100}%`,
                         top: `${Math.random() * 100}%`,
                     }}
@@ -119,21 +94,18 @@ const FloatingParticles = () => {
     );
 };
 
-// Animated Background with Parallax
+// Animated Background
 const AnimatedBackground = () => {
     const { scrollY } = useScroll();
     const y1 = useSpring(useTransform(scrollY, [0, 500], [0, 150]), { stiffness: 100, damping: 30 });
     const y2 = useSpring(useTransform(scrollY, [0, 500], [0, -100]), { stiffness: 100, damping: 30 });
-    const y3 = useSpring(useTransform(scrollY, [0, 500], [0, 50]), { stiffness: 100, damping: 30 });
-    const rotate = useSpring(useTransform(scrollY, [0, 500], [0, 360]), { stiffness: 100, damping: 30 });
-    const scale = useSpring(useTransform(scrollY, [0, 300], [1, 1.2]), { stiffness: 100, damping: 30 });
 
     return (
         <div className="absolute inset-0 overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-[#667eea] via-[#764ba2] to-[#f093fb]" />
+            <div className="absolute inset-0 bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400" />
 
             <motion.div
-                className="absolute inset-0 bg-gradient-to-tr from-[#667eea]/50 via-transparent to-[#f093fb]/50"
+                className="absolute inset-0 bg-gradient-to-tr from-purple-600/50 via-transparent to-orange-400/50"
                 animate={{
                     backgroundPosition: ['0% 0%', '100% 100%'],
                 }}
@@ -145,27 +117,21 @@ const AnimatedBackground = () => {
                 }}
             />
 
-            <motion.div style={{ y: y1, scale }}>
-                <div className="absolute top-20 right-20 w-96 h-96 bg-[#667eea] rounded-full mix-blend-multiply filter blur-3xl opacity-40 animate-blob" />
+            <motion.div style={{ y: y1 }}>
+                <div className="absolute top-20 right-20 w-96 h-96 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-40 animate-blob" />
             </motion.div>
 
-            <motion.div style={{ y: y2, rotate }}>
-                <div className="absolute top-40 left-20 w-96 h-96 bg-[#764ba2] rounded-full mix-blend-multiply filter blur-3xl opacity-40 animate-blob animation-delay-2000" />
+            <motion.div style={{ y: y2 }}>
+                <div className="absolute top-40 left-20 w-96 h-96 bg-pink-500 rounded-full mix-blend-multiply filter blur-3xl opacity-40 animate-blob animation-delay-2000" />
             </motion.div>
-
-            <motion.div style={{ y: y3 }}>
-                <div className="absolute -bottom-20 left-1/3 w-96 h-96 bg-[#f093fb] rounded-full mix-blend-multiply filter blur-3xl opacity-40 animate-blob animation-delay-4000" />
-            </motion.div>
-
-            <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMC41IiBvcGFjaXR5PSIwLjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')] opacity-20" />
 
             <FloatingParticles />
         </div>
     );
 };
 
-// Modern Feature Card
-const ModernFeatureCard = ({ feature, index }) => {
+// Feature Card
+const FeatureCard = ({ feature, index }) => {
     const Icon = feature.icon;
     const ref = useRef(null);
     const isInView = useInView(ref, { once: true, margin: "-50px" });
@@ -180,679 +146,503 @@ const ModernFeatureCard = ({ feature, index }) => {
             transition={{ duration: 0.3 }}
             className="relative group h-full"
         >
-            <div className="absolute inset-0 bg-gradient-to-r from-[#667eea] via-[#764ba2] to-[#f093fb] rounded-3xl blur-xl opacity-0 group-hover:opacity-60 transition-all duration-500" />
+            <div className="absolute inset-0 bg-gradient-to-r from-purple-500 via-pink-500 to-orange-400 rounded-3xl blur-xl opacity-0 group-hover:opacity-60 transition-all duration-500" />
 
-            <div className="relative h-full bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-3xl p-8 shadow-2xl border border-white/20 dark:border-gray-700/50 hover:border-[#667eea]/50 transition-all duration-300 overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-br from-[#667eea]/5 via-[#764ba2]/5 to-[#f093fb]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+            <div className="relative h-full bg-white/90 backdrop-blur-xl rounded-3xl p-8 shadow-2xl border border-white/20 hover:border-purple-500/50 transition-all duration-300 overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 via-pink-500/5 to-orange-400/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
 
                 <motion.div
                     whileHover={{ rotate: 360, scale: 1.1 }}
                     transition={{ duration: 0.6 }}
-                    className="relative w-20 h-20 rounded-2xl bg-gradient-to-br from-[#667eea] via-[#764ba2] to-[#f093fb] flex items-center justify-center mb-6 shadow-2xl"
+                    className="relative w-20 h-20 rounded-2xl bg-gradient-to-br from-purple-600 via-pink-600 to-orange-500 flex items-center justify-center mb-6 shadow-2xl"
                 >
                     <Icon size={36} className="text-white" />
-                    <motion.div
-                        className="absolute inset-0 rounded-2xl bg-white"
-                        animate={{ scale: [1, 1.2, 1], opacity: [0.5, 0, 0.5] }}
-                        transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                    />
                 </motion.div>
 
-                <h3 className="relative text-2xl font-black text-gray-800 dark:text-white mb-3 bg-gradient-to-r from-[#667eea] via-[#764ba2] to-[#f093fb] bg-clip-text text-transparent">
+                <h3 className="text-2xl font-black text-gray-900 mb-3 relative">
                     {feature.title}
                 </h3>
-                <p className="relative text-gray-600 dark:text-gray-400 text-lg leading-relaxed">
-                    {feature.desc}
+
+                <p className="text-gray-600 leading-relaxed relative">
+                    {feature.description}
                 </p>
 
-                <div className="absolute top-4 left-4 w-16 h-16 bg-gradient-to-br from-[#667eea]/10 to-transparent rounded-full blur-2xl" />
-                <div className="absolute bottom-4 right-4 w-20 h-20 bg-gradient-to-tl from-[#f093fb]/10 to-transparent rounded-full blur-2xl" />
-            </div>
-        </motion.div>
-    );
-};
-
-// Animated Wave
-const AnimatedWave = () => {
-    return (
-        <div className="absolute bottom-0 left-0 right-0 overflow-hidden">
-            <svg className="w-full h-24" viewBox="0 0 1440 120" preserveAspectRatio="none">
-                <motion.path
-                    d="M0,64 C320,96 640,32 960,64 C1280,96 1440,64 1440,64 L1440,120 L0,120 Z"
-                    fill="currentColor"
-                    className="text-gray-50 dark:text-gray-900"
-                    initial={{ pathLength: 0, opacity: 0 }}
-                    animate={{ pathLength: 1, opacity: 1 }}
-                    transition={{ duration: 2, ease: "easeInOut" }}
-                />
-            </svg>
-        </div>
-    );
-};
-
-// Enhanced Stats Counter
-const AnimatedCounter = ({ value, label, gradient, icon: Icon }) => {
-    const [count, setCount] = useState(0);
-    const targetValue = parseInt(value.replace(/[^0-9]/g, '')) || 0;
-    const ref = useRef(null);
-    const isInView = useInView(ref, { once: true });
-
-    useEffect(() => {
-        if (!isInView) return;
-
-        const duration = 2000;
-        const steps = 60;
-        const increment = targetValue / steps;
-        let current = 0;
-
-        const timer = setInterval(() => {
-            current += increment;
-            if (current >= targetValue) {
-                setCount(targetValue);
-                clearInterval(timer);
-            } else {
-                setCount(Math.floor(current));
-            }
-        }, duration / steps);
-
-        return () => clearInterval(timer);
-    }, [targetValue, isInView]);
-
-    return (
-        <motion.div
-            ref={ref}
-            initial="hidden"
-            animate={isInView ? "visible" : "hidden"}
-            variants={scaleInVariants}
-            whileHover={{ scale: 1.08, y: -8 }}
-            transition={{ type: "spring", stiffness: 300, damping: 20 }}
-            className="relative group cursor-pointer"
-        >
-            <div className="absolute inset-0 bg-gradient-to-r from-[#667eea] via-[#764ba2] to-[#f093fb] rounded-2xl blur-2xl opacity-30 group-hover:opacity-60 transition-all duration-500" />
-
-            <div className="relative bg-white/95 dark:bg-gray-800/95 backdrop-blur-xl rounded-2xl p-6 shadow-2xl border border-white/50 dark:border-gray-700/50 overflow-hidden">
-                <motion.div
-                    className="absolute inset-0 bg-gradient-to-br from-[#667eea]/10 via-[#764ba2]/10 to-[#f093fb]/10"
-                    animate={{
-                        backgroundPosition: ['0% 0%', '100% 100%'],
-                    }}
-                    transition={{
-                        duration: 3,
-                        repeat: Infinity,
-                        repeatType: 'reverse',
-                        ease: "linear",
-                    }}
-                />
-
-                {Icon && (
-                    <motion.div
-                        animate={{ rotate: [0, 10, -10, 0] }}
-                        transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                        className="relative mb-2"
-                    >
-                        <Icon className="w-8 h-8 text-[#667eea]" />
-                    </motion.div>
+                {feature.badge && (
+                    <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-100 to-pink-100 rounded-full">
+                        <Sparkles className="w-4 h-4 text-purple-600" />
+                        <span className="text-sm font-bold text-purple-700">{feature.badge}</span>
+                    </div>
                 )}
-
-                <div className={`relative text-5xl font-black bg-gradient-to-r ${gradient} bg-clip-text text-transparent mb-2`}>
-                    {count}{value.includes('+') ? '+' : ''}{value.includes('%') ? '%' : ''}
-                </div>
-
-                <div className="relative text-gray-700 dark:text-gray-300 font-bold text-lg">
-                    {label}
-                </div>
             </div>
         </motion.div>
     );
 };
 
-// Benefit Card
-const BenefitCard = ({ icon: Icon, title, items, index }) => {
-    const ref = useRef(null);
-    const isInView = useInView(ref, { once: true, margin: "-50px" });
-
-    return (
-        <motion.div
-            ref={ref}
-            initial="hidden"
-            animate={isInView ? "visible" : "hidden"}
-            variants={{
-                hidden: { opacity: 0, y: 50 },
-                visible: {
-                    opacity: 1,
-                    y: 0,
-                    transition: {
-                        duration: 0.6,
-                        delay: index * 0.1,
-                        ease: [0.25, 0.46, 0.45, 0.94],
-                    },
-                },
-            }}
-            whileHover={{ scale: 1.05, y: -5 }}
-            transition={{ duration: 0.3 }}
-            className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl rounded-2xl p-6 shadow-xl border border-gray-200/50 dark:border-gray-700/50 hover:shadow-2xl transition-all duration-300"
-        >
-            <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#667eea] to-[#764ba2] flex items-center justify-center shadow-lg">
-                    <Icon className="w-6 h-6 text-white" />
-                </div>
-                <h3 className="text-xl font-black text-gray-800 dark:text-white">{title}</h3>
-            </div>
-            <motion.ul
-                className="space-y-2"
-                variants={staggerContainerVariants}
-                initial="hidden"
-                animate={isInView ? "visible" : "hidden"}
-            >
-                {items.map((item, i) => (
-                    <motion.li
-                        key={i}
-                        variants={staggerItemVariants}
-                        className="flex items-center gap-2 text-gray-700 dark:text-gray-300"
-                    >
-                        <CheckCircle className="w-5 h-5 text-[#667eea] flex-shrink-0" />
-                        <span>{item}</span>
-                    </motion.li>
-                ))}
-            </motion.ul>
-        </motion.div>
-    );
-};
-
-const Home = () => {
+const HomePage = () => {
     const navigate = useNavigate();
-    const { isAuthenticated } = useAuthStore();
-    const [courses, setCourses] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [reviews, setReviews] = useState([]);
+    const { user } = useAuthStore();
 
-    const { scrollY } = useScroll();
-    // Fade ONLY happens after significant scrolling - most of hero stays visible
-    const heroOpacity = useSpring(useTransform(scrollY, [400, 1000], [1, 0]), { stiffness: 100, damping: 30 });
-    const heroY = useSpring(useTransform(scrollY, [0, 800], [0, -100]), { stiffness: 100, damping: 30 });
+    const features = [
+        {
+            icon: Brain,
+            title: 'בינה מלאכותית מתקדמת',
+            description: 'נקסון משתמש ב-AI מתקדם כדי להתאים את הלמידה במיוחד עבורך, מזהה נקודות חוזק וחולשה ומתאים את רמת הקושי',
+            badge: 'טכנולוגיה חדשנית'
+        },
+        {
+            icon: Target,
+            title: 'למידה מותאמת אישית',
+            description: 'כל תלמיד מקבל תוכנית לימוד ייחודית המבוססת על היכולות, המטרות וסגנון הלמידה שלו',
+            badge: 'מותאם במיוחד'
+        },
+        {
+            icon: TrendingUp,
+            title: 'מעקב אחר התקדמות',
+            description: 'צפה בהתקדמות שלך בזמן אמת, עם גרפים ונתונים מפורטים על הביצועים שלך בכל נושא',
+            badge: 'נתונים בזמן אמת'
+        },
+        {
+            icon: BookOpen,
+            title: 'תיאוריה ותרגול',
+            description: 'שילוב מושלם בין למידת תיאוריה לתרגול מעשי, עם מעבר חלק בין שני האזורים',
+            badge: 'למידה שלמה'
+        },
+        {
+            icon: Trophy,
+            title: 'גמיפיקציה מוטיבציה',
+            description: 'הישג משחקים, אתגרים יומיים, ודירוג מתקדם ששומר על המוטיבציה גבוהה',
+            badge: 'כיף ללמוד'
+        },
+        {
+            icon: Users,
+            title: 'תמיכה צמודה 24/7',
+            description: 'נקסון זמין בכל שעה כדי לענות על שאלות, להסביר מחדש ולתת עזרה נוספת',
+            badge: 'תמיד פה בשבילך'
+        }
+    ];
 
-    useEffect(() => {
-        loadCourses();
-        loadTopReviews();
-    }, []);
+    const stats = [
+        { icon: Users, value: '10,000+', label: 'תלמידים פעילים' },
+        { icon: BookOpen, value: '50,000+', label: 'שיעורים הושלמו' },
+        { icon: Trophy, value: '95%', label: 'שיעור הצלחה' },
+        { icon: Star, value: '4.9/5', label: 'דירוג ממוצע' }
+    ];
 
-    const loadCourses = async () => {
-        try {
-            const { courses: newCourses } = await fetchCourses(null, 12);
-            setCourses(newCourses);
-        } catch (error) {
-            console.error('Error loading courses:', error);
-        } finally {
-            setLoading(false);
+    const testimonials = [
+        {
+            name: 'שרה כהן',
+            grade: 'כיתה ט׳',
+            avatar: '👧',
+            rating: 5,
+            text: 'נקסון שינה לי את הגישה למתמטיקה! עכשיו אני מבינה הכל ואפילו נהנית מהשיעורים',
+            badge: 'תלמידת מצטיינת'
+        },
+        {
+            name: 'דניאל לוי',
+            grade: 'כיתה יא׳',
+            avatar: '👦',
+            rating: 5,
+            text: 'החומר המותאם אישית והתרגילים המגוונים עזרו לי להעלות את הציון שלי מ-70 ל-95!',
+            badge: 'שיפור מדהים'
+        },
+        {
+            name: 'נועה גולן',
+            grade: 'כיתה ח׳',
+            avatar: '👩',
+            rating: 5,
+            text: 'נקסון הפך להיות המורה הפרטי שלי. הוא תמיד סבלני ומסביר בדיוק מה שאני צריכה',
+            badge: 'לומדת מצטיינת'
+        }
+    ];
+
+    const handleGetStarted = () => {
+        if (user) {
+            navigate('/dashboard');
+        } else {
+            navigate('/register');
         }
     };
-
-    const loadTopReviews = async () => {
-        try {
-            const reviewsQuery = query(
-                collection(db, 'reviews'),
-                where('rating', '>=', 4),
-                orderBy('rating', 'desc'),
-                orderBy('createdAt', 'desc'),
-                limit(6)
-            );
-
-            const reviewsSnapshot = await getDocs(reviewsQuery);
-            const reviewsData = reviewsSnapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
-
-            setReviews(reviewsData);
-        } catch (error) {
-            console.error('Error loading reviews:', error);
-        }
-    };
-
-    const featuredCourses = courses.slice(0, 6);
 
     return (
-        <div className="min-h-screen bg-gray-50 dark:bg-gray-900" dir="rtl">
+        <div className="min-h-screen bg-white" dir="rtl">
             {/* Hero Section */}
-            <div className="relative overflow-hidden min-h-screen flex items-center">
+            <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
                 <AnimatedBackground />
-                <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/20 to-transparent z-[5]" />
 
-                <div className="relative z-10 w-full max-w-7xl mx-auto px-4 py-20">
-                    <div className="text-center">
-                        {/* Content that fades with scroll */}
-                        <motion.div style={{ opacity: heroOpacity, y: heroY }}>
-                            <motion.div
-                                initial={{ opacity: 0, y: -20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ duration: 0.8, ease: [0.25, 0.46, 0.45, 0.94] }}
-                                className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-xl border border-white/30 rounded-full px-6 py-3 mb-8"
-                            >
-                                <Flame className="w-5 h-5 text-orange-400" />
-                                <span className="text-white font-bold">הפלטפורמה המובילה בישראל</span>
-                                <Sparkles className="w-5 h-5 text-yellow-400" />
-                            </motion.div>
-
-                            <motion.div
-                                initial={{ opacity: 0, scale: 0.8 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                transition={{ duration: 0.8, delay: 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
-                                className="mb-8 flex justify-center"
-                            >
-                                <motion.div
-                                    whileHover={{ scale: 1.05, rotate: 5 }}
-                                    transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                                    className="relative group"
-                                >
-                                    <div className="absolute inset-0 bg-white rounded-full blur-3xl opacity-60 group-hover:opacity-80 transition-opacity duration-500" />
-                                    <div className="relative bg-white rounded-full p-8 shadow-2xl border-4 border-white/50">
-                                        <img
-                                            src="/logo.png"
-                                            alt="Nexon Education"
-                                            className="h-32 w-auto object-contain"
-                                            onError={(e) => {
-                                                e.target.style.display = 'none';
-                                                e.target.parentElement.innerHTML = '<div class="text-6xl font-black bg-gradient-to-r from-[#667eea] via-[#764ba2] to-[#f093fb] bg-clip-text text-transparent">NEXON</div>';
-                                            }}
-                                        />
-                                    </div>
-                                </motion.div>
-                            </motion.div>
-
-                            <motion.h1
-                                initial={{ opacity: 0, y: 30 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ duration: 0.8, delay: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
-                                className="text-white text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-black mb-6 px-4 drop-shadow-2xl leading-tight"
-                            >
-                                למד את הכישורים
-                                <br />
-                                <span className="bg-gradient-to-r from-white via-purple-200 to-pink-200 bg-clip-text text-transparent">
-                                    של המחר
-                                </span>
-                            </motion.h1>
-
-                            <motion.p
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                transition={{ delay: 0.6, duration: 0.8, ease: "easeOut" }}
-                                className="text-white/95 text-xl sm:text-2xl md:text-3xl mb-12 font-bold max-w-3xl mx-auto px-4 drop-shadow-lg"
-                            >
-                                הצטרפו ל-10,000+ סטודנטים מצליחים 🚀
-                            </motion.p>
-                        </motion.div>
-
-                        {/* Stats - Don't fade */}
+                <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+                    <motion.div
+                        initial={{ opacity: 0, y: 40 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 1, ease: [0.25, 0.46, 0.45, 0.94] }}
+                        className="text-center"
+                    >
+                        {/* Logo/Brand */}
                         <motion.div
-                            className="grid grid-cols-1 sm:grid-cols-3 gap-6 max-w-5xl mx-auto mb-12 px-4"
-                            initial="hidden"
-                            animate="visible"
-                            variants={staggerContainerVariants}
+                            initial={{ scale: 0.8, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            transition={{ duration: 0.8, delay: 0.2 }}
+                            className="mb-8 inline-flex items-center justify-center"
                         >
-                            <AnimatedCounter
-                                value={`${courses.length || 0}+`}
-                                label="קורסים זמינים"
-                                gradient="from-[#667eea] to-[#764ba2]"
-                                icon={BookOpen}
-                            />
-                            <AnimatedCounter
-                                value="10000+"
-                                label="סטודנטים מרוצים"
-                                gradient="from-[#764ba2] to-[#f093fb]"
-                                icon={Users}
-                            />
-                            <AnimatedCounter
-                                value="98%"
-                                label="דירוג שביעות רצון"
-                                gradient="from-[#f093fb] to-[#667eea]"
-                                icon={Trophy}
-                            />
+                            <div className="relative">
+                                <div className="absolute inset-0 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full blur-2xl opacity-50 animate-pulse" />
+                                <div className="relative bg-white rounded-full p-6 shadow-2xl">
+                                    <Brain className="w-20 h-20 text-transparent bg-clip-text bg-gradient-to-r from-purple-600 via-pink-600 to-orange-500" style={{ fill: 'url(#gradient)' }} />
+                                    <svg width="0" height="0">
+                                        <defs>
+                                            <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                                <stop offset="0%" stopColor="#8b5cf6" />
+                                                <stop offset="50%" stopColor="#ec4899" />
+                                                <stop offset="100%" stopColor="#f59e0b" />
+                                            </linearGradient>
+                                        </defs>
+                                    </svg>
+                                </div>
+                            </div>
                         </motion.div>
 
-                        {/* CTA Buttons - NEVER fade, always visible and clickable */}
-                        <motion.div
-                            initial={{ opacity: 0, y: 30 }}
+                        <motion.h1
+                            initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.8, duration: 0.8, ease: [0.25, 0.46, 0.45, 0.94] }}
-                            className="flex flex-col sm:flex-row gap-4 justify-center items-center px-4 relative z-20"
+                            transition={{ duration: 0.8, delay: 0.3 }}
+                            className="text-7xl md:text-8xl font-black text-white mb-6 drop-shadow-2xl"
+                        >
+                            נקסון
+                        </motion.h1>
+
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.8, delay: 0.4 }}
+                            className="mb-8"
+                        >
+                            <p className="text-3xl md:text-4xl text-white font-bold mb-4">
+                                המורה הפרטי שלך למתמטיקה 🚀
+                            </p>
+                            <p className="text-xl md:text-2xl text-white/90 max-w-3xl mx-auto leading-relaxed">
+                                למד מתמטיקה בצורה חכמה, מהנה ומותאמת אישית עם בינה מלאכותית מתקדמת
+                            </p>
+                        </motion.div>
+
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.8, delay: 0.5 }}
+                            className="flex flex-col sm:flex-row gap-4 justify-center items-center"
                         >
                             <motion.button
-                                whileHover={{ scale: 1.05, y: -2 }}
+                                whileHover={{ scale: 1.05, boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}
                                 whileTap={{ scale: 0.95 }}
-                                transition={{ type: "spring", stiffness: 400, damping: 17 }}
-                                onClick={() => navigate('/courses')}
-                                className="group w-full sm:w-auto px-12 py-5 bg-white text-[#667eea] rounded-2xl font-black text-xl shadow-2xl hover:shadow-[#667eea]/50 transition-all relative overflow-hidden"
+                                onClick={handleGetStarted}
+                                className="group relative px-12 py-6 bg-white text-transparent bg-clip-text bg-gradient-to-r from-purple-600 via-pink-600 to-orange-500 rounded-2xl font-black text-2xl shadow-2xl overflow-hidden"
                             >
-                                <span className="absolute inset-0 bg-gradient-to-r from-[#667eea] via-[#764ba2] to-[#f093fb] opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                                <span className="relative flex items-center justify-center gap-2 group-hover:text-white transition-colors duration-300">
-                                    <Sparkles className="w-6 h-6" />
-                                    צפו בכל הקורסים
-                                    <ArrowLeft className="w-6 h-6 group-hover:translate-x-1 transition-transform duration-300" />
+                                <div className="absolute inset-0 bg-white" />
+                                <div className="absolute inset-0 bg-gradient-to-r from-purple-600 via-pink-600 to-orange-500 opacity-0 group-hover:opacity-10 transition-opacity" />
+                                <span className="relative flex items-center gap-3">
+                                    <Rocket className="w-7 h-7" style={{ color: '#8b5cf6' }} />
+                                    התחל ללמוד עכשיו!
                                 </span>
                             </motion.button>
 
-                            {!isAuthenticated && (
+                            {!user && (
                                 <motion.button
-                                    whileHover={{ scale: 1.05, y: -2 }}
+                                    whileHover={{ scale: 1.05 }}
                                     whileTap={{ scale: 0.95 }}
-                                    transition={{ type: "spring", stiffness: 400, damping: 17 }}
-                                    onClick={() => navigate('/register')}
-                                    className="w-full sm:w-auto px-12 py-5 bg-gradient-to-r from-[#667eea] via-[#764ba2] to-[#f093fb] text-white border-4 border-white/30 rounded-2xl font-black text-xl shadow-2xl hover:shadow-purple-500/50 transition-all"
+                                    onClick={() => navigate('/login')}
+                                    className="px-12 py-6 bg-white/10 backdrop-blur-lg text-white rounded-2xl font-bold text-xl border-2 border-white/30 hover:bg-white/20 transition-all shadow-xl"
                                 >
-                                    הצטרפו עכשיו בחינם 🎉
+                                    כבר יש לי חשבון
                                 </motion.button>
                             )}
                         </motion.div>
-                    </div>
+
+                        {/* Quick Stats */}
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.8, delay: 0.6 }}
+                            className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-6"
+                        >
+                            {stats.map((stat, index) => {
+                                const Icon = stat.icon;
+                                return (
+                                    <motion.div
+                                        key={index}
+                                        whileHover={{ y: -5, scale: 1.05 }}
+                                        className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20"
+                                    >
+                                        <Icon className="w-8 h-8 text-white mb-3 mx-auto" />
+                                        <div className="text-4xl font-black text-white mb-2">{stat.value}</div>
+                                        <div className="text-white/80 font-medium">{stat.label}</div>
+                                    </motion.div>
+                                );
+                            })}
+                        </motion.div>
+                    </motion.div>
                 </div>
 
-                <AnimatedWave />
-            </div>
-
-            {/* Trust Badges Section */}
-            <SmoothSection className="py-12 bg-gray-50 dark:bg-gray-900">
+                {/* Scroll Indicator */}
                 <motion.div
-                    variants={staggerContainerVariants}
-                    initial="hidden"
-                    whileInView="visible"
-                    viewport={{ once: true, margin: "-100px" }}
-                    className="max-w-7xl mx-auto px-4"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 1, duration: 1 }}
+                    className="absolute bottom-10 left-1/2 transform -translate-x-1/2"
                 >
-                    <div className="flex flex-wrap justify-center items-center gap-8 text-gray-600 dark:text-gray-400">
-                        {[
-                            { icon: Shield, text: 'תשלום מאובטח' },
-                            { icon: CheckCircle, text: 'תעודה מוכרת' },
-                            { icon: Clock, text: 'גישה מיידית' },
-                            { icon: Trophy, text: 'אחריות 30 יום' },
-                        ].map((badge, i) => (
-                            <motion.div
-                                key={i}
-                                variants={staggerItemVariants}
-                                className="flex items-center gap-2"
-                            >
-                                <badge.icon className="w-6 h-6 text-[#667eea]" />
-                                <span className="font-bold">{badge.text}</span>
-                            </motion.div>
-                        ))}
-                    </div>
+                    <motion.div
+                        animate={{ y: [0, 10, 0] }}
+                        transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                        className="text-white text-center"
+                    >
+                        <ChevronLeft className="w-8 h-8 mx-auto rotate-90" />
+                        <p className="text-sm font-medium">גלול למטה</p>
+                    </motion.div>
                 </motion.div>
-            </SmoothSection>
+            </section>
 
             {/* Features Section */}
-            <SmoothSection className="py-20 bg-white dark:bg-gray-800 relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-96 h-96 bg-[#667eea]/10 rounded-full blur-3xl" />
-                <div className="absolute bottom-0 left-0 w-96 h-96 bg-[#f093fb]/10 rounded-full blur-3xl" />
-
-                <div className="max-w-7xl mx-auto px-4 relative">
+            <SmoothSection className="py-24 px-4 bg-gray-50">
+                <div className="max-w-7xl mx-auto">
                     <motion.div
+                        variants={staggerContainerVariants}
                         initial="hidden"
                         whileInView="visible"
                         viewport={{ once: true, margin: "-100px" }}
-                        variants={fadeInUpVariants}
                         className="text-center mb-16"
                     >
-                        <motion.div
-                            animate={{ rotate: [0, 360] }}
-                            transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-                            className="inline-block mb-4"
-                        >
-                            <Sparkles className="w-12 h-12 text-[#667eea]" />
+                        <motion.div variants={staggerItemVariants} className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-100 to-pink-100 rounded-full mb-6">
+                            <Sparkles className="w-5 h-5 text-purple-600" />
+                            <span className="text-purple-700 font-bold">למה נקסון?</span>
                         </motion.div>
-                        <h2 className="text-5xl font-black text-gray-800 dark:text-white mb-4">
-                            למה לבחור בנו?
-                        </h2>
-                        <p className="text-xl text-gray-600 dark:text-gray-400">
-                            הסיבות שהופכות אותנו למובילים בתחום
-                        </p>
+
+                        <motion.h2 variants={staggerItemVariants} className="text-5xl md:text-6xl font-black text-gray-900 mb-6">
+                            למידה חכמה ומותאמת אישית
+                        </motion.h2>
+
+                        <motion.p variants={staggerItemVariants} className="text-xl text-gray-600 max-w-3xl mx-auto">
+                            נקסון משלב טכנולוגיה מתקדמת עם פדגוגיה מוכחת כדי לתת לך את חווית הלמידה הטובה ביותר
+                        </motion.p>
                     </motion.div>
 
                     <motion.div
-                        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8"
                         variants={staggerContainerVariants}
                         initial="hidden"
                         whileInView="visible"
                         viewport={{ once: true, margin: "-50px" }}
+                        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
                     >
-                        {[
-                            { icon: BookOpen, title: 'תוכן איכותי', desc: 'וידאו באיכות 4K עם הסברים ברורים ומפורטים' },
-                            { icon: Users, title: 'מרצים מומחים', desc: 'מקצוענים מובילים מהתעשייה עם ניסיון עשיר' },
-                            { icon: Award, title: 'תעודת הסמכה', desc: 'תעודה מוכרת בתעשייה שתגביר את הסיכויים שלך' },
-                            { icon: TrendingUp, title: 'גישה לכל החיים', desc: 'שלם פעם אחת וקבל גישה ללא הגבלת זמן' },
-                        ].map((feature, index) => (
-                            <ModernFeatureCard key={index} feature={feature} index={index} />
+                        {features.map((feature, index) => (
+                            <FeatureCard key={index} feature={feature} index={index} />
                         ))}
                     </motion.div>
                 </div>
             </SmoothSection>
 
-            {/* Benefits Section */}
-            <SmoothSection className="py-20 bg-gray-50 dark:bg-gray-900">
-                <div className="max-w-7xl mx-auto px-4">
-                    <motion.div
-                        initial="hidden"
-                        whileInView="visible"
-                        viewport={{ once: true, margin: "-100px" }}
-                        variants={fadeInUpVariants}
-                        className="text-center mb-16"
-                    >
-                        <h2 className="text-5xl font-black text-gray-800 dark:text-white mb-4">
-                            מה תקבלו? 🎁
-                        </h2>
-                        <p className="text-xl text-gray-600 dark:text-gray-400">
-                            חבילה מלאה לחוויית למידה מושלמת
-                        </p>
-                    </motion.div>
+            {/* How It Works */}
+            <SmoothSection className="py-24 px-4 bg-white">
+                <div className="max-w-7xl mx-auto">
+                    <div className="text-center mb-16">
+                        <div className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-100 to-pink-100 rounded-full mb-6">
+                            <Zap className="w-5 h-5 text-purple-600" />
+                            <span className="text-purple-700 font-bold">איך זה עובד?</span>
+                        </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <h2 className="text-5xl md:text-6xl font-black text-gray-900 mb-6">
+                            3 צעדים פשוטים להצלחה
+                        </h2>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                         {[
                             {
-                                icon: Rocket,
-                                title: 'למידה מתקדמת',
-                                items: ['תוכן מעודכן שבועית', 'פרויקטים מעשיים', 'קהילת תמיכה פעילה', 'עזרה צמודה מהמדריכים'],
-                            },
-                            {
+                                step: '1',
                                 icon: Target,
-                                title: 'כלים מקצועיים',
-                                items: ['משאבים להורדה', 'תבניות ודוגמאות', 'כלים נוספים', 'גישה למשאבים בלעדיים'],
+                                title: 'הרשמה ומיפוי',
+                                description: 'השלם שאלון קצר ונקסון ילמד את הצרכים והיכולות שלך'
                             },
                             {
-                                icon: Trophy,
-                                title: 'הכרה והסמכה',
-                                items: ['תעודה דיגיטלית', 'תג LinkedIn', 'פרופיל בוגרים', 'המלצות מקצועיות'],
+                                step: '2',
+                                icon: BookOpen,
+                                title: 'למד ותרגל',
+                                description: 'קבל תוכנית לימוד מותאמת אישית ותרגול חכם עם פידבק מיידי'
                             },
-                        ].map((benefit, i) => (
-                            <BenefitCard key={i} {...benefit} index={i} />
+                            {
+                                step: '3',
+                                icon: Trophy,
+                                title: 'התקדם והצלח',
+                                description: 'עקוב אחר ההתקדמות שלך וראה את השיפור בזמן אמת'
+                            }
+                        ].map((item, index) => {
+                            const Icon = item.icon;
+                            return (
+                                <motion.div
+                                    key={index}
+                                    initial={{ opacity: 0, y: 30 }}
+                                    whileInView={{ opacity: 1, y: 0 }}
+                                    viewport={{ once: true }}
+                                    transition={{ delay: index * 0.2 }}
+                                    whileHover={{ y: -10 }}
+                                    className="relative"
+                                >
+                                    <div className="text-center">
+                                        <div className="relative inline-block mb-6">
+                                            <div className="absolute inset-0 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full blur-xl opacity-30" />
+                                            <div className="relative w-24 h-24 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full flex items-center justify-center shadow-2xl">
+                                                <span className="text-4xl font-black text-white">{item.step}</span>
+                                            </div>
+                                        </div>
+
+                                        <div className="mb-4">
+                                            <Icon className="w-12 h-12 text-purple-600 mx-auto" />
+                                        </div>
+
+                                        <h3 className="text-2xl font-black text-gray-900 mb-3">
+                                            {item.title}
+                                        </h3>
+
+                                        <p className="text-gray-600 leading-relaxed">
+                                            {item.description}
+                                        </p>
+                                    </div>
+                                </motion.div>
+                            );
+                        })}
+                    </div>
+                </div>
+            </SmoothSection>
+
+            {/* Testimonials */}
+            <SmoothSection className="py-24 px-4 bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400">
+                <div className="max-w-7xl mx-auto">
+                    <div className="text-center mb-16">
+                        <div className="inline-flex items-center gap-2 px-6 py-3 bg-white/20 backdrop-blur-lg rounded-full mb-6">
+                            <Star className="w-5 h-5 text-white" />
+                            <span className="text-white font-bold">מה אומרים עלינו</span>
+                        </div>
+
+                        <h2 className="text-5xl md:text-6xl font-black text-white mb-6">
+                            תלמידים מרוצים משתפים
+                        </h2>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                        {testimonials.map((testimonial, index) => (
+                            <motion.div
+                                key={index}
+                                initial={{ opacity: 0, scale: 0.9 }}
+                                whileInView={{ opacity: 1, scale: 1 }}
+                                viewport={{ once: true }}
+                                transition={{ delay: index * 0.1 }}
+                                whileHover={{ y: -10, scale: 1.02 }}
+                                className="bg-white/90 backdrop-blur-xl rounded-3xl p-8 shadow-2xl"
+                            >
+                                <div className="flex justify-between items-start mb-4">
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-3 mb-2">
+                                            <div className="text-5xl">{testimonial.avatar}</div>
+                                            <div>
+                                                <h4 className="font-black text-xl text-gray-900">{testimonial.name}</h4>
+                                                <p className="text-gray-600">{testimonial.grade}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <span className="px-3 py-1 bg-purple-100 text-purple-700 text-xs font-bold rounded-full">
+                                        {testimonial.badge}
+                                    </span>
+                                </div>
+
+                                <div className="flex gap-1 mb-4">
+                                    {[...Array(testimonial.rating)].map((_, i) => (
+                                        <Star key={i} className="w-5 h-5 fill-yellow-400 text-yellow-400" />
+                                    ))}
+                                </div>
+
+                                <p className="text-gray-700 leading-relaxed">
+                                    "{testimonial.text}"
+                                </p>
+                            </motion.div>
                         ))}
                     </div>
                 </div>
             </SmoothSection>
 
-            {/* Featured Courses */}
-            {featuredCourses.length > 0 && (
-                <SmoothSection className="py-20 bg-white dark:bg-gray-800">
-                    <div className="max-w-7xl mx-auto px-4">
-                        <motion.div
-                            initial="hidden"
-                            whileInView="visible"
-                            viewport={{ once: true, margin: "-100px" }}
-                            variants={fadeInUpVariants}
-                            className="text-center mb-16"
-                        >
-                            <h2 className="text-5xl font-black text-gray-800 dark:text-white mb-4">
-                                הקורסים המומלצים שלנו ⭐
-                            </h2>
-                            <p className="text-xl text-gray-600 dark:text-gray-400">
-                                הקורסים הפופולריים והמבוקשים ביותר
-                            </p>
-                        </motion.div>
-
-                        <motion.div
-                            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
-                            variants={staggerContainerVariants}
-                            initial="hidden"
-                            whileInView="visible"
-                            viewport={{ once: true, margin: "-50px" }}
-                        >
-                            {featuredCourses.map((course, index) => (
-                                <motion.div
-                                    key={course.id}
-                                    variants={staggerItemVariants}
-                                >
-                                    <CourseCard course={course} />
-                                </motion.div>
-                            ))}
-                        </motion.div>
-
-                        <motion.div
-                            initial={{ opacity: 0, y: 30 }}
-                            whileInView={{ opacity: 1, y: 0 }}
-                            viewport={{ once: true }}
-                            transition={{ duration: 0.8, ease: [0.25, 0.46, 0.45, 0.94] }}
-                            className="text-center mt-12"
-                        >
-                            <motion.button
-                                whileHover={{ scale: 1.05 }}
-                                whileTap={{ scale: 0.95 }}
-                                transition={{ type: "spring", stiffness: 400, damping: 17 }}
-                                onClick={() => navigate('/courses')}
-                                className="px-10 py-4 bg-gradient-to-r from-[#667eea] via-[#764ba2] to-[#f093fb] text-white rounded-xl font-bold text-lg shadow-2xl hover:shadow-[#667eea]/50 transition-all"
-                            >
-                                צפו בכל הקורסים
-                            </motion.button>
-                        </motion.div>
-                    </div>
-                </SmoothSection>
-            )}
-
-            {/* Reviews Section */}
-            {reviews.length > 0 && (
-                <SmoothSection className="py-20 bg-gray-50 dark:bg-gray-900">
-                    <div className="max-w-7xl mx-auto px-4">
-                        <motion.div
-                            initial="hidden"
-                            whileInView="visible"
-                            viewport={{ once: true, margin: "-100px" }}
-                            variants={fadeInUpVariants}
-                            className="text-center mb-16"
-                        >
-                            <h2 className="text-5xl font-black text-gray-800 dark:text-white mb-4">
-                                מה אומרים עלינו? 💬
-                            </h2>
-                            <p className="text-xl text-gray-600 dark:text-gray-400">
-                                חוות דעת אמיתיות מסטודנטים מרוצים
-                            </p>
-                        </motion.div>
-
-                        <Swiper
-                            modules={[Autoplay, Pagination, Navigation]}
-                            spaceBetween={30}
-                            slidesPerView={1}
-                            autoplay={{ delay: 5000, disableOnInteraction: false }}
-                            pagination={{ clickable: true }}
-                            navigation
-                            breakpoints={{
-                                640: { slidesPerView: 2 },
-                                1024: { slidesPerView: 3 },
-                            }}
-                            className="pb-12"
-                        >
-                            {reviews.map((review) => (
-                                <SwiperSlide key={review.id}>
-                                    <motion.div
-                                        whileHover={{ y: -5 }}
-                                        transition={{ duration: 0.3 }}
-                                        className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-2xl p-6 shadow-xl hover:shadow-2xl transition-all border border-gray-200/50 dark:border-gray-700/50 h-full"
-                                    >
-                                        <div className="flex items-center gap-1 mb-4">
-                                            {[...Array(5)].map((_, i) => (
-                                                <Star
-                                                    key={i}
-                                                    size={20}
-                                                    className={i < review.rating ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}
-                                                />
-                                            ))}
-                                        </div>
-                                        <p className="text-gray-700 dark:text-gray-300 mb-4 line-clamp-3">{review.comment}</p>
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 bg-gradient-to-br from-[#667eea] via-[#764ba2] to-[#f093fb] rounded-full flex items-center justify-center text-white font-bold shadow-lg">
-                                                {review.userName?.charAt(0) || 'A'}
-                                            </div>
-                                            <div>
-                                                <p className="font-bold text-gray-800 dark:text-white">{review.userName || 'אנונימי'}</p>
-                                            </div>
-                                        </div>
-                                    </motion.div>
-                                </SwiperSlide>
-                            ))}
-                        </Swiper>
-                    </div>
-                </SmoothSection>
-            )}
-
-            {/* Final CTA */}
-            {!isAuthenticated && (
-                <SmoothSection className="relative py-20 overflow-hidden">
-                    <div className="absolute inset-0 bg-gradient-to-r from-[#667eea] via-[#764ba2] to-[#f093fb]" />
-
-                    <div className="absolute inset-0 opacity-30">
-                        <motion.div
-                            animate={{ scale: [1, 1.2, 1], x: [0, 50, 0], y: [0, 30, 0] }}
-                            transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-                            className="absolute top-10 left-1/4 w-96 h-96 bg-white rounded-full filter blur-3xl"
-                        />
-                        <motion.div
-                            animate={{ scale: [1, 1.3, 1], x: [0, -50, 0], y: [0, -30, 0] }}
-                            transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
-                            className="absolute bottom-10 right-1/4 w-96 h-96 bg-pink-300 rounded-full filter blur-3xl"
-                        />
-                    </div>
-
+            {/* CTA Section */}
+            <SmoothSection className="py-24 px-4 bg-gray-900">
+                <div className="max-w-4xl mx-auto text-center">
                     <motion.div
-                        initial="hidden"
-                        whileInView="visible"
-                        viewport={{ once: true, margin: "-100px" }}
-                        variants={fadeInUpVariants}
-                        className="relative max-w-4xl mx-auto text-center px-4"
+                        initial={{ opacity: 0, y: 20 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true }}
                     >
-                        <motion.div
-                            animate={{
-                                rotate: [0, 10, -10, 0],
-                                scale: [1, 1.1, 1],
-                            }}
-                            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                        >
-                            <Rocket size={80} className="mx-auto mb-6 text-white drop-shadow-2xl" />
-                        </motion.div>
-                        <h2 className="text-5xl md:text-6xl font-black mb-6 text-white drop-shadow-lg">
-                            מוכנים להתחיל את המסע? 🚀
+                        <Sparkles className="w-16 h-16 text-purple-400 mx-auto mb-6" />
+
+                        <h2 className="text-5xl md:text-6xl font-black text-white mb-6">
+                            מוכן להתחיל?
                         </h2>
-                        <p className="text-2xl mb-10 font-bold text-white/95 drop-shadow-md">
-                            הצטרפו עכשיו ותקבלו גישה מיידית לכל הקורסים
+
+                        <p className="text-2xl text-gray-300 mb-10 max-w-2xl mx-auto">
+                            הצטרף אלפי תלמידים שכבר משפרים את הציונים שלהם עם נקסון
                         </p>
+
                         <motion.button
-                            whileHover={{ scale: 1.1, y: -5 }}
+                            whileHover={{ scale: 1.05, boxShadow: "0 20px 60px rgba(139, 92, 246, 0.5)" }}
                             whileTap={{ scale: 0.95 }}
-                            transition={{ type: "spring", stiffness: 400, damping: 17 }}
-                            onClick={() => navigate('/register')}
-                            className="px-12 py-6 bg-white text-[#667eea] rounded-2xl font-black text-2xl shadow-2xl hover:shadow-white/50 transition-all"
+                            onClick={handleGetStarted}
+                            className="inline-flex items-center gap-3 px-12 py-6 bg-gradient-to-r from-purple-600 via-pink-600 to-orange-500 text-white text-2xl font-black rounded-2xl shadow-2xl hover:shadow-purple-500/50 transition-all"
                         >
-                            הצטרפו עכשיו בחינם! 🎉
+                            <Rocket className="w-7 h-7" />
+                            התחל בחינם עכשיו!
                         </motion.button>
 
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            transition={{ delay: 0.5, duration: 0.8 }}
-                            className="mt-8 flex items-center justify-center gap-2 text-white/90"
-                        >
-                            <Users className="w-5 h-5" />
-                            <span className="text-sm font-semibold">הצטרפו ל-10,000+ סטודנטים מרוצים</span>
-                        </motion.div>
+                        <p className="text-gray-400 mt-6">
+                            ✓ ללא כרטיס אשראי ✓ גישה מיידית ✓ ביטול בכל עת
+                        </p>
                     </motion.div>
-                </SmoothSection>
-            )}
+                </div>
+            </SmoothSection>
+
+            {/* Footer */}
+            <footer className="bg-gray-950 text-gray-400 py-12 px-4">
+                <div className="max-w-7xl mx-auto text-center">
+                    <div className="flex items-center justify-center gap-3 mb-4">
+                        <Brain className="w-8 h-8 text-purple-500" />
+                        <span className="text-2xl font-black text-white">נקסון</span>
+                    </div>
+
+                    <p className="mb-6">המורה הפרטי שלך למתמטיקה • זמין 24/7</p>
+
+                    <div className="flex justify-center gap-6 mb-6">
+                        <a href="#" className="hover:text-white transition-colors">תנאי שימוש</a>
+                        <a href="#" className="hover:text-white transition-colors">מדיניות פרטיות</a>
+                        <a href="#" className="hover:text-white transition-colors">צור קשר</a>
+                    </div>
+
+                    <p className="text-sm">
+                        © 2025 נקסון. כל הזכויות שמורות.
+                    </p>
+                </div>
+            </footer>
+
+            <style jsx>{`
+                @keyframes blob {
+                    0%, 100% { transform: translate(0, 0) scale(1); }
+                    25% { transform: translate(20px, -50px) scale(1.1); }
+                    50% { transform: translate(-20px, 20px) scale(0.9); }
+                    75% { transform: translate(50px, 50px) scale(1.05); }
+                }
+
+                .animate-blob {
+                    animation: blob 7s infinite;
+                }
+
+                .animation-delay-2000 {
+                    animation-delay: 2s;
+                }
+
+                .animation-delay-4000 {
+                    animation-delay: 4s;
+                }
+            `}</style>
         </div>
     );
 };
 
-export default Home;
+export default HomePage;
