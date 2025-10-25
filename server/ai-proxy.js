@@ -19,6 +19,7 @@ import curriculumRoutes from './routes/curriculumRoutes.js';
 import learningRoutes from './routes/learningRoutes.js';
 import chatRoutes from './routes/chatRoutes.js';
 
+import pool from './config/database.js';
 import ISRAELI_CURRICULUM, {
     getGradeConfig,
     getReformNotes,
@@ -1834,6 +1835,16 @@ app.use('/api/learning', learningRoutes);
 app.use('/api/chat', chatRoutes);
 
 
+
+// ==================== TEST DATABASE CONNECTION ====================
+pool.query('SELECT NOW()', (err, result) => {
+    if (err) {
+        console.error('? Database connection failed:', err.message);
+    } else {
+        console.log('? Database connected successfully!');
+        console.log('   Connection time:', result.rows[0].now);
+    }
+});
 app.listen(PORT, async () => {
     await loadPersonalityFromStorage();
 
