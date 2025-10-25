@@ -1845,15 +1845,16 @@ pool.query('SELECT NOW()', (err, result) => {
         console.log('   Connection time:', result.rows[0].now);
     }
 });
-app.listen(PORT, async () => {
+app.listen(PORT, '0.0.0.0', async () => {
     await loadPersonalityFromStorage();
 
     console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('🚀 NEXON AI - SMART TOPIC-BASED QUESTIONS');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log(`📡 Server: http://localhost:${PORT}`);
+    console.log(`📡 Server: http://0.0.0.0:${PORT}`);
     console.log(`   • Personality: ${personalitySystem.loaded ? '✅' : '❌'}`);
     console.log(`   • Smart Topics: ✅`);
     console.log(`   • SVG Support: ✅`);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 });
+
