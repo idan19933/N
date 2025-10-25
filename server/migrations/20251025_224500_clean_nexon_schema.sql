@@ -1,6 +1,5 @@
-﻿-- Clean Nexon Database Schema
+-- Clean Nexon Database Schema
 
--- Users table
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     firebase_uid VARCHAR(255) UNIQUE,
@@ -10,7 +9,6 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Student profiles
 CREATE TABLE IF NOT EXISTS student_profiles (
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -20,7 +18,6 @@ CREATE TABLE IF NOT EXISTS student_profiles (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Curriculum progress
 CREATE TABLE IF NOT EXISTS curriculum_progress (
     id SERIAL PRIMARY KEY,
     student_id VARCHAR(255) NOT NULL,
@@ -34,7 +31,6 @@ CREATE TABLE IF NOT EXISTS curriculum_progress (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Student progress
 CREATE TABLE IF NOT EXISTS student_progress (
     id SERIAL PRIMARY KEY,
     student_id VARCHAR(255) NOT NULL,
@@ -46,7 +42,6 @@ CREATE TABLE IF NOT EXISTS student_progress (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Topic progress
 CREATE TABLE IF NOT EXISTS topic_progress (
     id SERIAL PRIMARY KEY,
     student_id VARCHAR(255) NOT NULL,
@@ -57,7 +52,6 @@ CREATE TABLE IF NOT EXISTS topic_progress (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Subtopic progress
 CREATE TABLE IF NOT EXISTS subtopic_progress (
     id SERIAL PRIMARY KEY,
     student_id VARCHAR(255) NOT NULL,
@@ -68,7 +62,6 @@ CREATE TABLE IF NOT EXISTS subtopic_progress (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Notebook entries
 CREATE TABLE IF NOT EXISTS notebook_entries (
     id SERIAL PRIMARY KEY,
     student_id INTEGER NOT NULL,
@@ -82,7 +75,6 @@ CREATE TABLE IF NOT EXISTS notebook_entries (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Chat sessions
 CREATE TABLE IF NOT EXISTS chat_sessions (
     id SERIAL PRIMARY KEY,
     student_id INTEGER NOT NULL,
@@ -90,7 +82,6 @@ CREATE TABLE IF NOT EXISTS chat_sessions (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Learning sessions
 CREATE TABLE IF NOT EXISTS learning_sessions (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL,
@@ -107,7 +98,6 @@ CREATE TABLE IF NOT EXISTS learning_sessions (
     mood_after VARCHAR(20)
 );
 
--- Student goals
 CREATE TABLE IF NOT EXISTS student_goals (
     id SERIAL PRIMARY KEY,
     student_id VARCHAR(255) NOT NULL,
@@ -119,7 +109,6 @@ CREATE TABLE IF NOT EXISTS student_goals (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Timeline events
 CREATE TABLE IF NOT EXISTS timeline_events (
     id SERIAL PRIMARY KEY,
     student_id VARCHAR(255) NOT NULL,
@@ -128,7 +117,6 @@ CREATE TABLE IF NOT EXISTS timeline_events (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create indexes
 CREATE INDEX IF NOT EXISTS idx_student_profiles_user_id ON student_profiles(user_id);
 CREATE INDEX IF NOT EXISTS idx_curriculum_progress_student ON curriculum_progress(student_id);
 CREATE INDEX IF NOT EXISTS idx_student_progress_student ON student_progress(student_id);
