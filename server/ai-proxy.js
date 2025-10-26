@@ -45,6 +45,12 @@ const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 
+// SIMPLE TEST ROUTE
+app.get('/test', (req, res) => {
+    console.error('?? TEST ROUTE HIT!');
+    res.json({ success: true, message: 'Server is reachable!' });
+});
+
 // LOG ALL INCOMING REQUESTS
 app.use((req, res, next) => {
     console.log('='.repeat(60));
@@ -1874,6 +1880,7 @@ app.listen(PORT, '0.0.0.0', async () => {
     console.log(`   • SVG Support: ✅`);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 });
+
 
 
 
