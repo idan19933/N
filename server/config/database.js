@@ -14,7 +14,7 @@ console.log('?? DATABASE_URL exists?', !!process.env.DATABASE_URL);
 console.log('?? NODE_ENV:', process.env.NODE_ENV);
 
 const pool = new Pool({
-    connectionString: process.env.DATABASE_PUBLIC_URL || process.env.DATABASE_URL || 'postgresql://postgres:PNqnFQHUTQTeJupKwOjZcqCFjnenwVQn@gondola.proxy.rlwy.net:35958/railway',
+    connectionString: process.env.DATABASE_PUBLIC_URL || process.env.DATABASE_URL || 'postgresql://postgres:PNqnFQHUTQTeJupKwOjZcqCFjnerwYQr@gondola.proxy.rlwy.net:35958/railway',
     ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
     max: 20,
     idleTimeoutMillis: 30000,
@@ -31,6 +31,7 @@ pool.on('error', (err) => {
 });
 
 export default pool;
+
 
 
 

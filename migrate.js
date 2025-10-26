@@ -8,7 +8,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_PUBLIC_URL || process.env.DATABASE_URL || 'postgresql://postgres:PNqnFQHUTQTeJupKwOjZcqCFjnenwVQn@gondola.proxy.rlwy.net:35958/railway',
+  connectionString: process.env.DATABASE_PUBLIC_URL || process.env.DATABASE_URL || 'postgresql://postgres:PNqnFQHUTQTeJupKwOjZcqCFjnerwYQr@gondola.proxy.rlwy.net:35958/railway',
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
@@ -86,4 +86,5 @@ runMigrations().catch(error => {
   console.error('Failed to run migrations:', error);
   process.exit(1);
 });
+
 
