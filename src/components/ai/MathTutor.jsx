@@ -33,7 +33,7 @@ import {
     ComposedChart
 } from 'recharts';
 
-const API_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+const API_URL = 'http://localhost:3001'; // HARDCODED FOR TESTING
 
 // ==================== 🎤 VOICE SUPPORT HOOK ====================
 const useVoiceSupport = () => {
@@ -1432,7 +1432,7 @@ const MathTutor = ({
 
             let displayMessage = 'שגיאה ביצירת שאלה';
             if (error.message.includes('fetch')) {
-                displayMessage = 'לא ניתן להתחבר לשרת. בדוק שהשרת רץ על http://localhost:3001';
+                displayMessage = 'לא ניתן להתחבר לשרת. בדוק שהשרת רץ על the backend server';
             } else if (error.message.includes('JSON')) {
                 displayMessage = 'שגיאת תקשורת עם השרת. נסה שוב.';
             } else if (error.message) {
@@ -2505,3 +2505,4 @@ const MathTutor = ({
 
 
 export default MathTutor;
+
