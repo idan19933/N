@@ -29,7 +29,10 @@ import ISRAELI_CURRICULUM, {
     CURRICULUM_METADATA
 } from './config/israeliCurriculum.js';
 
-dotenv.config();
+// Only load .env in development
+if (process.env.NODE_ENV !== 'production') {
+    dotenv.config();
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1857,4 +1860,5 @@ app.listen(PORT, '0.0.0.0', async () => {
     console.log(`   • SVG Support: ✅`);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 });
+
 

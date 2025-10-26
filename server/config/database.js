@@ -1,9 +1,15 @@
-﻿// server/config/database.js
+// server/config/database.js
 import pkg from 'pg';
 const { Pool } = pkg;
 import dotenv from 'dotenv';
 
-dotenv.config();
+// Only load .env in development
+if (process.env.NODE_ENV !== 'production') {
+    dotenv.config();
+}
+
+console.log('?? DATABASE_URL exists?', !!process.env.DATABASE_URL);
+console.log('?? NODE_ENV:', process.env.NODE_ENV);
 
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
@@ -15,11 +21,12 @@ const pool = new Pool({
 
 // Test connection
 pool.on('connect', () => {
-    console.log('✅ Database connected');
+    console.log('? Database connected');
 });
 
 pool.on('error', (err) => {
-    console.error('❌ Database error:', err);
+    console.error('? Database error:', err);
 });
 
 export default pool;
+
