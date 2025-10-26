@@ -4,21 +4,21 @@ import pool from '../config/database.js';
 const router = express.Router();
 
 router.post('/progress/record', async (req, res) => {
-    console.log('========================================');
-    console.log('ROUTE CALLED: /progress/record');
-    console.log('Body:', req.body);
-    console.log('========================================');
-    console.log('='.repeat(50));
-    console.log('?? PROGRESS ROUTE CALLED');
-    console.log('Request body:', JSON.stringify(req.body));
-    console.log('='.repeat(50));
-    console.log('?????? CURRICULUM ROUTE HIT!');
-    console.log('?? Request received from:', req.ip);
-    console.log('?? Request headers:', req.headers);
+    console.error('========================================');
+    console.error('ROUTE CALLED: /progress/record');
+    console.error('Body:', req.body);
+    console.error('========================================');
+    console.error('='.repeat(50));
+    console.error('?? PROGRESS ROUTE CALLED');
+    console.error('Request body:', JSON.stringify(req.body));
+    console.error('='.repeat(50));
+    console.error('?????? CURRICULUM ROUTE HIT!');
+    console.error('?? Request received from:', req.ip);
+    console.error('?? Request headers:', req.headers);
     try {
         const { userId, topicId, subtopicId, topic, subtopic, correct, timeSpent, hintsUsed = 0, attempts = 1 } = req.body;
 
-        console.log('📊 Recording progress:', { userId, topic, subtopic, correct });
+        console.error('📊 Recording progress:', { userId, topic, subtopic, correct });
 
         if (!userId) {
             return res.status(400).json({ success: false, error: 'User ID is required' });
@@ -62,7 +62,7 @@ router.post('/progress/record', async (req, res) => {
             }
 
             await client.query('COMMIT');
-            console.log('✅ Progress recorded');
+            console.error('✅ Progress recorded');
             res.json({ success: true, message: 'Progress recorded successfully' });
 
         } catch (error) {
@@ -82,7 +82,7 @@ router.get('/stats/topics/:userId', async (req, res) => {
     try {
         const { userId } = req.params;
 
-        console.log('📊 Fetching topic stats for userId:', userId);
+        console.error('📊 Fetching topic stats for userId:', userId);
 
         // Check if table exists first
         const tableCheck = await pool.query(`
@@ -93,7 +93,7 @@ router.get('/stats/topics/:userId', async (req, res) => {
         `);
 
         if (!tableCheck.rows[0].exists) {
-            console.log('⚠️ Table topic_progress does not exist - returning empty data');
+            console.error('⚠️ Table topic_progress does not exist - returning empty data');
             return res.json({
                 success: true,
                 topics: []
@@ -120,7 +120,7 @@ router.get('/stats/topics/:userId', async (req, res) => {
             ORDER BY last_activity DESC
         `, [userId]);
 
-        console.log(`✅ Found ${result.rows.length} topic records`);
+        console.error(`✅ Found ${result.rows.length} topic records`);
 
         res.json({
             success: true,
@@ -145,7 +145,7 @@ router.get('/stats/subtopics/:userId', async (req, res) => {
         const { userId } = req.params;
         const { topicId } = req.query;
 
-        console.log('📊 Fetching subtopic stats for userId:', userId, 'topicId:', topicId);
+        console.error('📊 Fetching subtopic stats for userId:', userId, 'topicId:', topicId);
 
         // Check if table exists first
         const tableCheck = await pool.query(`
@@ -156,7 +156,7 @@ router.get('/stats/subtopics/:userId', async (req, res) => {
         `);
 
         if (!tableCheck.rows[0].exists) {
-            console.log('⚠️ Table subtopic_progress does not exist - returning empty data');
+            console.error('⚠️ Table subtopic_progress does not exist - returning empty data');
             return res.json({
                 success: true,
                 subtopics: []
@@ -189,7 +189,7 @@ router.get('/stats/subtopics/:userId', async (req, res) => {
 
         const result = await pool.query(query, params);
 
-        console.log(`✅ Found ${result.rows.length} subtopic records`);
+        console.error(`✅ Found ${result.rows.length} subtopic records`);
 
         res.json({
             success: true,
@@ -213,7 +213,7 @@ router.get('/stats/overall/:userId', async (req, res) => {
     try {
         const { userId } = req.params;
 
-        console.log('📊 Fetching overall stats for userId:', userId);
+        console.error('📊 Fetching overall stats for userId:', userId);
 
         // Check if view exists first
         const viewCheck = await pool.query(`
@@ -224,7 +224,7 @@ router.get('/stats/overall/:userId', async (req, res) => {
         `);
 
         if (!viewCheck.rows[0].exists) {
-            console.log('⚠️ View student_progress_summary does not exist - returning default data');
+            console.error('⚠️ View student_progress_summary does not exist - returning default data');
             return res.json({
                 success: true,
                 stats: {
@@ -243,7 +243,7 @@ router.get('/stats/overall/:userId', async (req, res) => {
             WHERE user_id = $1
         `, [userId]);
 
-        console.log('✅ Overall stats fetched');
+        console.error('✅ Overall stats fetched');
 
         res.json({
             success: true,
@@ -276,6 +276,8 @@ router.get('/stats/overall/:userId', async (req, res) => {
 });
 
 export default router;
+
+
 
 
 
