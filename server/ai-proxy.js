@@ -1155,7 +1155,7 @@ ${previousQuestionsText}
                 'anthropic-version': '2023-06-01'
             },
             body: JSON.stringify({
-                model: 'claude-3-5-sonnet-20241022',
+                model: 'claude-sonnet-4-20250514',
                 max_tokens: 4096,
                 temperature: 0.8,
                 system: 'אתה מורה למתמטיקה ישראלי מנוסה. כל התשובות שלך חייבות להיות בעברית בלבד! אסור לך לכתוב באנגלית או בשפה אחרת. צור שאלות מקוריות ומעניינות שמתאימות לתכנית הלימודים הישראלית.',
@@ -1213,7 +1213,7 @@ ${previousQuestionsText}
             correctAnswer: questionData.correctAnswer,
             hints: questionData.hints,
             explanation: questionData.explanation,
-            model: 'claude-3.5-sonnet',
+            model: 'claude-sonnet-4',
             topic: topicName,
             subtopic: subtopicName
         });
@@ -1300,7 +1300,7 @@ app.post('/api/ai/verify-answer', async (req, res) => {
                     'anthropic-version': '2023-06-01'
                 },
                 body: JSON.stringify({
-                    model: 'claude-3-5-sonnet-20241022',
+                    model: 'claude-sonnet-4-20250514',
                     max_tokens: 2048,
                     temperature: 0.3,
                     system: 'אתה מורה למתמטיקה ישראלי מנוסה. כל התשובות שלך חייבות להיות בעברית בלבד! אסור לך לענות באנגלית או בשפה אחרת.',
@@ -1472,7 +1472,7 @@ app.post('/api/ai/get-hint', async (req, res) => {
                     'anthropic-version': '2023-06-01'
                 },
                 body: JSON.stringify({
-                    model: 'claude-3-5-haiku-20241022',
+                    model: 'claude-sonnet-4-20250514',
                     max_tokens: 500,
                     temperature: 0.7,
                     messages: [{ role: 'user', content: prompt }]
@@ -1522,7 +1522,7 @@ app.post('/api/ai/chat', async (req, res) => {
                     'anthropic-version': '2023-06-01'
                 },
                 body: JSON.stringify({
-                    model: 'claude-3-5-haiku-20241022',
+                    model: 'claude-sonnet-4-20250514',
                     max_tokens: wantsFullSolution ? 2000 : 800,
                     temperature: 0.7,
                     messages: [{ role: 'user', content: conversationPrompt }]
@@ -1538,7 +1538,7 @@ app.post('/api/ai/chat', async (req, res) => {
             return res.json({
                 success: true,
                 response: data.content[0].text,
-                model: 'claude-3.5-haiku'
+                model: 'claude-sonnet-4'
             });
         }
 
@@ -1682,7 +1682,7 @@ ${correctAnswer}
                         'anthropic-version': '2023-06-01'
                     },
                     body: JSON.stringify({
-                        model: 'claude-3-5-haiku-20241022',  // ✅ MUST USE SONNET FOR VISION
+                        model: 'claude-sonnet-4-20250514',  // ✅ MUST USE SONNET FOR VISION
                         max_tokens: 2000,
                         temperature: 0.5,
                         messages: [{
@@ -1791,7 +1791,7 @@ ${correctAnswer}
         res.json({
             success: true,
             analysis: cleanedAnalysis,
-            model: 'claude-3-5-haiku-20241022',  // ✅ SONNET FOR VISION
+            model: 'claude-sonnet-4-20250514',  // ✅ SONNET FOR VISION
             timestamp: new Date().toISOString()
         });
 
@@ -1878,6 +1878,7 @@ app.listen(PORT, '0.0.0.0', async () => {
     console.log(`   • SVG Support: ✅`);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 });
+
 
 
 
