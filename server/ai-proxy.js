@@ -1080,218 +1080,130 @@ function buildDynamicQuestionPrompt(topic, subtopic, difficulty, studentProfile,
 }
 // ==================== GENERATE QUESTION ENDPOINT ====================
 // ==================== GENERATE QUESTION ENDPOINT WITH RETRY LOGIC ====================
+// ==================== GENERATE QUESTION ====================
 app.post('/api/ai/generate-question', async (req, res) => {
+    console.log('============================================================');
+    console.log('📝 GENERATING QUESTION');
+    console.log('============================================================');
+
     try {
-        const { topic, subtopic, difficulty, studentProfile } = req.body;
+        const { topic, subtopic, difficulty = 'medium', grade = 'grade_8', previousQuestions = [] } = req.body;
 
-        if (!topic || !topic.name) {
-            return res.status(400).json({
-                success: false,
-                error: 'Invalid topic object'
-            });
+        if (!topic) {
+            return res.status(400).json({ success: false, error: 'Topic required' });
         }
 
-        if (!studentProfile || !studentProfile.grade) {
-            return res.status(400).json({
-                success: false,
-                error: 'Invalid student profile'
-            });
-        }
+        console.log('📊 Request:', { topic, subtopic, difficulty, grade });
 
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('📝 SMART QUESTION GENERATION');
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('   Topic:', topic.name);
-        console.log('   Subtopic:', subtopic?.name || 'General');
+        // Build personality-aware prompt
+        const personalityContext = personalitySystem ? `
+אתה ${personalitySystem.core.teacherName}, ${personalitySystem.core.role}.
+תכונות האישיות שלך:
+- ${personalitySystem.core.personality}
+- ${personalitySystem.core.teachingStyle}
+- ${personalitySystem.core.communicationTone}
 
-        const gradeId = `grade_${studentProfile.grade}`;
-        const studentId = studentProfile.studentId || studentProfile.name || 'anonymous';
+סגנון שפה:
+- ${personalitySystem.language.hebrewLevel}
+- ${personalitySystem.language.formalityLevel}
+- ${personalitySystem.language.encouragementStyle}
+` : '';
 
-        let prompt = buildDynamicQuestionPrompt(topic, subtopic, difficulty, studentProfile, gradeId);
-        const systemPrompt = buildEnhancedSystemPrompt(studentProfile, gradeId, topic, subtopic);
+        const previousQuestionsText = previousQuestions.length > 0
+            ? `\n\nשאלות קודמות (צור שאלה שונה לחלוטין!):\n${previousQuestions.map((q, i) => `${i + 1}. ${q.substring(0, 100)}...`).join('\n')}`
+            : '';
 
-        let attempts = 0;
-        let parsed;
-        const maxAttempts = 3;
+        const prompt = `${personalityContext}
 
-        while (attempts < maxAttempts) {
-            attempts++;
+צור שאלת מתמטיקה חדשה ומקורית.
 
-            if (process.env.ANTHROPIC_API_KEY) {
-                console.log(`   🔄 Attempt ${attempts}/${maxAttempts}`);
+נושא: ${topic}
+${subtopic ? `תת-נושא (המוקד העיקרי): ${subtopic}` : ''}
+רמת קושי: ${difficulty}
+כיתה: ${grade}
+${previousQuestionsText}
 
-                // 🔥 RETRY LOGIC WITH EXPONENTIAL BACKOFF
-                let apiSuccess = false;
-                let lastError = null;
+דרישות חובה:
+1. כתוב את כל התוכן בעברית בלבד - אסור לכתוב באנגלית!
+2. השאלה חייבת להיות ישירות על "${subtopic || topic}"
+3. השתמש במספרים מעניינים ומגוונים
+4. הוסף הקשר מהחיים האמיתיים (ספורט, קניות, בית ספר וכו')
+5. צור שאלה שונה לחלוטין משאלות קודמות
 
-                for (let retryAttempt = 0; retryAttempt < 3; retryAttempt++) {
-                    try {
-                        // Wait before retry (exponential backoff: 2s, 4s, 8s)
-                        if (retryAttempt > 0) {
-                            const waitTime = Math.pow(2, retryAttempt) * 1000;
-                            console.log(`   ⏳ API Retry ${retryAttempt}/3 - waiting ${waitTime}ms...`);
-                            await new Promise(resolve => setTimeout(resolve, waitTime));
-                        }
+פורמט JSON חובה (בעברית בלבד!):
+{
+  "question": "השאלה המלאה בעברית",
+  "correctAnswer": "התשובה הנכונה",
+  "hints": ["רמז 1 בעברית", "רמז 2 בעברית", "רמז 3 בעברית"],
+  "explanation": "הסבר מפורט בעברית איך פותרים את השאלה"
+}
 
-                        const response = await fetch('https://api.anthropic.com/v1/messages', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'x-api-key': process.env.ANTHROPIC_API_KEY,
-                                'anthropic-version': '2023-06-01'
-                            },
-                            body: JSON.stringify({
-                                model: 'claude-3-5-haiku-20241022',
-                                max_tokens: 3000,
-                                temperature: 0.8 + (attempts * 0.1),
-                                system: systemPrompt,
-                                messages: [{ role: 'user', content: prompt }]
-                            })
-                        });
+חשוב: השתמש ב\\n לשורה חדשה, לא Enter אמיתי. החזר רק JSON, ללא טקסט נוסף.`;
 
-                        const data = await response.json();
+        console.log('🔄 Calling Claude API...');
 
-                        // Handle 529 Overloaded error
-                        if (response.status === 529) {
-                            lastError = new Error('Overloaded');
-                            console.log(`   ⚠️ API Overloaded (retry ${retryAttempt + 1}/3)`);
-                            continue; // Try again
-                        }
-
-                        // Handle other errors
-                        if (!response.ok) {
-                            lastError = new Error(data.error?.message || `API error: ${response.status}`);
-                            console.log(`   ❌ API Error: ${lastError.message}`);
-
-                            // If it's a rate limit or server error, retry
-                            if (response.status >= 500 || response.status === 429) {
-                                continue;
-                            }
-
-                            // For other errors (like auth), don't retry
-                            throw lastError;
-                        }
-
-                        // Success! Parse the response
-                        const rawText = data.content[0].text;
-                        const jsonText = cleanJsonText(rawText);
-                        parsed = JSON.parse(jsonText);
-
-                        console.log('   ✅ API call successful');
-                        apiSuccess = true;
-                        break; // Exit retry loop
-
-                    } catch (error) {
-                        lastError = error;
-                        console.error(`   ❌ API attempt ${retryAttempt + 1} failed:`, error.message);
-
-                        // If it's the last retry attempt, throw
-                        if (retryAttempt === 2) {
-                            throw error;
-                        }
-
-                        // Otherwise, continue to next retry
-                    }
-                }
-
-                // If all retries failed, throw the last error
-                if (!apiSuccess) {
-                    throw lastError || new Error('All API retry attempts failed');
-                }
-
-                console.log('   ✅ Parsed successfully');
-
-                // Check for similarity with recent questions
-                const topicId = topic.id || topic.name;
-                const recentQuestions = questionHistoryManager.getRecentQuestions(studentId, topicId, 5);
-                const isSimilar = questionHistoryManager.isSimilar(parsed.question, recentQuestions);
-
-                if (isSimilar && attempts < maxAttempts) {
-                    console.log(`   ⚠️ Too similar, retrying...`);
-                    prompt += `\n\n🚨 TOO SIMILAR! Create MORE DIFFERENT!\n`;
-                    continue;
-                } else {
-                    console.log('   ✅ Question is unique');
-                    break;
-                }
-            } else {
-                throw new Error('No AI API configured');
-            }
-        }
-
-        // Validate and process the question
-        const validation = validateQuestionHasRawData(parsed, topic, subtopic);
-        if (!validation.valid) {
-            console.log('   ⚠️ Validation failed - rewriting');
-            parsed = forceRewriteGraphDescription(parsed, topic, subtopic);
-        }
-
-        parsed = ensureVisualDataForGraphQuestions(parsed, topic, subtopic);
-        parsed = detectGeometryVisual(parsed, topic, subtopic);
-
-        if (parsed.visualData?.type?.startsWith('svg-')) {
-            const svgType = parsed.visualData.type.replace('svg-', '');
-            let svg = null;
-
-            try {
-                if (svgType === 'triangle') {
-                    svg = SVGGenerator.generateTriangle(parsed.visualData.svgData);
-                } else if (svgType === 'rectangle') {
-                    svg = SVGGenerator.generateRectangle(parsed.visualData.svgData);
-                } else if (svgType === 'circle') {
-                    svg = SVGGenerator.generateCircle(parsed.visualData.svgData);
-                }
-
-                if (svg) {
-                    parsed.visualData.svg = svg;
-                    console.log('   ✅ SVG generated:', svgType);
-                }
-            } catch (svgError) {
-                console.error('   ❌ SVG error:', svgError);
-            }
-        }
-
-        const topicId = topic.id || topic.name;
-        questionHistoryManager.addQuestion(studentId, topicId, {
-            question: parsed.question,
-            timestamp: Date.now()
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': process.env.ANTHROPIC_API_KEY,
+                'anthropic-version': '2023-06-01'
+            },
+            body: JSON.stringify({
+                model: 'claude-3-5-sonnet-20241022',
+                max_tokens: 4096,
+                temperature: 0.8,
+                system: 'אתה מורה למתמטיקה ישראלי מנוסן. כל התשובות שלך חייבות להיות בעברית בלבד! אסור לך לכתוב באנגלית או בשפה אחרת. צור שאלות מקוריות ומעניינות.',
+                messages: [{
+                    role: 'user',
+                    content: prompt
+                }]
+            })
         });
 
-        console.log('   ✅ Complete');
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(`API error: ${response.status} - ${errorData.error?.message}`);
+        }
 
-        return res.json({
+        const data = await response.json();
+        const rawText = data.content[0].text;
+
+        console.log('📄 Raw response (first 200):', rawText.substring(0, 200));
+
+        // Clean and parse JSON
+        let jsonText = rawText.trim();
+        jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+
+        const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+            jsonText = jsonMatch[0];
+        }
+
+        const questionData = JSON.parse(jsonText);
+
+        // Validate all fields are in Hebrew
+        if (!questionData.question || !questionData.correctAnswer) {
+            throw new Error('Missing required fields in generated question');
+        }
+
+        console.log('✅ Question generated successfully');
+        console.log('📝 Question:', questionData.question.substring(0, 100));
+
+        res.json({
             success: true,
-            question: {
-                question: parsed.question,
-                correctAnswer: parsed.correctAnswer,
-                hints: parsed.hints || [],
-                explanation: parsed.explanation || '',
-                topic: topic.name,
-                subtopic: subtopic?.name,
-                difficulty: parsed.difficulty || difficulty,
-                gradeLevel: studentProfile.grade,
-                visualData: parsed.visualData || null,
-                curriculumAligned: true,
-                reformYear: CURRICULUM_METADATA.reformYear
-            },
-            model: 'claude-3.5-haiku',
-            personalityActive: personalitySystem.loaded,
-            attemptCount: attempts
+            question: questionData.question,
+            correctAnswer: questionData.correctAnswer,
+            hints: questionData.hints || [],
+            explanation: questionData.explanation || '',
+            model: 'claude-3.5-sonnet'
         });
 
     } catch (error) {
-        console.error('❌ Error:', error);
-
-        // Provide user-friendly error messages
-        let errorMessage = error.message;
-        if (error.message === 'Overloaded') {
-            errorMessage = 'השרת עמוס כרגע. אנא נסה שוב בעוד כמה שניות.';
-        }
-
+        console.error('❌ Generate question error:', error);
         res.status(500).json({
             success: false,
-            error: errorMessage
+            error: error.message
         });
     }
 });
@@ -1299,6 +1211,7 @@ app.post('/api/ai/generate-question', async (req, res) => {
 
 
 // Replace your existing endpoint with this:
+// ==================== VERIFY ANSWER ====================
 app.post('/api/ai/verify-answer', async (req, res) => {
     console.log('============================================================');
     console.log('🔍 VERIFYING ANSWER');
@@ -1341,17 +1254,23 @@ app.post('/api/ai/verify-answer', async (req, res) => {
 
         // AI verification using Anthropic API
         if (process.env.ANTHROPIC_API_KEY) {
-            const prompt = `Compare this answer to determine if it's correct:
+            const prompt = `אתה מורה למתמטיקה מומחה. בדוק האם תשובת התלמיד נכונה.
 
-Question: ${question}
-Student's Answer: ${userAnswer}
-Correct Answer: ${correctAnswer}
+חשוב מאוד:
+1. ענה רקעברית בלבד - אסור לכתוב באנגלית!
+2. תשובות מתמטיות שוות ערך נחשבות נכונות (למשל: 1/2 = 0.5, 2x = x+x)
+3. התעלם משגיאות כתיב קלות או פורמט
+4. בדוק אם התשובה נכונה מבחינה מתמטית, לא רק זהה טקסטואלית
 
-Respond in JSON format:
+שאלה: ${question}
+תשובת התלמיד: ${userAnswer}
+התשובה הנכונה: ${correctAnswer}
+
+השב בפורמט JSON בדיוק כך (בעברית בלבד!):
 {
-  "isCorrect": boolean,
-  "feedback": "brief feedback",
-  "explanation": "detailed explanation"
+  "isCorrect": true/false,
+  "feedback": "משוב קצר בעברית לתלמיד (1-2 משפטים)",
+  "explanation": "הסבר מפורט בעברית למה התשובה נכונה או לא נכונה"
 }`;
 
             const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -1362,8 +1281,10 @@ Respond in JSON format:
                     'anthropic-version': '2023-06-01'
                 },
                 body: JSON.stringify({
-                    model: 'claude-3-5-haiku-20241022',
-                    max_tokens: 1024,
+                    model: 'claude-3-5-sonnet-20241022',
+                    max_tokens: 2048,
+                    temperature: 0.3,
+                    system: 'אתה מורה למתמטיקה ישראלי מנוסה. כל התשובות שלך חייבות להיות בעברית בלבד! אסור לך לענות באנגלית או בשפה אחרת.',
                     messages: [{
                         role: 'user',
                         content: prompt
@@ -1372,21 +1293,36 @@ Respond in JSON format:
             });
 
             if (!response.ok) {
-                throw new Error(`API error: ${response.status}`);
+                const errorData = await response.json();
+                throw new Error(`API error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
             }
 
             const data = await response.json();
             const rawText = data.content[0].text;
 
+            console.log('📄 Raw AI response:', rawText.substring(0, 200));
+
             // Clean and parse JSON
-            const jsonText = rawText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+            let jsonText = rawText.trim();
+
+            // Remove markdown code blocks if present
+            jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+
+            // Find JSON object
+            const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                jsonText = jsonMatch[0];
+            }
+
             const parsed = JSON.parse(jsonText);
 
-            isCorrect = parsed.isCorrect;
+            isCorrect = parsed.isCorrect === true;
             confidence = 95;
-            feedback = parsed.feedback;
-            explanation = parsed.explanation;
-            model = 'claude-3.5-haiku';
+            feedback = parsed.feedback || 'בדיקה הושלמה';
+            explanation = parsed.explanation || '';
+            model = 'claude-3.5-sonnet';
+
+            console.log('✅ Verification complete:', { isCorrect, feedback: feedback.substring(0, 50) });
         } else {
             throw new Error('No AI API configured');
         }
@@ -1411,7 +1347,6 @@ Respond in JSON format:
                 console.log('✅ Saved to notebook successfully:', saveResult);
             } catch (notebookError) {
                 console.error('⚠️ Failed to save to notebook:', notebookError);
-                console.error('Stack:', notebookError.stack);
             }
         } else {
             console.log('⚠️ No userId provided - skipping notebook save');
