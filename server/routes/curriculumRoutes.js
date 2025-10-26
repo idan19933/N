@@ -23,9 +23,8 @@ router.post('/progress/record', async (req, res) => {
         try {
             await client.query('BEGIN');
 
-            // Get grade from student_profiles using firebase_uid
-            const gradeResult = await client.query('SELECT grade FROM student_profiles WHERE firebase_uid = $1', [userId]);
-            const gradeId = gradeResult.rows[0]?.grade || 'grade_8';
+            // Use default grade for now
+            const gradeId = 'grade_8';
 
             if (topicId) {
                 await client.query(`
@@ -103,12 +102,12 @@ router.get('/stats/subtopics/:userId', async (req, res) => {
         const { topicId } = req.query;
 
         let query = `
-            SELECT 
+            SELECT
                 subtopic_id,
                 mastery_level,
                 exercises_completed,
                 updated_at as last_practice
-            FROM subtopic_progress 
+            FROM subtopic_progress
             WHERE student_id = $1
             ORDER BY updated_at DESC
         `;
@@ -155,4 +154,3 @@ router.get('/stats/overall/:userId', async (req, res) => {
 });
 
 export default router;
-
