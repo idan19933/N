@@ -1081,6 +1081,7 @@ function buildDynamicQuestionPrompt(topic, subtopic, difficulty, studentProfile,
 // ==================== GENERATE QUESTION ENDPOINT ====================
 // ==================== GENERATE QUESTION ENDPOINT WITH RETRY LOGIC ====================
 // ==================== GENERATE QUESTION ====================
+// ==================== GENERATE QUESTION ====================
 app.post('/api/ai/generate-question', async (req, res) => {
     console.log('============================================================');
     console.log('📝 GENERATING QUESTION');
@@ -1095,40 +1096,44 @@ app.post('/api/ai/generate-question', async (req, res) => {
 
         console.log('📊 Request:', { topic, subtopic, difficulty, grade });
 
-        // Build personality-aware prompt
-        const personalityContext = personalitySystem ? `
-אתה ${personalitySystem.core.teacherName}, ${personalitySystem.core.role}.
+        // Build personality-aware prompt with CORRECT property paths
+        const personalityContext = personalitySystem?.loaded ? `
+אתה ${personalitySystem.data.corePersonality.teacherName}, ${personalitySystem.data.corePersonality.role}.
 תכונות האישיות שלך:
-- ${personalitySystem.core.personality}
-- ${personalitySystem.core.teachingStyle}
-- ${personalitySystem.core.communicationTone}
+- ${personalitySystem.data.corePersonality.personality}
+- ${personalitySystem.data.corePersonality.teachingStyle}
+- ${personalitySystem.data.corePersonality.communicationTone}
 
 סגנון שפה:
-- ${personalitySystem.language.hebrewLevel}
-- ${personalitySystem.language.formalityLevel}
-- ${personalitySystem.language.encouragementStyle}
-` : '';
+- ${personalitySystem.data.languageStyle.hebrewLevel}
+- ${personalitySystem.data.languageStyle.formalityLevel}
+- ${personalitySystem.data.languageStyle.encouragementStyle}
+` : 'אתה נקסון, מורה למתמטיקה ישראלי מנוסה וידידותי.';
 
         const previousQuestionsText = previousQuestions.length > 0
             ? `\n\nשאלות קודמות (צור שאלה שונה לחלוטין!):\n${previousQuestions.map((q, i) => `${i + 1}. ${q.substring(0, 100)}...`).join('\n')}`
             : '';
 
+        const topicName = typeof topic === 'object' ? topic.name : topic;
+        const subtopicName = typeof subtopic === 'object' ? subtopic.name : subtopic;
+
         const prompt = `${personalityContext}
 
 צור שאלת מתמטיקה חדשה ומקורית.
 
-נושא: ${topic}
-${subtopic ? `תת-נושא (המוקד העיקרי): ${subtopic}` : ''}
+נושא: ${topicName}
+${subtopicName ? `תת-נושא (המוקד העיקרי): ${subtopicName}` : ''}
 רמת קושי: ${difficulty}
 כיתה: ${grade}
 ${previousQuestionsText}
 
 דרישות חובה:
 1. כתוב את כל התוכן בעברית בלבד - אסור לכתוב באנגלית!
-2. השאלה חייבת להיות ישירות על "${subtopic || topic}"
+2. השאלה חייבת להיות ישירות על "${subtopicName || topicName}"
 3. השתמש במספרים מעניינים ומגוונים
 4. הוסף הקשר מהחיים האמיתיים (ספורט, קניות, בית ספר וכו')
 5. צור שאלה שונה לחלוטין משאלות קודמות
+6. השאלה צריכה להיות מאתגרת ברמת ${difficulty}
 
 פורמט JSON חובה (בעברית בלבד!):
 {
@@ -1153,7 +1158,7 @@ ${previousQuestionsText}
                 model: 'claude-3-5-sonnet-20241022',
                 max_tokens: 4096,
                 temperature: 0.8,
-                system: 'אתה מורה למתמטיקה ישראלי מנוסן. כל התשובות שלך חייבות להיות בעברית בלבד! אסור לך לכתוב באנגלית או בשפה אחרת. צור שאלות מקוריות ומעניינות.',
+                system: 'אתה מורה למתמטיקה ישראלי מנוסה. כל התשובות שלך חייבות להיות בעברית בלבד! אסור לך לכתוב באנגלית או בשפה אחרת. צור שאלות מקוריות ומעניינות שמתאימות לתכנית הלימודים הישראלית.',
                 messages: [{
                     role: 'user',
                     content: prompt
@@ -1173,8 +1178,11 @@ ${previousQuestionsText}
 
         // Clean and parse JSON
         let jsonText = rawText.trim();
+
+        // Remove markdown code blocks if present
         jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
 
+        // Find JSON object
         const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
             jsonText = jsonMatch[0];
@@ -1182,9 +1190,18 @@ ${previousQuestionsText}
 
         const questionData = JSON.parse(jsonText);
 
-        // Validate all fields are in Hebrew
+        // Validate all required fields
         if (!questionData.question || !questionData.correctAnswer) {
             throw new Error('Missing required fields in generated question');
+        }
+
+        // Ensure hints and explanation exist
+        if (!questionData.hints || !Array.isArray(questionData.hints)) {
+            questionData.hints = ['נסה לחשוב על השלב הראשון', 'מה הכלי המתמטי שנלמד?', 'חשוב על דוגמאות דומות'];
+        }
+
+        if (!questionData.explanation) {
+            questionData.explanation = 'הסבר מפורט זמין בהמשך.';
         }
 
         console.log('✅ Question generated successfully');
@@ -1194,9 +1211,11 @@ ${previousQuestionsText}
             success: true,
             question: questionData.question,
             correctAnswer: questionData.correctAnswer,
-            hints: questionData.hints || [],
-            explanation: questionData.explanation || '',
-            model: 'claude-3.5-sonnet'
+            hints: questionData.hints,
+            explanation: questionData.explanation,
+            model: 'claude-3.5-sonnet',
+            topic: topicName,
+            subtopic: subtopicName
         });
 
     } catch (error) {
