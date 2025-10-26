@@ -265,6 +265,7 @@ class AIAnswerVerification {
                         question,
                         userAnswer,
                         correctAnswer,
+                        userId: context.userId,
                         studentName: context.studentName || 'תלמיד',
                         grade: context.grade,
                         topic: context.topic,
