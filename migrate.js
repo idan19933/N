@@ -1,4 +1,4 @@
-﻿import pg from 'pg';
+import pg from 'pg';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -8,7 +8,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: process.env.DATABASE_PUBLIC_URL || process.env.DATABASE_URL || 'postgresql://postgres:PNqnFQHUTQTeJupKwOjZcqCFjnenwVQn@gondola.proxy.rlwy.net:35958/railway',
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
@@ -62,13 +62,13 @@ async function runMigrations() {
             [file]
           );
           await client.query('COMMIT');
-          console.log(`✓ Migration ${file} completed successfully`);
+          console.log(`? Migration ${file} completed successfully`);
         } catch (error) {
           await client.query('ROLLBACK');
           throw error;
         }
       } else {
-        console.log(`⊘ Migration ${file} already executed, skipping`);
+        console.log(`? Migration ${file} already executed, skipping`);
       }
     }
     
@@ -86,3 +86,4 @@ runMigrations().catch(error => {
   console.error('Failed to run migrations:', error);
   process.exit(1);
 });
+
