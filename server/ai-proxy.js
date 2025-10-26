@@ -1363,16 +1363,18 @@ app.post('/api/ai/verify-answer', async (req, res) => {
         }
 
         // ✨ AUTO-SAVE TO NOTEBOOK IF CORRECT
-        if (isCorrect && userId) {
+        // ✨ AUTO-SAVE TO NOTEBOOK (SAVE ALL ANSWERS)
+        if (userId) {
             try {
-                console.log('📓 Saving to notebook...');
+                console.log('📔 Saving to notebook...');
                 await notebookService.saveExerciseToNotebook(userId, {
                     question: question,
                     answer: correctAnswer,
-                    studentAnswer: userAnswer,
-                    isCorrect: true,
-                    topic: topic || 'כללי',
-                    subtopic: subtopic || ''
+                    userAnswer: userAnswer,
+                    isCorrect: isCorrect,
+                    topic: topic || '',
+                    subtopic: subtopic || '',
+                    timestamp: new Date().toISOString()
                 });
                 console.log('✅ Saved to notebook successfully');
             } catch (notebookError) {
