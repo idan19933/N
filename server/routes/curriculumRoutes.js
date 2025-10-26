@@ -4,6 +4,10 @@ import pool from '../config/database.js';
 const router = express.Router();
 
 router.post('/progress/record', async (req, res) => {
+    console.log('========================================');
+    console.log('ROUTE CALLED: /progress/record');
+    console.log('Body:', req.body);
+    console.log('========================================');
     console.log('='.repeat(50));
     console.log('?? PROGRESS ROUTE CALLED');
     console.log('Request body:', JSON.stringify(req.body));
@@ -272,5 +276,6 @@ router.get('/stats/overall/:userId', async (req, res) => {
 });
 
 export default router;
+
 
 
