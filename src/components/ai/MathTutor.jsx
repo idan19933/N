@@ -1498,19 +1498,36 @@ const MathTutor = ({
 
         if (!result || lastCheckedAnswerRef.current !== userAnswer) {
             try {
+                // ✅ DEBUG LOGGING for answer verification
+                console.log('🔍 submitAnswer - Debug Info:');
+                console.log('🔍 userAnswer:', userAnswer);
+                console.log('🔍 currentQuestion.question:', currentQuestion?.question);
+                console.log('🔍 currentQuestion.correctAnswer:', currentQuestion?.correctAnswer);
+                console.log('🔍 propUserId:', propUserId);
+                console.log('🔍 user?.uid:', user?.uid);
+                console.log('🔍 selectedTopic?.name:', selectedTopic?.name);
+                console.log('🔍 selectedSubtopic?.name:', selectedSubtopic?.name);
+
+                // ✅ Use propUserId (passed from parent) as primary source
+                const actualUserId = propUserId || user?.uid || null;
+                console.log('🔍 Final userId to send to verification:', actualUserId);
+
                 result = await aiVerification.verifyAnswer(
                     userAnswer,
                     currentQuestion.correctAnswer,
                     currentQuestion.question,
                     {
-                        studentName: nexonProfile?.name || user?.name || 'תלמיד',
+                        studentName: nexonProfile?.name || user?.displayName || user?.name || 'תלמיד',
                         grade: currentGrade,
+                        userId: actualUserId,  // ✅ Include userId in verification context
                         topic: selectedTopic?.name,
                         subtopic: selectedSubtopic?.name
                     }
                 );
+
+                console.log('✅ Verification result:', result);
             } catch (error) {
-                console.error('Submit error:', error);
+                console.error('❌ Submit error:', error);
                 toast.error('שגיאה בבדיקת תשובה');
                 return;
             }
@@ -2505,7 +2522,3 @@ const MathTutor = ({
 
 
 export default MathTutor;
-
-
-
-
