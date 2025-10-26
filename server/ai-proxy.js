@@ -51,6 +51,13 @@ app.get('/test', (req, res) => {
     res.json({ success: true, message: 'Server is reachable!' });
 });
 
+app.post('/api/test-progress', (req, res) => {
+    console.error('?? TEST PROGRESS ROUTE HIT!');
+    res.json({ success: true, message: 'Test progress endpoint works!' });
+    console.error('?? TEST ROUTE HIT!');
+    res.json({ success: true, message: 'Server is reachable!' });
+});
+
 // LOG ALL INCOMING REQUESTS
 app.use((req, res, next) => {
     console.log('='.repeat(60));
@@ -1880,6 +1887,7 @@ app.listen(PORT, '0.0.0.0', async () => {
     console.log(`   • SVG Support: ✅`);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 });
+
 
 
 
