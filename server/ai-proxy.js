@@ -1300,74 +1300,106 @@ app.post('/api/ai/generate-question', async (req, res) => {
 
 // Replace your existing endpoint with this:
 app.post('/api/ai/verify-answer', async (req, res) => {
+    console.log('============================================================');
+    console.log('🔍 VERIFYING ANSWER');
+    console.log('============================================================');
+
+    const startTime = Date.now();
+
     try {
-        const { question, userAnswer, correctAnswer, studentName, topic, subtopic, userId } = req.body;
+        const {
+            question,
+            userAnswer,
+            correctAnswer,
+            topic = '',
+            subtopic = '',
+            userId = null,
+            difficulty = 'medium'
+        } = req.body;
 
-        console.log('🔍 VERIFYING ANSWER');
+        console.log('📝 Request:', {
+            question: question?.substring(0, 50),
+            userAnswer,
+            correctAnswer,
+            userId,
+            topic,
+            subtopic
+        });
 
-        let isCorrect = false;
-        let feedback = '';
-        let explanation = '';
-        let confidence = 0;
-        let model = '';
-
-        // Check for exact match first
-        if (compareMathExpressions(userAnswer, correctAnswer)) {
-            console.log('✅ EXACT MATCH');
-
-            isCorrect = true;
-            confidence = 100;
-            feedback = 'נכון מצוין! 🎉';
-            explanation = 'התשובה שלך נכונה!';
-            model = 'exact-match';
-
-        } else {
-            // Use AI verification
-            const prompt = `בדוק:\n\nשאלה: ${question}\nתלמיד: ${userAnswer}\nנכון: ${correctAnswer}\n\nJSON:\n{"isCorrect":true/false,"feedback":"...","explanation":"..."}`;
-
-            if (process.env.ANTHROPIC_API_KEY) {
-                const response = await fetch('https://api.anthropic.com/v1/messages', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'x-api-key': process.env.ANTHROPIC_API_KEY,
-                        'anthropic-version': '2023-06-01'
-                    },
-                    body: JSON.stringify({
-                        model: 'claude-3-5-haiku-20241022',
-                        max_tokens: 1500,
-                        temperature: 0.3,
-                        system: 'אתה נקסון. בדוק שקילות מתמטית. JSON בלבד.',
-                        messages: [{ role: 'user', content: prompt }]
-                    })
-                });
-
-                const data = await response.json();
-
-                if (!response.ok) {
-                    throw new Error(data.error?.message || 'API error');
-                }
-
-                const rawText = data.content[0].text;
-                const jsonText = cleanJsonText(rawText);
-                const parsed = JSON.parse(jsonText);
-
-                isCorrect = parsed.isCorrect;
-                confidence = 95;
-                feedback = parsed.feedback;
-                explanation = parsed.explanation;
-                model = 'claude-3.5-haiku';
-            } else {
-                throw new Error('No AI configured');
-            }
+        if (!question || !userAnswer || !correctAnswer) {
+            return res.status(400).json({
+                success: false,
+                error: 'Missing required fields'
+            });
         }
 
-        // ✨ AUTO-SAVE TO NOTEBOOK IF CORRECT
+        let isCorrect = false;
+        let confidence = 0;
+        let feedback = '';
+        let explanation = '';
+        let model = '';
+
+        // AI verification using Anthropic API
+        if (process.env.ANTHROPIC_API_KEY) {
+            const prompt = `Compare this answer to determine if it's correct:
+
+Question: ${question}
+Student's Answer: ${userAnswer}
+Correct Answer: ${correctAnswer}
+
+Respond in JSON format:
+{
+  "isCorrect": boolean,
+  "feedback": "brief feedback",
+  "explanation": "detailed explanation"
+}`;
+
+            const response = await fetch('https://api.anthropic.com/v1/messages', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': process.env.ANTHROPIC_API_KEY,
+                    'anthropic-version': '2023-06-01'
+                },
+                body: JSON.stringify({
+                    model: 'claude-3-5-haiku-20241022',
+                    max_tokens: 1024,
+                    messages: [{
+                        role: 'user',
+                        content: prompt
+                    }]
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`API error: ${response.status}`);
+            }
+
+            const data = await response.json();
+            const rawText = data.content[0].text;
+
+            // Clean and parse JSON
+            const jsonText = rawText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+            const parsed = JSON.parse(jsonText);
+
+            isCorrect = parsed.isCorrect;
+            confidence = 95;
+            feedback = parsed.feedback;
+            explanation = parsed.explanation;
+            model = 'claude-3.5-haiku';
+        } else {
+            throw new Error('No AI API configured');
+        }
+
         // ✨ AUTO-SAVE TO NOTEBOOK (SAVE ALL ANSWERS)
+        console.log('🔍 DEBUG: Checking notebook save conditions...');
+        console.log('🔍 DEBUG: userId =', userId);
+        console.log('🔍 DEBUG: question exists =', !!question);
+
         if (userId) {
             try {
                 console.log('📔 Saving to notebook...');
-                await notebookService.saveExerciseToNotebook(userId, {
+                const saveResult = await notebookService.saveExerciseToNotebook(userId, {
                     question: question,
                     answer: correctAnswer,
                     userAnswer: userAnswer,
@@ -1376,31 +1408,35 @@ app.post('/api/ai/verify-answer', async (req, res) => {
                     subtopic: subtopic || '',
                     timestamp: new Date().toISOString()
                 });
-                console.log('✅ Saved to notebook successfully');
+                console.log('✅ Saved to notebook successfully:', saveResult);
             } catch (notebookError) {
-                // Don't fail the request if notebook save fails
-                console.error('⚠️ Failed to save to notebook:', notebookError.message);
-                // Continue anyway - the answer verification is still valid
+                console.error('⚠️ Failed to save to notebook:', notebookError);
+                console.error('Stack:', notebookError.stack);
             }
+        } else {
+            console.log('⚠️ No userId provided - skipping notebook save');
         }
 
-        // Return the verification result
+        const duration = Date.now() - startTime;
+
         return res.json({
             success: true,
             isCorrect,
             confidence,
             feedback,
             explanation,
-            model
+            model,
+            duration
         });
 
     } catch (error) {
-        console.error('❌ Error:', error);
-        res.status(500).json({
+        console.error('❌ Verify answer error:', error);
+        return res.status(500).json({
             success: false,
             error: error.message
         });
     }
+});
 });
 // ==================== GET HINT ====================
 
