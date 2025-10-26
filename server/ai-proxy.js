@@ -1437,7 +1437,6 @@ Respond in JSON format:
         });
     }
 });
-});
 // ==================== GET HINT ====================
 
 // ==================== ADMIN: UPLOAD PERSONALITY FILE ====================
