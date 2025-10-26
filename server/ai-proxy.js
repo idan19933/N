@@ -41,6 +41,17 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
+
+// LOG ALL INCOMING REQUESTS
+app.use((req, res, next) => {
+    console.log('='.repeat(60));
+    console.log('INCOMING REQUEST');
+    console.log('Method:', req.method);
+    console.log('URL:', req.url);
+    console.log('Body:', JSON.stringify(req.body));
+    console.log('='.repeat(60));
+    next();
+});
 app.use(express.json({ limit: '50mb' }));
 
 // ==================== MULTER CONFIGURATION ====================
@@ -1860,6 +1871,7 @@ app.listen(PORT, '0.0.0.0', async () => {
     console.log(`   • SVG Support: ✅`);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 });
+
 
 
 
