@@ -33,7 +33,7 @@ import {
     ComposedChart
 } from 'recharts';
 
-const API_URL = 'http://localhost:3001'; // HARDCODED FOR TESTING
+const API_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 
 // ==================== 🎤 VOICE SUPPORT HOOK ====================
 const useVoiceSupport = () => {
@@ -2505,4 +2505,7 @@ const MathTutor = ({
 
 
 export default MathTutor;
+
+
+
 

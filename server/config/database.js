@@ -1,3 +1,4 @@
+// FORCE COMPLETE REBUILD 10/26/2025 11:47:29
 // Force rebuild: 10/26/2025 11:38:56
 // server/config/database.js
 import pkg from 'pg';
@@ -30,6 +31,7 @@ pool.on('error', (err) => {
 });
 
 export default pool;
+
 
 
 
