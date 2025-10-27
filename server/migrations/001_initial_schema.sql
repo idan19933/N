@@ -33,6 +33,7 @@ CREATE TABLE notebook_entries (
                                   id SERIAL PRIMARY KEY,
                                   user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
                                   firebase_uid VARCHAR(255) NOT NULL,
+                                  student_id VARCHAR(255),
                                   topic VARCHAR(255) NOT NULL,
                                   subtopic VARCHAR(255),
                                   question_text TEXT NOT NULL,
@@ -45,12 +46,15 @@ CREATE TABLE notebook_entries (
                                   hints_used INTEGER DEFAULT 0,
                                   notes TEXT,
                                   tags TEXT[],
+                                  type VARCHAR(100),
                                   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                                   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_notebook_firebase_uid ON notebook_entries(firebase_uid);
+CREATE INDEX idx_notebook_student_id ON notebook_entries(student_id);
 CREATE INDEX idx_notebook_topic ON notebook_entries(topic);
+CREATE INDEX idx_notebook_type ON notebook_entries(type);
 CREATE INDEX idx_notebook_created_at ON notebook_entries(created_at);
 
 -- =====================================================
@@ -185,6 +189,22 @@ CREATE TRIGGER update_goals_updated_at
     BEFORE UPDATE ON student_goals
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
+
+-- Auto-populate student_id from firebase_uid
+CREATE OR REPLACE FUNCTION set_student_id()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.student_id IS NULL AND NEW.firebase_uid IS NOT NULL THEN
+        NEW.student_id = NEW.firebase_uid;
+END IF;
+RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER set_notebook_student_id
+    BEFORE INSERT OR UPDATE ON notebook_entries
+                         FOR EACH ROW
+                         EXECUTE FUNCTION set_student_id();
 
 -- =====================================================
 -- SAMPLE DATA (Optional - Comment out for production)
