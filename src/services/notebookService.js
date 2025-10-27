@@ -1,7 +1,7 @@
 // src/services/notebookService.js - FRONTEND NOTEBOOK API
 import axios from 'axios';
 
-const API_URL = 'http://localhost:3001';
+const API_URL = import.meta.env.VITE_API_URL || 'https://nexons-production-1915.up.railway.app';
 
 class NotebookAPI {
     async saveExercise(userId, exerciseData) {
