@@ -81,9 +81,9 @@ router.get('/stats/topics/:userId', async (req, res) => {
                 topic_id,
                 COUNT(*) as total_exercises,
                 SUM(CASE WHEN correct_attempts > 0 THEN 1 ELSE 0 END) as correct_exercises,
-                ROUND(AVG(mastery_level), 1) as mastery_level,
+                ROUND(AVG(mastery_level::numeric), 1) as mastery_level,
                 ROUND(
-                        AVG(CASE WHEN attempts > 0 THEN (correct_attempts::float / attempts * 100) ELSE 0 END),
+                        AVG(CASE WHEN attempts::numeric > 0 THEN (correct_attempts::numeric / attempts::numeric * 100) ELSE 0 END),
                         1
                 ) as accuracy,
                 ROUND(
