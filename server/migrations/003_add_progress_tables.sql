@@ -35,12 +35,14 @@ CREATE INDEX IF NOT EXISTS idx_topic_progress_topic ON topic_progress(topic_id);
 CREATE INDEX IF NOT EXISTS idx_subtopic_progress_student ON subtopic_progress(student_id);
 CREATE INDEX IF NOT EXISTS idx_subtopic_progress_subtopic ON subtopic_progress(subtopic_id);
 
--- Add triggers for updated_at
+-- Add triggers for updated_at (with DROP first to prevent errors)
+DROP TRIGGER IF EXISTS update_topic_progress_updated_at ON topic_progress;
 CREATE TRIGGER update_topic_progress_updated_at
     BEFORE UPDATE ON topic_progress
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_subtopic_progress_updated_at ON subtopic_progress;
 CREATE TRIGGER update_subtopic_progress_updated_at
     BEFORE UPDATE ON subtopic_progress
     FOR EACH ROW
