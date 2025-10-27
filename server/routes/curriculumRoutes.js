@@ -30,10 +30,10 @@ router.post('/progress/record', async (req, res) => {
                 await client.query(`
                     INSERT INTO topic_progress (student_id, topic_id, mastery_level, created_at, updated_at)
                     VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                        ON CONFLICT (student_id, topic_id) 
+                    ON CONFLICT (student_id, topic_id) 
                     DO UPDATE SET
-                        mastery_level = LEAST(100, topic_progress.mastery_level + $3),
-                                                   updated_at = CURRENT_TIMESTAMP
+                        mastery_level = LEAST(100, topic_progress.mastery_level::integer + $3),
+                        updated_at = CURRENT_TIMESTAMP
                 `, [userId, topicId, correct ? 5 : 0]);
             }
 
@@ -41,18 +41,27 @@ router.post('/progress/record', async (req, res) => {
                 await client.query(`
                     INSERT INTO subtopic_progress (student_id, subtopic_id, mastery_level, exercises_completed, created_at, updated_at)
                     VALUES ($1, $2, $3, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                        ON CONFLICT (student_id, subtopic_id)
+                    ON CONFLICT (student_id, subtopic_id)
                     DO UPDATE SET
                         exercises_completed = subtopic_progress.exercises_completed + 1,
-                                                   mastery_level = LEAST(100, subtopic_progress.mastery_level + $3),
-                                                   updated_at = CURRENT_TIMESTAMP
+                        mastery_level = LEAST(100, subtopic_progress.mastery_level::integer + $3),
+                        updated_at = CURRENT_TIMESTAMP
                 `, [userId, subtopicId, correct ? 5 : 0]);
             }
 
-            // Record in curriculum_progress
+            // Record in curriculum_progress with UPSERT
             await client.query(`
-                INSERT INTO curriculum_progress (student_id, grade_id, topic_id, subtopic_id, mastery_level, attempts, correct_attempts, last_practiced)
+                INSERT INTO curriculum_progress (
+                    student_id, grade_id, topic_id, subtopic_id, 
+                    mastery_level, attempts, correct_attempts, last_practiced
+                )
                 VALUES ($1, $2, $3, $4, $5, 1, $6, CURRENT_TIMESTAMP)
+                ON CONFLICT (student_id, grade_id, topic_id, subtopic_id) 
+                DO UPDATE SET
+                    attempts = curriculum_progress.attempts::integer + 1,
+                    correct_attempts = curriculum_progress.correct_attempts::integer + $6,
+                    mastery_level = LEAST(100, curriculum_progress.mastery_level::integer + $5),
+                    last_practiced = CURRENT_TIMESTAMP
             `, [userId, gradeId, topicId, subtopicId, correct ? 5 : 0, correct ? 1 : 0]);
 
             await client.query('COMMIT');
@@ -80,15 +89,39 @@ router.get('/stats/topics/:userId', async (req, res) => {
             SELECT
                 topic_id,
                 COUNT(*) as total_exercises,
-                SUM(CASE WHEN correct_attempts > 0 THEN 1 ELSE 0 END) as correct_exercises,
-                ROUND(AVG(mastery_level::numeric), 1) as mastery_level,
-                ROUND(
-                        AVG(CASE WHEN attempts::numeric > 0 THEN (correct_attempts::numeric / attempts::numeric * 100) ELSE 0 END),
-                        1
+                SUM(CASE WHEN correct_attempts::integer > 0 THEN 1 ELSE 0 END) as correct_exercises,
+                COALESCE(
+                    CAST(ROUND(CAST(AVG(mastery_level::integer) AS numeric), 1) AS float),
+                    0
+                ) as mastery_level,
+                COALESCE(
+                    CAST(
+                        ROUND(
+                            CAST(
+                                AVG(
+                                    CASE 
+                                        WHEN attempts::integer > 0 
+                                        THEN (correct_attempts::integer::float / attempts::integer::float * 100) 
+                                        ELSE 0 
+                                    END
+                                ) AS numeric
+                            ), 
+                            1
+                        ) AS float
+                    ),
+                    0
                 ) as accuracy,
-                ROUND(
-                        (SUM(CASE WHEN correct_attempts > 0 THEN 1 ELSE 0 END)::float / COUNT(*) * 100),
-                        1
+                COALESCE(
+                    CAST(
+                        ROUND(
+                            CAST(
+                                (SUM(CASE WHEN correct_attempts::integer > 0 THEN 1 ELSE 0 END)::float / COUNT(*)::float * 100) 
+                                AS numeric
+                            ),
+                            1
+                        ) AS float
+                    ),
+                    0
                 ) as progress_percent,
                 MAX(last_practiced) as last_activity
             FROM curriculum_progress
@@ -138,8 +171,8 @@ router.get('/stats/overall/:userId', async (req, res) => {
         const result = await pool.query(`
             SELECT
                 COUNT(DISTINCT topic_id) as total_topics,
-                SUM(attempts) as total_exercises,
-                SUM(correct_attempts) as total_correct
+                SUM(attempts::integer) as total_exercises,
+                SUM(correct_attempts::integer) as total_correct
             FROM curriculum_progress
             WHERE student_id = $1
         `, [userId]);
