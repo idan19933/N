@@ -43,7 +43,16 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors());
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true
+}));
+
+// Body Parser - MUST come before logging
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // SIMPLE TEST ROUTE
 app.get('/test', (req, res) => {
@@ -54,8 +63,17 @@ app.get('/test', (req, res) => {
 app.post('/api/test-progress', (req, res) => {
     console.error('?? TEST PROGRESS ROUTE HIT!');
     res.json({ success: true, message: 'Test progress endpoint works!' });
-    console.error('?? TEST ROUTE HIT!');
-    res.json({ success: true, message: 'Server is reachable!' });
+});
+
+// ==================== REGISTER ROUTES ====================
+console.log('📍 Registering routes...');
+app.use('/api/users', userRoutes);
+app.use('/api/notebook', notebookRoutes);
+app.use('/api/curriculum', curriculumRoutes);
+app.use('/api', nexonRoutes);
+app.use('/api/learning', learningRoutes);
+app.use('/api/chat', chatRoutes);
+console.log('✅ All routes registered!');
 });
 
 // LOG ALL INCOMING REQUESTS
@@ -68,7 +86,6 @@ app.use((req, res, next) => {
     console.log('='.repeat(60));
     next();
 });
-app.use(express.json({ limit: '50mb' }));
 
 // ==================== MULTER CONFIGURATION ====================
 // ==================== MULTER CONFIGURATION - ENHANCED ====================
@@ -1843,17 +1860,6 @@ async function loadPersonalityFromStorage() {
         console.error('❌ Error loading personality:', error.message);
     }
 }
-app.use('/api/users', userRoutes);
-
-app.use('/api/notebook', notebookRoutes);
-
-app.use('/api/curriculum', curriculumRoutes);
-
-app.use('/api', nexonRoutes);
-
-app.use('/api/learning', learningRoutes);
-
-app.use('/api/chat', chatRoutes);
 
 
 
