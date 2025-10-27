@@ -1,444 +1,513 @@
-// src/components/ai/AILearningArea.jsx - FINAL FIX (Handles React 18 Strict Mode)
-import React, { useState, useEffect, useRef } from 'react';
+// src/components/learning/AILearningArea.jsx - ULTIMATE FIXED VERSION
+import React, { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-    BookOpen, ChevronRight, ChevronLeft, Sparkles, Brain, CheckCircle2,
-    Lightbulb, Target, Play, Loader2, Award, Zap, ArrowLeft
+    Book, ChevronLeft, ChevronRight, XCircle, Brain,
+    Lightbulb, Play, ArrowLeft, Sparkles, Trophy
 } from 'lucide-react';
-import axios from 'axios';
-import toast from 'react-hot-toast';
 import useAuthStore from '../../store/authStore';
+import toast from 'react-hot-toast';
 
-const API_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+// ✅ MODULE-LEVEL CACHE - Persists across ALL component mounts/unmounts
+const CONTENT_CACHE = new Map();
+const LOADING_TRACKER = new Map();
 
-// ✅ PERSIST ACROSS REMOUNTS (React 18 Strict Mode fix)
-const generatedTopics = new Map();
-
-const AILearningArea = ({ topic, subtopic, onComplete, onStartPractice, personality = 'nexon' }) => {
-    const { user, nexonProfile } = useAuthStore();
-    const [loading, setLoading] = useState(true);
+const AILearningArea = memo(({ topic, subtopic, personality, onComplete, onStartPractice, onClose }) => {
+    const [content, setContent] = useState(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
     const [currentPage, setCurrentPage] = useState(0);
-    const [learningContent, setLearningContent] = useState(null);
-    const [completedPages, setCompletedPages] = useState(new Set());
     const [quizAnswers, setQuizAnswers] = useState({});
+    const [showSolution, setShowSolution] = useState({});
 
-    // Create unique key for this topic/subtopic
-    const topicKey = `${topic?.id || topic?.name || 'unknown'}-${subtopic?.id || subtopic?.name || 'none'}`;
+    // ✅ Single ref to track if this instance loaded content
+    const hasLoadedRef = useRef(false);
 
-    useEffect(() => {
-        console.log('🔍 AILearningArea mounted:', {
-            topicKey,
-            alreadyGenerated: generatedTopics.has(topicKey),
-            cachedContent: generatedTopics.get(topicKey) ? 'YES' : 'NO'
-        });
+    const user = useAuthStore(state => state.user);
 
-        // Check if we already generated for this topic
-        const cachedContent = generatedTopics.get(topicKey);
+    // Get topic key for caching
+    const getTopicKey = useCallback(() => {
+        const topicName = topic?.name || topic || 'general';
+        const subtopicName = subtopic?.name || subtopic || 'none';
+        return `${topicName}-${subtopicName}`.toLowerCase().replace(/\s+/g, '-');
+    }, [topic, subtopic]);
 
-        if (cachedContent) {
-            console.log('✅ Using cached content (no API call)');
-            setLearningContent(cachedContent);
-            setLoading(false);
-        } else {
-            console.log('✅ Generating new content (first time)');
-            generateLearningContent();
+    // ✅ Memoized function to generate content
+    const generateContent = useCallback(async () => {
+        const topicKey = getTopicKey();
+
+        // Check if already loaded in this instance
+        if (hasLoadedRef.current) {
+            console.log('⏭️ Already loaded in this instance');
+            return;
         }
 
-        // No cleanup needed - we want to persist!
-    }, [topicKey]);
+        // Check module-level cache first
+        const cached = CONTENT_CACHE.get(topicKey);
+        if (cached) {
+            console.log('💾 Using MODULE cache for:', topicKey);
+            setContent(cached);
+            hasLoadedRef.current = true;
+            return;
+        }
 
-    const generateLearningContent = async () => {
+        // Check if another instance is already loading this
+        if (LOADING_TRACKER.get(topicKey)) {
+            console.log('⏳ Another instance is loading, waiting...');
+            // Wait for the other instance to finish
+            const checkInterval = setInterval(() => {
+                const cached = CONTENT_CACHE.get(topicKey);
+                if (cached) {
+                    console.log('💾 Content now available from other instance');
+                    setContent(cached);
+                    hasLoadedRef.current = true;
+                    clearInterval(checkInterval);
+                }
+            }, 100);
+            return;
+        }
+
+        // Mark as loading globally
+        LOADING_TRACKER.set(topicKey, true);
+        console.log('🎓 SINGLE API CALL: Generating content for:', topicKey);
+
+        setLoading(true);
+        setError(null);
+
         try {
-            setLoading(true);
-            console.log('🎓 API Call: Generating learning content for:', topicKey);
+            const API_BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 
-            const response = await axios.post(`${API_URL}/api/learning/generate-content`, {
-                topic: topic?.name || topic,
-                subtopic: subtopic?.name || subtopic || null,
-                topicId: topic?.id,
-                subtopicId: subtopic?.id,
-                grade: nexonProfile?.grade || user?.grade || '8',
-                personality: nexonProfile?.personality || personality,
-                userId: user?.uid
+            const startTime = Date.now();
+            console.log('⏱️ Generation started...');
+
+            const response = await fetch(`${API_BASE_URL}/api/learning/generate-content`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    topic: topic?.name || topic,
+                    subtopic: subtopic?.name || subtopic,
+                    grade: user?.grade || '7',
+                    personality: personality?.group || 'nexon',
+                    userId: user?.uid || 'anonymous'
+                })
             });
 
-            console.log('✅ API Response received');
+            const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+            console.log(`✅ API Response: ${response.status} (${elapsed}s)`);
 
-            if (response.data?.content) {
-                const content = response.data.content;
-                setLearningContent(content);
-
-                // ✅ Cache for future remounts
-                generatedTopics.set(topicKey, content);
-                console.log('💾 Content cached for:', topicKey);
-            } else {
-                throw new Error('No content received from server');
+            if (!response.ok) {
+                const data = await response.json().catch(() => ({ error: 'Server error' }));
+                throw new Error(data.error || `Server error: ${response.status}`);
             }
 
-            setLoading(false);
-        } catch (error) {
-            console.error('❌ Error generating learning content:', error);
-            toast.error('שגיאה ביצירת תוכן הלימוד');
-            setLoading(false);
-        }
-    };
+            const data = await response.json();
 
-    const handleNextPage = () => {
-        setCompletedPages(prev => new Set([...prev, currentPage]));
-        if (currentPage < learningContent.pages.length - 1) {
+            if (data.success && data.content) {
+                console.log(`💾 Content cached for: ${topicKey} (Total: ${elapsed}s)`);
+
+                // Store in module-level cache
+                CONTENT_CACHE.set(topicKey, data.content);
+
+                setContent(data.content);
+                hasLoadedRef.current = true;
+            } else {
+                throw new Error('Invalid response format from server');
+            }
+
+        } catch (err) {
+            console.error('❌ Error:', err);
+
+            let errorMessage = err.message;
+            if (err.message.includes('Failed to fetch')) {
+                errorMessage = 'לא ניתן להתחבר לשרת. בדוק שהשרת פועל.';
+            }
+
+            setError(errorMessage);
+            toast.error('שגיאה בטעינת תוכן הלימוד');
+        } finally {
+            setLoading(false);
+            LOADING_TRACKER.delete(topicKey); // Clear loading flag
+        }
+    }, [topic, subtopic, user, personality, getTopicKey]);
+
+    // ✅ Effect - ONLY depends on topic/subtopic
+    useEffect(() => {
+        const topicKey = getTopicKey();
+
+        console.log('🔍 Component effect triggered:', topicKey);
+
+        // Reset for new topic
+        hasLoadedRef.current = false;
+
+        // Check cache immediately
+        const cached = CONTENT_CACHE.get(topicKey);
+        if (cached) {
+            console.log('💾 Instant load from cache:', topicKey);
+            setContent(cached);
+            hasLoadedRef.current = true;
+        } else {
+            // Generate only if not cached
+            generateContent();
+        }
+
+        return () => {
+            // Cleanup
+            console.log('🧹 Component unmounting');
+        };
+    }, [topic, subtopic]); // ONLY topic and subtopic!
+
+    // ✅ Memoized handlers
+    const handleNextPage = useCallback(() => {
+        if (content && currentPage < content.pages.length - 1) {
             setCurrentPage(prev => prev + 1);
+            setQuizAnswers({});
+            setShowSolution({});
+            window.scrollTo({ top: 0, behavior: 'smooth' });
         }
-    };
+    }, [content, currentPage]);
 
-    const handlePrevPage = () => {
+    const handlePrevPage = useCallback(() => {
         if (currentPage > 0) {
             setCurrentPage(prev => prev - 1);
+            setQuizAnswers({});
+            setShowSolution({});
+            window.scrollTo({ top: 0, behavior: 'smooth' });
         }
-    };
+    }, [currentPage]);
 
-    const handleQuizAnswer = (questionIndex, answer) => {
+    const handleAnswerSelect = useCallback((questionIndex, answerIndex) => {
         setQuizAnswers(prev => ({
             ...prev,
-            [currentPage]: {
-                ...prev[currentPage],
-                [questionIndex]: answer
-            }
+            [questionIndex]: answerIndex
         }));
-    };
+    }, []);
 
-    const checkQuizAnswers = () => {
-        const currentQuiz = learningContent.pages[currentPage].quiz;
-        const currentAnswers = quizAnswers[currentPage] || {};
+    const handleCheckAnswer = useCallback((questionIndex) => {
+        setShowSolution(prev => ({
+            ...prev,
+            [questionIndex]: true
+        }));
+    }, []);
 
-        let correct = 0;
-        currentQuiz.forEach((q, idx) => {
-            if (currentAnswers[idx] === q.correctAnswer) {
-                correct++;
-            }
-        });
+    const handleComplete = useCallback(() => {
+        toast.success('כל הכבוד! סיימת את החומר');
+        if (onComplete) onComplete();
+        if (onStartPractice) onStartPractice();
+    }, [onComplete, onStartPractice]);
 
-        const percentage = (correct / currentQuiz.length) * 100;
+    const handleRetry = useCallback(() => {
+        setError(null);
+        setLoading(false);
+        hasLoadedRef.current = false;
+        generateContent();
+    }, [generateContent]);
 
-        if (percentage >= 70) {
-            toast.success(`מצוין! ${correct}/${currentQuiz.length} תשובות נכונות! 🎉`);
-            handleNextPage();
-        } else {
-            toast.error(`צריך לשפר... ${correct}/${currentQuiz.length} תשובות נכונות. נסה שוב! 💪`);
-        }
-    };
-
-    const handleStartPractice = () => {
-        console.log('🚀 Starting practice from learning area');
-        if (onStartPractice) {
-            onStartPractice();
-        } else {
-            console.error('❌ onStartPractice callback not provided');
-            toast.error('שגיאה במעבר לתרגול');
-        }
-    };
-
-    const handleRetry = () => {
-        console.log('🔄 Retrying - clearing cache for:', topicKey);
-        generatedTopics.delete(topicKey);
-        generateLearningContent();
-    };
-
+    // Loading state
     if (loading) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 flex items-center justify-center" dir="rtl">
-                <motion.div
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="bg-white rounded-3xl shadow-2xl p-12 max-w-md w-full text-center"
-                >
+            <div className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-500 to-red-500 flex items-center justify-center p-4">
+                <div className="bg-white rounded-3xl p-12 max-w-md text-center">
                     <motion.div
-                        animate={{ rotate: 360 }}
-                        transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                        className="inline-block mb-6"
+                        animate={{
+                            rotate: 360,
+                            scale: [1, 1.2, 1]
+                        }}
+                        transition={{
+                            rotate: { duration: 2, repeat: Infinity, ease: "linear" },
+                            scale: { duration: 1, repeat: Infinity }
+                        }}
+                        className="mx-auto mb-6"
                     >
                         <Brain className="w-20 h-20 text-purple-600" />
                     </motion.div>
-                    <h2 className="text-3xl font-black text-gray-800 mb-4">
-                        נקסון מכין עבורך תוכן לימוד...
+                    <h2 className="text-2xl font-bold text-gray-900 mb-3">
+                        יוצר חומר לימוד מותאם אישית
                     </h2>
-                    <p className="text-gray-600 text-lg">
-                        יוצר חומר לימוד ייעודי עבור {subtopic?.name || topic?.name || topic}
+                    <p className="text-gray-600">
+                        רגע, אני מכין לך את התוכן הכי מתאים...
                     </p>
-                    <div className="mt-6 flex items-center justify-center gap-2">
-                        <Loader2 className="w-6 h-6 text-purple-600 animate-spin" />
-                        <span className="text-purple-600 font-bold">טוען...</span>
+                    <div className="mt-6 w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                        <motion.div
+                            className="h-full bg-gradient-to-r from-purple-600 to-pink-600"
+                            animate={{
+                                x: ['-100%', '100%']
+                            }}
+                            transition={{
+                                duration: 1.5,
+                                repeat: Infinity,
+                                ease: "easeInOut"
+                            }}
+                        />
                     </div>
-                </motion.div>
+                </div>
             </div>
         );
     }
 
-    if (!learningContent || !learningContent.pages) {
+    // Error state
+    if (error) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 flex items-center justify-center" dir="rtl">
-                <motion.div
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="bg-white rounded-3xl shadow-2xl p-12 max-w-md w-full text-center"
-                >
-                    <div className="text-6xl mb-6">😞</div>
-                    <h2 className="text-3xl font-black text-gray-800 mb-4">
-                        אופס! משהו השתבש
+            <div className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-500 to-red-500 flex items-center justify-center p-4">
+                <div className="bg-white rounded-3xl p-12 max-w-md text-center">
+                    <XCircle className="w-20 h-20 text-red-500 mx-auto mb-6" />
+                    <h2 className="text-2xl font-bold text-gray-900 mb-3">
+                        שגיאה בטעינת התוכן
                     </h2>
-                    <p className="text-gray-600 text-lg mb-6">
-                        לא הצלחנו ליצור תוכן לימוד כרגע
+                    <p className="text-gray-600 mb-6">{error}</p>
+                    <div className="flex gap-4">
+                        <button
+                            onClick={handleRetry}
+                            className="flex-1 px-6 py-3 bg-purple-600 text-white rounded-xl font-bold hover:bg-purple-700 transition-all"
+                        >
+                            נסה שוב
+                        </button>
+                        {onClose && (
+                            <button
+                                onClick={onClose}
+                                className="flex-1 px-6 py-3 bg-gray-200 text-gray-700 rounded-xl font-bold hover:bg-gray-300 transition-all"
+                            >
+                                חזור
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // No content yet
+    if (!content || !content.pages || content.pages.length === 0) {
+        return (
+            <div className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-500 to-red-500 flex items-center justify-center p-4">
+                <div className="bg-white rounded-3xl p-12 max-w-md text-center">
+                    <Book className="w-20 h-20 text-gray-400 mx-auto mb-6" />
+                    <h2 className="text-2xl font-bold text-gray-900 mb-3">
+                        אין תוכן זמין
+                    </h2>
+                    <p className="text-gray-600 mb-6">
+                        לא הצלחנו לטעון את חומר הלימוד
                     </p>
                     <button
                         onClick={handleRetry}
-                        className="px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-bold hover:shadow-lg transition-all"
+                        className="px-6 py-3 bg-purple-600 text-white rounded-xl font-bold hover:bg-purple-700 transition-all"
                     >
-                        נסה שוב
+                        טען מחדש
                     </button>
-                </motion.div>
+                </div>
             </div>
         );
     }
 
-    const currentPageContent = learningContent.pages[currentPage];
-    const isLastPage = currentPage === learningContent.pages.length - 1;
+    const currentPageData = content.pages[currentPage];
+    const isLastPage = currentPage === content.pages.length - 1;
+    const progress = ((currentPage + 1) / content.pages.length) * 100;
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 p-4" dir="rtl">
-            <div className="max-w-5xl mx-auto">
-                <motion.div
-                    initial={{ opacity: 0, y: -20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="bg-white/10 backdrop-blur-md rounded-2xl p-4 mb-6 flex items-center justify-between"
-                >
-                    <div className="flex items-center gap-3">
-                        <BookOpen className="w-8 h-8 text-white" />
-                        <div>
-                            <h1 className="text-2xl font-black text-white">
-                                {learningContent.title || `לימוד: ${topic?.name || topic}`}
-                            </h1>
-                            <p className="text-white/80 text-sm font-semibold">
-                                {subtopic?.name || 'חומר לימוד'}
-                            </p>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-2 bg-white/20 px-4 py-2 rounded-xl">
-                        <Target className="w-5 h-5 text-white" />
-                        <span className="text-white font-bold">
-                            {currentPage + 1} מתוך {learningContent.pages.length}
-                        </span>
-                    </div>
-                </motion.div>
+        <div className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-500 to-red-500 p-4 md:p-8" dir="rtl">
+            <div className="max-w-4xl mx-auto">
+                {/* Header */}
+                <div className="flex items-center justify-between mb-6">
+                    <button
+                        onClick={onClose}
+                        className="flex items-center gap-2 text-white hover:text-white/80 transition-all"
+                    >
+                        <ArrowLeft className="w-5 h-5" />
+                        <span className="font-medium">חזור</span>
+                    </button>
 
+                    <div className="text-white text-center">
+                        <h1 className="text-2xl md:text-3xl font-bold mb-2">
+                            {content.title}
+                        </h1>
+                        <p className="text-white/90">
+                            עמוד {currentPage + 1} מתוך {content.pages.length}
+                        </p>
+                    </div>
+
+                    <div className="w-20"></div>
+                </div>
+
+                {/* Progress Bar */}
+                <div className="bg-white/20 rounded-full h-3 mb-8 overflow-hidden backdrop-blur-sm">
+                    <motion.div
+                        className="h-full bg-white rounded-full"
+                        initial={{ width: 0 }}
+                        animate={{ width: `${progress}%` }}
+                        transition={{ duration: 0.5 }}
+                    />
+                </div>
+
+                {/* Content Card */}
                 <AnimatePresence mode="wait">
                     <motion.div
                         key={currentPage}
                         initial={{ opacity: 0, x: 50 }}
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: -50 }}
-                        className="bg-white rounded-3xl shadow-2xl overflow-hidden"
+                        transition={{ duration: 0.3 }}
+                        className="bg-white rounded-3xl p-8 md:p-12 mb-6 shadow-2xl"
                     >
-                        <div className="p-8 max-h-[70vh] overflow-y-auto">
-                            <motion.div
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                className="mb-8"
-                            >
-                                <div className="flex items-center gap-3 mb-4">
-                                    <div className="p-3 bg-gradient-to-r from-purple-600 to-pink-600 rounded-2xl">
-                                        <Sparkles className="w-6 h-6 text-white" />
-                                    </div>
-                                    <h2 className="text-3xl font-black text-gray-800">
-                                        {currentPageContent.title}
-                                    </h2>
-                                </div>
-                            </motion.div>
+                        <h2 className="text-3xl md:text-4xl font-bold text-purple-900 mb-8 flex items-center gap-3">
+                            <Book className="w-8 h-8" />
+                            {currentPageData.title}
+                        </h2>
 
-                            <div className="space-y-6 mb-8">
-                                {currentPageContent.content && Array.isArray(currentPageContent.content) && currentPageContent.content.map((section, idx) => (
-                                    <motion.div
-                                        key={idx}
-                                        initial={{ opacity: 0, y: 20 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        transition={{ delay: idx * 0.1 }}
-                                        className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl p-6"
-                                    >
-                                        {section.type === 'text' && (
-                                            <div className="prose prose-lg max-w-none">
-                                                <p className="text-gray-700 text-lg leading-relaxed whitespace-pre-wrap">
-                                                    {section.data}
-                                                </p>
+                        {/* Content Items */}
+                        <div className="space-y-6 mb-8">
+                            {currentPageData.content.map((item, index) => (
+                                <div key={index}>
+                                    {item.type === 'text' && (
+                                        <p className="text-lg text-gray-700 leading-relaxed">
+                                            {item.value}
+                                        </p>
+                                    )}
+
+                                    {item.type === 'example' && (
+                                        <div className="bg-blue-50 border-r-4 border-blue-500 rounded-lg p-6">
+                                            <div className="font-bold text-blue-700 mb-2 flex items-center gap-2">
+                                                <Lightbulb className="w-5 h-5" />
+                                                דוגמה:
                                             </div>
-                                        )}
-
-                                        {section.type === 'example' && (
-                                            <div className="border-r-4 border-purple-600 pr-6">
-                                                <div className="flex items-center gap-2 mb-3">
-                                                    <Lightbulb className="w-6 h-6 text-purple-600" />
-                                                    <span className="text-xl font-black text-purple-600">דוגמה:</span>
+                                            <div className="text-gray-800 font-medium text-lg mb-3">
+                                                {item.value}
+                                            </div>
+                                            {item.solution && (
+                                                <div className="text-gray-700 mt-3 pt-3 border-t border-blue-200">
+                                                    <strong>פתרון:</strong> {item.solution}
                                                 </div>
-                                                <p className="text-gray-700 text-lg leading-relaxed whitespace-pre-wrap">
-                                                    {section.data}
-                                                </p>
-                                            </div>
-                                        )}
-
-                                        {section.type === 'tip' && (
-                                            <div className="bg-yellow-50 border-2 border-yellow-400 rounded-xl p-5">
-                                                <div className="flex items-center gap-2 mb-2">
-                                                    <Target className="w-5 h-5 text-yellow-600" />
-                                                    <span className="text-lg font-black text-yellow-600">טיפ:</span>
-                                                </div>
-                                                <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">
-                                                    {section.data}
-                                                </p>
-                                            </div>
-                                        )}
-                                    </motion.div>
-                                ))}
-                            </div>
-
-                            {currentPageContent.quiz && currentPageContent.quiz.length > 0 && (
-                                <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl p-8 mb-6">
-                                    <div className="flex items-center gap-3 mb-6">
-                                        <div className="p-3 bg-purple-600 rounded-2xl">
-                                            <Brain className="w-6 h-6 text-white" />
+                                            )}
                                         </div>
-                                        <h3 className="text-2xl font-black text-gray-800">
-                                            בדיקת הבנה מהירה
-                                        </h3>
-                                    </div>
+                                    )}
 
-                                    <div className="space-y-6">
-                                        {currentPageContent.quiz.map((question, qIdx) => (
-                                            <motion.div
-                                                key={qIdx}
-                                                initial={{ opacity: 0, y: 20 }}
-                                                animate={{ opacity: 1, y: 0 }}
-                                                transition={{ delay: qIdx * 0.1 }}
-                                                className="bg-white rounded-xl p-6 shadow-lg"
-                                            >
-                                                <p className="text-lg font-bold text-gray-800 mb-4">
-                                                    {qIdx + 1}. {question.question}
-                                                </p>
-                                                <div className="space-y-3">
-                                                    {question.options && question.options.map((option, oIdx) => {
-                                                        const isSelected = quizAnswers[currentPage]?.[qIdx] === oIdx;
-                                                        return (
-                                                            <button
-                                                                key={oIdx}
-                                                                onClick={() => handleQuizAnswer(qIdx, oIdx)}
-                                                                className={`w-full text-right px-6 py-4 rounded-xl font-bold transition-all ${
-                                                                    isSelected
-                                                                        ? 'bg-purple-600 text-white shadow-lg transform scale-105'
-                                                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                                                }`}
-                                                            >
-                                                                {option}
-                                                            </button>
-                                                        );
-                                                    })}
-                                                </div>
-                                            </motion.div>
-                                        ))}
-                                    </div>
-
-                                    <motion.button
-                                        whileHover={{ scale: 1.02 }}
-                                        whileTap={{ scale: 0.98 }}
-                                        onClick={checkQuizAnswers}
-                                        disabled={!quizAnswers[currentPage] || Object.keys(quizAnswers[currentPage]).length < currentPageContent.quiz.length}
-                                        className="w-full mt-6 px-8 py-5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-black text-xl hover:shadow-2xl disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                                    >
-                                        <div className="flex items-center justify-center gap-2">
-                                            <CheckCircle2 className="w-6 h-6" />
-                                            <span>בדוק תשובות</span>
+                                    {item.type === 'tip' && (
+                                        <div className="bg-yellow-50 border-r-4 border-yellow-500 rounded-lg p-4 flex items-start gap-3">
+                                            <Sparkles className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-1" />
+                                            <p className="text-gray-800">{item.value}</p>
                                         </div>
-                                    </motion.button>
+                                    )}
                                 </div>
-                            )}
+                            ))}
                         </div>
 
-                        <div className="bg-gray-50 px-8 py-6 flex items-center justify-between">
-                            <button
-                                onClick={handlePrevPage}
-                                disabled={currentPage === 0}
-                                className="flex items-center gap-2 px-6 py-3 bg-white text-gray-700 rounded-xl font-bold hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                            >
-                                <ChevronRight className="w-5 h-5" />
-                                <span>דף קודם</span>
-                            </button>
+                        {/* Quiz */}
+                        {currentPageData.quiz && currentPageData.quiz.length > 0 && (
+                            <div className="bg-purple-50 rounded-2xl p-6">
+                                <h3 className="text-2xl font-bold text-purple-900 mb-4 flex items-center gap-2">
+                                    <Trophy className="w-6 h-6" />
+                                    שאלות לתרגול
+                                </h3>
 
-                            <div className="flex items-center gap-2">
-                                {learningContent.pages.map((_, idx) => (
-                                    <div
-                                        key={idx}
-                                        className={`w-3 h-3 rounded-full transition-all ${
-                                            idx === currentPage
-                                                ? 'bg-purple-600 w-8'
-                                                : completedPages.has(idx)
-                                                    ? 'bg-green-500'
-                                                    : 'bg-gray-300'
-                                        }`}
-                                    />
-                                ))}
+                                <div className="space-y-6">
+                                    {currentPageData.quiz.map((question, qIndex) => (
+                                        <div key={qIndex} className="bg-white rounded-xl p-5">
+                                            <p className="text-lg font-bold text-gray-900 mb-4">
+                                                {question.question}
+                                            </p>
+
+                                            <div className="space-y-2 mb-4">
+                                                {question.options.map((option, oIndex) => {
+                                                    const isSelected = quizAnswers[qIndex] === oIndex;
+                                                    const isCorrect = question.correctAnswer === oIndex;
+                                                    const showAnswer = showSolution[qIndex];
+
+                                                    return (
+                                                        <button
+                                                            key={oIndex}
+                                                            onClick={() => handleAnswerSelect(qIndex, oIndex)}
+                                                            disabled={showAnswer}
+                                                            className={`w-full text-right p-4 rounded-lg font-medium transition-all ${
+                                                                showAnswer
+                                                                    ? isCorrect
+                                                                        ? 'bg-green-100 border-2 border-green-500 text-green-800'
+                                                                        : isSelected
+                                                                            ? 'bg-red-100 border-2 border-red-500 text-red-800'
+                                                                            : 'bg-gray-100 text-gray-500'
+                                                                    : isSelected
+                                                                        ? 'bg-purple-100 border-2 border-purple-500 text-purple-900'
+                                                                        : 'bg-gray-50 border-2 border-gray-200 hover:border-purple-300 text-gray-700'
+                                                            }`}
+                                                        >
+                                                            {option}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+
+                                            {quizAnswers[qIndex] !== undefined && !showSolution[qIndex] && (
+                                                <button
+                                                    onClick={() => handleCheckAnswer(qIndex)}
+                                                    className="px-6 py-3 bg-purple-600 text-white rounded-lg font-bold hover:bg-purple-700 transition-all"
+                                                >
+                                                    בדוק תשובה
+                                                </button>
+                                            )}
+
+                                            {showSolution[qIndex] && (
+                                                <div
+                                                    className={`mt-4 p-4 rounded-lg ${
+                                                        quizAnswers[qIndex] === question.correctAnswer
+                                                            ? 'bg-green-50 border-2 border-green-500'
+                                                            : 'bg-red-50 border-2 border-red-500'
+                                                    }`}
+                                                >
+                                                    <p className="font-bold mb-2">
+                                                        {quizAnswers[qIndex] === question.correctAnswer
+                                                            ? '✅ נכון!'
+                                                            : '❌ לא נכון'}
+                                                    </p>
+                                                    <p className="text-gray-700">{question.explanation}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
-
-                            {!isLastPage ? (
-                                <button
-                                    onClick={handleNextPage}
-                                    className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-bold hover:shadow-lg transition-all"
-                                >
-                                    <span>דף הבא</span>
-                                    <ChevronLeft className="w-5 h-5" />
-                                </button>
-                            ) : (
-                                <motion.button
-                                    whileHover={{ scale: 1.05 }}
-                                    whileTap={{ scale: 0.95 }}
-                                    onClick={handleStartPractice}
-                                    className="flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-black text-lg hover:shadow-2xl transition-all"
-                                >
-                                    <Zap className="w-6 h-6" />
-                                    <span>התחל תרגול!</span>
-                                    <Play className="w-6 h-6" />
-                                </motion.button>
-                            )}
-                        </div>
+                        )}
                     </motion.div>
                 </AnimatePresence>
 
-                {completedPages.size === learningContent.pages.length && isLastPage && (
-                    <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="mt-6 bg-gradient-to-r from-green-500 to-emerald-600 rounded-3xl p-8 text-center shadow-2xl"
+                {/* Navigation */}
+                <div className="flex gap-4">
+                    <button
+                        onClick={handlePrevPage}
+                        disabled={currentPage === 0}
+                        className="flex-1 flex items-center justify-center gap-2 px-6 py-4 bg-white text-purple-600 rounded-2xl font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/90 transition-all"
                     >
-                        <motion.div
-                            animate={{ rotate: [0, 10, -10, 0], scale: [1, 1.1, 1] }}
-                            transition={{ duration: 2, repeat: Infinity }}
+                        <ChevronRight className="w-5 h-5" />
+                        עמוד קודם
+                    </button>
+
+                    {!isLastPage ? (
+                        <button
+                            onClick={handleNextPage}
+                            className="flex-1 flex items-center justify-center gap-2 px-6 py-4 bg-white text-purple-600 rounded-2xl font-bold hover:bg-white/90 transition-all"
                         >
-                            <Award className="w-20 h-20 text-white mx-auto mb-4" />
-                        </motion.div>
-                        <h2 className="text-4xl font-black text-white mb-3">
-                            כל הכבוד! סיימת את חומר הלימוד! 🎉
-                        </h2>
-                        <p className="text-2xl text-white/90 mb-6">
-                            עכשיו זה הזמן לתרגל ולבדוק את עצמך!
-                        </p>
-                        <motion.button
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={handleStartPractice}
-                            className="px-12 py-5 bg-white text-green-600 rounded-2xl font-black text-xl shadow-2xl hover:shadow-white/50 transition-all inline-flex items-center gap-3"
+                            עמוד הבא
+                            <ChevronLeft className="w-5 h-5" />
+                        </button>
+                    ) : (
+                        <button
+                            onClick={handleComplete}
+                            className="flex-1 flex items-center justify-center gap-2 px-6 py-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-2xl font-bold hover:shadow-xl transition-all"
                         >
-                            <Play className="w-7 h-7" />
-                            <span>התחל תרגול עכשיו!</span>
-                        </motion.button>
-                    </motion.div>
-                )}
+                            <Play className="w-5 h-5" />
+                            התחל תרגול!
+                        </button>
+                    )}
+                </div>
             </div>
         </div>
     );
-};
+}, (prevProps, nextProps) => {
+    // ✅ Comparison function - only re-render if topic/subtopic actually changed
+    const topicChanged = (prevProps.topic?.name || prevProps.topic) !== (nextProps.topic?.name || nextProps.topic);
+    const subtopicChanged = (prevProps.subtopic?.name || prevProps.subtopic) !== (nextProps.subtopic?.name || nextProps.subtopic);
+
+    return !topicChanged && !subtopicChanged;
+});
+
+AILearningArea.displayName = 'AILearningArea';
 
 export default AILearningArea;

@@ -117,9 +117,8 @@ function App() {
                     <Route
                         path="learn"
                         element={
-                            <PrivateRoute>
                                 <LearnPage />
-                            </PrivateRoute>
+
                         }
                     />
 

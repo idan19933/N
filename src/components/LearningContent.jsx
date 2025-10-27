@@ -9,7 +9,7 @@ const LearningContent = memo(({ topic, subtopic, grade, personality }) => {
     const [currentPage, setCurrentPage] = useState(0);
     const [quizAnswers, setQuizAnswers] = useState({});
     const [showSolution, setShowSolution] = useState({});
-    
+
     // Refs to prevent duplicate calls
     const contentLoadedRef = useRef(false);
     const loadingRef = useRef(false);
@@ -84,7 +84,7 @@ const LearningContent = memo(({ topic, subtopic, grade, personality }) => {
         // Reset refs when parameters change
         contentLoadedRef.current = false;
         setContent(null);
-        
+
         generateContent();
     }, [topic, subtopic, grade, personality]); // Only depend on actual props, not the function
 
