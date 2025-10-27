@@ -76,20 +76,28 @@ router.get('/stats/topics/:userId', async (req, res) => {
     try {
         const { userId } = req.params;
         console.error('📊 Fetching topic stats for userId:', userId);
-
         const result = await pool.query(`
             SELECT
                 topic_id,
-                mastery_level,
-                updated_at as last_activity
-            FROM topic_progress
+                COUNT(*) as total_exercises,
+                SUM(CASE WHEN correct_attempts > 0 THEN 1 ELSE 0 END) as correct_exercises,
+                ROUND(AVG(mastery_level), 1) as mastery_level,
+                ROUND(
+                        AVG(CASE WHEN attempts > 0 THEN (correct_attempts::float / attempts * 100) ELSE 0 END),
+                        1
+                ) as accuracy,
+                ROUND(
+                        (SUM(CASE WHEN correct_attempts > 0 THEN 1 ELSE 0 END)::float / COUNT(*) * 100),
+                        1
+                ) as progress_percent,
+                MAX(last_practiced) as last_activity
+            FROM curriculum_progress
             WHERE student_id = $1
-            ORDER BY updated_at DESC
+            GROUP BY topic_id
+            ORDER BY last_activity DESC
         `, [userId]);
-
         console.error(`✅ Found ${result.rows.length} topic records`);
         res.json({ success: true, topics: result.rows });
-
     } catch (error) {
         console.error('❌ Error fetching topic stats:', error.message);
         res.json({ success: true, topics: [], error: error.message });
