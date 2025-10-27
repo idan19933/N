@@ -1,6 +1,10 @@
-// server/routes/learningRoutes.js - FIXED VERSION WITH BETTER ERROR HANDLING
+// server/routes/learningRoutes.js - OPTIMIZED VERSION
 import express from 'express';
 const router = express.Router();
+
+// Cache for generated content (optional - helps reduce API calls)
+const contentCache = new Map();
+const CACHE_DURATION = 1000 * 60 * 30; // 30 minutes
 
 function cleanJsonText(rawText) {
     let jsonText = rawText.trim();
@@ -21,6 +25,10 @@ function cleanJsonText(rawText) {
     return jsonText;
 }
 
+function getCacheKey(topic, subtopic, grade, personality) {
+    return `${topic}-${subtopic}-${grade}-${personality}`;
+}
+
 router.post('/generate-content', async (req, res) => {
     try {
         const { topic, subtopic, topicId, subtopicId, grade, personality, userId } = req.body;
@@ -30,14 +38,35 @@ router.post('/generate-content', async (req, res) => {
             subtopic,
             grade,
             personality,
+            userId,
             hasApiKey: !!process.env.ANTHROPIC_API_KEY
         });
+
+        // Validate required fields
+        if (!topic || !grade || !personality) {
+            return res.status(400).json({
+                success: false,
+                error: 'Missing required fields: topic, grade, and personality are required'
+            });
+        }
 
         if (!process.env.ANTHROPIC_API_KEY) {
             console.error('❌ ANTHROPIC_API_KEY not found in environment');
             return res.status(500).json({
                 success: false,
                 error: 'API key not configured'
+            });
+        }
+
+        // Check cache first (optional)
+        const cacheKey = getCacheKey(topic, subtopic, grade, personality);
+        const cached = contentCache.get(cacheKey);
+        if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+            console.log('✅ Returning cached content');
+            return res.json({
+                success: true,
+                content: cached.data,
+                cached: true
             });
         }
 
@@ -165,7 +194,8 @@ ${subtopic ? `- תת-נושא: ${subtopic}` : ''}
             });
             return res.status(500).json({
                 success: false,
-                error: `API Error: ${response.status} ${response.statusText}`
+                error: `API Error: ${response.status} ${response.statusText}`,
+                details: errorData
             });
         }
 
@@ -189,13 +219,30 @@ ${subtopic ? `- תת-נושא: ${subtopic}` : ''}
             console.log('📄 Failed text:', cleanedText.substring(0, 500));
             return res.status(500).json({
                 success: false,
-                error: 'Failed to parse AI response'
+                error: 'Failed to parse AI response',
+                rawResponse: cleanedText.substring(0, 500)
             });
+        }
+
+        // Cache the result
+        contentCache.set(cacheKey, {
+            data: learningContent,
+            timestamp: Date.now()
+        });
+
+        // Clean old cache entries (keep last 50)
+        if (contentCache.size > 50) {
+            const entries = Array.from(contentCache.entries());
+            entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
+            for (let i = 0; i < 10; i++) {
+                contentCache.delete(entries[i][0]);
+            }
         }
 
         res.json({
             success: true,
-            content: learningContent
+            content: learningContent,
+            cached: false
         });
 
     } catch (error) {
@@ -203,9 +250,16 @@ ${subtopic ? `- תת-נושא: ${subtopic}` : ''}
         console.error('Error stack:', error.stack);
         res.status(500).json({
             success: false,
-            error: error.message || 'Internal server error'
+            error: error.message || 'Internal server error',
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
         });
     }
+});
+
+// Optional: Clear cache endpoint
+router.post('/clear-cache', (req, res) => {
+    contentCache.clear();
+    res.json({ success: true, message: 'Cache cleared' });
 });
 
 export default router;

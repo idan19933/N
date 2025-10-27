@@ -20,6 +20,7 @@ import PaymentCancel from './pages/PaymentCancel';
 import NotebookPage from './pages/NotebookPage';
 import PlansPage from './pages/PlansPage';
 import PremiumSuccess from './pages/PremiumSuccess';
+import LearnPage from './pages/LearnPage'; // ← NEW: Learning Content System
 
 // AI & Practice
 import MathTutor from './components/ai/MathTutor';
@@ -108,6 +109,16 @@ function App() {
                         element={
                             <PrivateRoute>
                                 <MathTutor />
+                            </PrivateRoute>
+                        }
+                    />
+
+                    {/* ✅ NEW: Learning Content System */}
+                    <Route
+                        path="learn"
+                        element={
+                            <PrivateRoute>
+                                <LearnPage />
                             </PrivateRoute>
                         }
                     />

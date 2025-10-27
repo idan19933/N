@@ -1,0 +1,281 @@
+/* styles/LearnPage.css */
+
+.learn-page {
+    min-height: 100vh;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 20px;
+}
+
+.learn-page.menu {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding-top: 40px;
+}
+
+.learn-container {
+    max-width: 1000px;
+    width: 100%;
+    background: white;
+    border-radius: 20px;
+    padding: 40px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+.learn-container h1 {
+    text-align: center;
+    font-size: 42px;
+    color: #667eea;
+    margin: 0 0 10px 0;
+}
+
+.subtitle {
+    text-align: center;
+    font-size: 18px;
+    color: #666;
+    margin: 0 0 40px 0;
+}
+
+.back-btn {
+    background: white;
+    color: #667eea;
+    border: 2px solid #667eea;
+    padding: 12px 24px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 20px;
+    transition: all 0.2s;
+}
+
+.back-btn:hover {
+    background: #667eea;
+    color: white;
+}
+
+/* Selection Sections */
+.selection-section {
+    margin-bottom: 40px;
+}
+
+.selection-section h3 {
+    color: #333;
+    font-size: 22px;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #eee;
+}
+
+/* Grade Selector */
+.grade-selector {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.grade-btn {
+    padding: 15px 30px;
+    background: #f5f7fa;
+    border: 2px solid #ddd;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 18px;
+    font-weight: 600;
+    transition: all 0.2s;
+    color: #333;
+}
+
+.grade-btn:hover {
+    border-color: #667eea;
+    background: #f5f7ff;
+}
+
+.grade-btn.active {
+    background: #667eea;
+    color: white;
+    border-color: #667eea;
+}
+
+/* Personality Selector */
+.personality-selector {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 15px;
+}
+
+.personality-btn {
+    padding: 20px;
+    background: #f5f7fa;
+    border: 2px solid #ddd;
+    border-radius: 12px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    transition: all 0.2s;
+}
+
+.personality-btn:hover {
+    border-color: #667eea;
+    background: #f5f7ff;
+    transform: translateY(-2px);
+}
+
+.personality-btn.active {
+    background: #667eea;
+    color: white;
+    border-color: #667eea;
+}
+
+.personality-btn .emoji {
+    font-size: 36px;
+}
+
+.personality-btn .name {
+    font-size: 18px;
+    font-weight: 600;
+}
+
+/* Topics Grid */
+.topics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 20px;
+}
+
+.topic-card {
+    background: #f5f7fa;
+    border: 2px solid #ddd;
+    border-radius: 12px;
+    padding: 25px;
+    cursor: pointer;
+    transition: all 0.3s;
+    text-align: center;
+}
+
+.topic-card:hover {
+    border-color: #667eea;
+    background: #f5f7ff;
+    transform: translateY(-5px);
+    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.2);
+}
+
+.topic-card.selected {
+    background: #667eea;
+    color: white;
+    border-color: #667eea;
+    box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+}
+
+.topic-card h4 {
+    margin: 0 0 10px 0;
+    font-size: 20px;
+}
+
+.subtopic-count {
+    margin: 0;
+    font-size: 14px;
+    opacity: 0.8;
+}
+
+.topic-card.selected .subtopic-count {
+    opacity: 0.9;
+}
+
+/* Subtopics Section */
+.selection-section.subtopics {
+    background: #f9f9f9;
+    padding: 25px;
+    border-radius: 12px;
+    border: 2px solid #eee;
+}
+
+.subtopics-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.subtopic-btn {
+    padding: 12px 20px;
+    background: white;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: all 0.2s;
+    color: #333;
+}
+
+.subtopic-btn:hover {
+    border-color: #667eea;
+    background: #f5f7ff;
+}
+
+.subtopic-btn.active {
+    background: #667eea;
+    color: white;
+    border-color: #667eea;
+}
+
+/* Start Button */
+.start-learning-btn {
+    width: 100%;
+    padding: 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 22px;
+    font-weight: 700;
+    margin-top: 30px;
+    transition: all 0.3s;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.start-learning-btn:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+}
+
+.start-learning-btn:active {
+    transform: translateY(-1px);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .learn-container {
+        padding: 25px;
+    }
+
+    .learn-container h1 {
+        font-size: 32px;
+    }
+
+    .subtitle {
+        font-size: 16px;
+    }
+
+    .topics-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .personality-selector {
+        grid-template-columns: 1fr;
+    }
+
+    .grade-selector {
+        justify-content: center;
+    }
+
+    .subtopics-list {
+        flex-direction: column;
+    }
+
+    .subtopic-btn {
+        width: 100%;
+    }
+}

@@ -1,0 +1,368 @@
+/* styles/LearningContent.css */
+
+.learning-content {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 20px;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.learning-content.loading,
+.learning-content.error,
+.learning-content.empty {
+    text-align: center;
+    padding: 60px 20px;
+}
+
+.spinner {
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #4CAF50;
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 20px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.learning-content.error {
+    color: #d32f2f;
+}
+
+.retry-btn {
+    margin-top: 20px;
+    padding: 12px 30px;
+    background: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.retry-btn:hover {
+    background: #45a049;
+}
+
+/* Header Styles */
+.learning-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 30px;
+    border-radius: 12px;
+    margin-bottom: 30px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.learning-header h2 {
+    margin: 0 0 15px 0;
+    font-size: 32px;
+    font-weight: 700;
+}
+
+.introduction {
+    font-size: 18px;
+    margin: 15px 0;
+    opacity: 0.95;
+}
+
+.page-indicator {
+    display: inline-block;
+    background: rgba(255, 255, 255, 0.2);
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 14px;
+    margin-top: 10px;
+}
+
+/* Page Content */
+.learning-page {
+    background: white;
+    padding: 30px;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    margin-bottom: 20px;
+}
+
+.page-title {
+    color: #667eea;
+    font-size: 26px;
+    margin: 0 0 25px 0;
+    padding-bottom: 15px;
+    border-bottom: 3px solid #667eea;
+}
+
+.page-content {
+    margin-bottom: 30px;
+}
+
+/* Content Items */
+.content-item {
+    margin-bottom: 25px;
+}
+
+.content-text {
+    font-size: 18px;
+    line-height: 1.8;
+    color: #333;
+    margin: 0;
+}
+
+.content-example {
+    background: #f5f7fa;
+    border-right: 4px solid #4CAF50;
+    padding: 20px;
+    border-radius: 8px;
+    margin: 20px 0;
+}
+
+.example-label {
+    color: #4CAF50;
+    font-weight: 700;
+    font-size: 16px;
+    margin-bottom: 10px;
+}
+
+.example-value {
+    font-size: 18px;
+    color: #333;
+    font-weight: 600;
+    margin-bottom: 10px;
+}
+
+.example-solution {
+    font-size: 16px;
+    color: #555;
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid #ddd;
+}
+
+.content-tip {
+    background: #fff9e6;
+    border-right: 4px solid #ffc107;
+    padding: 15px 20px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.tip-icon {
+    font-size: 24px;
+    flex-shrink: 0;
+}
+
+.tip-text {
+    font-size: 16px;
+    color: #333;
+}
+
+/* Quiz Styles */
+.page-quiz {
+    margin-top: 40px;
+    padding-top: 30px;
+    border-top: 2px solid #eee;
+}
+
+.page-quiz h4 {
+    color: #667eea;
+    font-size: 22px;
+    margin-bottom: 20px;
+}
+
+.quiz-question {
+    background: #fafbfc;
+    padding: 25px;
+    border-radius: 10px;
+    margin-bottom: 25px;
+    border: 2px solid #e0e0e0;
+}
+
+.question-text {
+    font-size: 18px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 20px;
+}
+
+.question-options {
+    display: grid;
+    gap: 12px;
+    margin-bottom: 15px;
+}
+
+.option-btn {
+    padding: 15px 20px;
+    background: white;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 16px;
+    text-align: right;
+    transition: all 0.2s;
+}
+
+.option-btn:hover:not(:disabled) {
+    border-color: #667eea;
+    background: #f5f7ff;
+}
+
+.option-btn.selected {
+    border-color: #667eea;
+    background: #f5f7ff;
+    font-weight: 600;
+}
+
+.option-btn.correct {
+    border-color: #4CAF50;
+    background: #e8f5e9;
+    color: #2e7d32;
+}
+
+.option-btn.incorrect {
+    border-color: #f44336;
+    background: #ffebee;
+    color: #c62828;
+}
+
+.option-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.check-answer-btn {
+    padding: 12px 30px;
+    background: #667eea;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 600;
+    transition: background 0.2s;
+}
+
+.check-answer-btn:hover {
+    background: #5568d3;
+}
+
+.answer-feedback {
+    margin-top: 15px;
+    padding: 15px;
+    border-radius: 8px;
+}
+
+.answer-feedback.correct {
+    background: #e8f5e9;
+    border: 2px solid #4CAF50;
+    color: #2e7d32;
+}
+
+.answer-feedback.incorrect {
+    background: #ffebee;
+    border: 2px solid #f44336;
+    color: #c62828;
+}
+
+.answer-feedback p {
+    margin: 0 0 10px 0;
+    font-weight: 600;
+}
+
+.explanation {
+    font-weight: normal !important;
+    font-size: 15px;
+    line-height: 1.6;
+}
+
+/* Navigation */
+.learning-navigation {
+    display: flex;
+    justify-content: space-between;
+    gap: 15px;
+    margin-top: 30px;
+}
+
+.nav-btn {
+    padding: 15px 30px;
+    background: #667eea;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 600;
+    transition: all 0.2s;
+    flex: 1;
+    max-width: 200px;
+}
+
+.nav-btn:hover:not(:disabled) {
+    background: #5568d3;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+}
+
+.nav-btn:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.prev-btn {
+    margin-left: auto;
+}
+
+.next-btn {
+    margin-right: auto;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .learning-content {
+        padding: 15px;
+    }
+
+    .learning-header {
+        padding: 20px;
+    }
+
+    .learning-header h2 {
+        font-size: 24px;
+    }
+
+    .introduction {
+        font-size: 16px;
+    }
+
+    .learning-page {
+        padding: 20px;
+    }
+
+    .page-title {
+        font-size: 22px;
+    }
+
+    .content-text {
+        font-size: 16px;
+    }
+
+    .learning-navigation {
+        flex-direction: column;
+    }
+
+    .nav-btn {
+        max-width: 100%;
+    }
+
+    .prev-btn,
+    .next-btn {
+        margin: 0;
+    }
+}

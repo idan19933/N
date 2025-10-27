@@ -1,5 +1,5 @@
 // src/components/ai/MathTutor.jsx - COMPLETE WITH VOICE SUPPORT 🎤🔊
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Brain, Send, BookOpen, Target, Sparkles, ChevronRight,
@@ -890,11 +890,36 @@ const MathTutor = ({
                        userId: propUserId,
                        onClose
                    }) => {
+    // 🔍 DEBUG: Track component mounts
+    const mountCount = useRef(0);
+    useEffect(() => {
+        mountCount.current += 1;
+        console.log(`🎨 MathTutor MOUNTED (count: ${mountCount.current})`);
+        console.log('🎯 MathTutor initialized with props:', {
+            propSelectedTopic: propSelectedTopic?.name,
+            propSelectedSubtopic: propSelectedSubtopic?.name,
+            propMode,
+            propUserId,
+            initialView: view
+        });
+        return () => console.log(`🗑️ MathTutor UNMOUNTING`);
+    }, []);
+
+    // 🔍 DEBUG: Track prop changes
+    useEffect(() => {
+        console.log('🔄 Props changed:', {
+            selectedTopic: propSelectedTopic?.name,
+            selectedSubtopic: propSelectedSubtopic?.name,
+            mode: propMode,
+            userId: propUserId
+        });
+    }, [propSelectedTopic, propSelectedSubtopic, propMode, propUserId]);
+
     const user = useAuthStore(state => state.user);
     const nexonProfile = useAuthStore(state => state.nexonProfile);
 
-    // 🔥 HELPER: Get user ID as integer for database
-    const getUserId = () => {
+    // 🔥 HELPER: Get user ID - using useCallback to prevent recreation
+    const getUserId = useCallback(() => {
         // Use prop userId first
         if (propUserId) return propUserId;
         if (!user) return null;
@@ -904,7 +929,7 @@ const MathTutor = ({
         // Convert to integer
         const numId = parseInt(id);
         return isNaN(numId) ? null : numId;
-    };
+    }, [propUserId, user]);
 
 
     const [view, setView] = useState(() => {
@@ -968,6 +993,7 @@ const MathTutor = ({
 
     const autoCheckTimerRef = useRef(null);
     const lastCheckedAnswerRef = useRef('');
+    const practiceStartedRef = useRef(false); // ✅ Prevent infinite loop
 
     const [sessionStats, setSessionStats] = useState({
         correct: 0,
@@ -991,14 +1017,16 @@ const MathTutor = ({
     const gradeConfig = getGradeConfig(gradeId);
     const availableTopics = gradeConfig?.topics || [];
 
-    console.log('🎯 MathTutor STREAMLINED initialized:', {
-        propSelectedTopic: propSelectedTopic?.name,
-        propSelectedSubtopic: propSelectedSubtopic?.name,
-        propMode,
-        propUserId,
-        initialView: view,
-        skippingIntermediateScreens: !!(propSelectedTopic || propMode)
-    });
+    // Moved to mount useEffect to prevent log spam
+
+    // 🔍 DEBUG: Track currentQuestion state
+    useEffect(() => {
+        console.log('📝 currentQuestion changed:', {
+            hasQuestion: !!currentQuestion,
+            questionText: currentQuestion?.question?.substring(0, 50),
+            isGenerating: isGeneratingQuestion
+        });
+    }, [currentQuestion, isGeneratingQuestion]);
 
     useEffect(() => {
         if (propTopicId && availableTopics.length > 0 && !selectedTopic) {
@@ -1037,7 +1065,7 @@ const MathTutor = ({
 
     useEffect(() => {
         // Auto-start practice when view is 'practice' and no question exists
-        if (view === 'practice' && !currentQuestion) {
+        if (view === 'practice' && !currentQuestion && !practiceStartedRef.current) {
             // Skip auto-start only if normal mode WITHOUT subtopic (user needs to pick subtopic)
             if (propMode === 'normal' && propSelectedTopic && !propSelectedSubtopic) {
                 console.log('⏸️ Normal mode with topic only - waiting for subtopic selection');
@@ -1045,6 +1073,7 @@ const MathTutor = ({
             }
 
             console.log('🚀 Auto-starting practice from dashboard props');
+            practiceStartedRef.current = true; // ✅ Mark as started
 
             let topicToUse = propSelectedTopic;
             let subtopicToUse = propSelectedSubtopic;
@@ -1080,7 +1109,7 @@ const MathTutor = ({
                 startPractice(topicToUse, subtopicToUse);
             }, 100);
         }
-    }, [view, propMode, propSelectedTopic, propSelectedSubtopic, availableTopics, currentQuestion]);
+    }, [view, propMode, propSelectedTopic, propSelectedSubtopic, currentQuestion]); // ✅ Removed availableTopics
 
     useEffect(() => {
         if (isTimerRunning) {
@@ -1326,6 +1355,8 @@ const MathTutor = ({
     const startPractice = async (topic, subtopic) => {
         console.log('🎮 Starting practice:', { topic: topic?.name, subtopic: subtopic?.name });
 
+        practiceStartedRef.current = true; // ✅ Set BEFORE changing view to prevent useEffect trigger
+
         setSelectedTopic(topic);
         setSelectedSubtopic(subtopic);
         setView('practice');
@@ -1423,7 +1454,20 @@ const MathTutor = ({
             console.log('✅ Question received successfully');
 
             await new Promise(resolve => setTimeout(resolve, 1500));
-            setCurrentQuestion(data.question);
+            console.log('🔍 About to set currentQuestion:', {
+                hasQuestion: !!data.question,
+                questionText: typeof data.question === 'string' ? data.question.substring(0, 50) : 'not a string',
+                dataKeys: Object.keys(data)
+            });
+
+            // ✅ FIX: Backend returns flat structure, restructure it for frontend
+            setCurrentQuestion({
+                question: data.question,  // The actual question text string
+                correctAnswer: data.correctAnswer,
+                hints: data.hints || [],
+                explanation: data.explanation || '',
+                visualData: data.visualData || null
+            });
             setIsTimerRunning(true);
             setTimeout(() => inputRef.current?.focus(), 100);
 
@@ -2048,6 +2092,16 @@ const MathTutor = ({
 
     // ==================== VIEW: PRACTICE (WITH IMAGE UPLOAD) ====================
     if (view === 'practice') {
+        // 🔍 DEBUG RENDER STATE
+        console.log('🎨 RENDERING practice view:', {
+            isGeneratingQuestion,
+            hasCurrentQuestion: !!currentQuestion,
+            questionKeys: currentQuestion ? Object.keys(currentQuestion) : [],
+            questionText: currentQuestion?.question,
+            topicName: selectedTopic?.name,
+            subtopicName: selectedSubtopic?.name
+        });
+
         return (
             <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50 p-4" dir="rtl">
                 <div className="max-w-4xl mx-auto">
@@ -2520,5 +2574,25 @@ const MathTutor = ({
     return null;
 };
 
+// ✅ Prevent unnecessary re-renders when parent component updates
+export default React.memo(MathTutor, (prevProps, nextProps) => {
+    // Deep comparison for object props
+    const topicChanged = JSON.stringify(prevProps.selectedTopic) !== JSON.stringify(nextProps.selectedTopic);
+    const subtopicChanged = JSON.stringify(prevProps.selectedSubtopic) !== JSON.stringify(nextProps.selectedSubtopic);
 
-export default MathTutor;
+    // Only re-render if these specific props actually change
+    const shouldNotUpdate = (
+        prevProps.topicId === nextProps.topicId &&
+        prevProps.gradeId === nextProps.gradeId &&
+        prevProps.mode === nextProps.mode &&
+        prevProps.userId === nextProps.userId &&
+        !topicChanged &&
+        !subtopicChanged
+    );
+
+    if (!shouldNotUpdate) {
+        console.log('🔄 MathTutor re-rendering due to prop change');
+    }
+
+    return shouldNotUpdate;
+});
