@@ -1,49 +1,41 @@
-// server/routes/learningRoutes.js - BULLETPROOF JSON CLEANING
+// server/routes/learningRoutes.js - SUPER EXPLICIT PROMPT
 import express from 'express';
 const router = express.Router();
 
 function cleanJsonText(rawText) {
     console.log('🧹 Starting JSON cleaning...');
     console.log('📝 Raw length:', rawText.length);
-    console.log('📝 First 200 chars:', rawText.substring(0, 200));
-    console.log('📝 Last 200 chars:', rawText.substring(rawText.length - 200));
 
     let cleaned = rawText.trim();
 
-    // Step 1: Remove ALL markdown code blocks (both variants)
+    // Remove markdown code blocks
     if (cleaned.startsWith('```json')) {
         console.log('🔧 Removing ```json prefix');
-        cleaned = cleaned.substring(7); // Remove ```json and newline
+        cleaned = cleaned.substring(7);
     } else if (cleaned.startsWith('```')) {
         console.log('🔧 Removing ``` prefix');
-        cleaned = cleaned.substring(3); // Remove ```
+        cleaned = cleaned.substring(3);
     }
 
-    // Step 2: Remove trailing markdown
     if (cleaned.endsWith('```')) {
         console.log('🔧 Removing ``` suffix');
         cleaned = cleaned.substring(0, cleaned.length - 3);
     }
 
-    // Step 3: Trim again after removing markdown
     cleaned = cleaned.trim();
 
-    // Step 4: Find the actual JSON boundaries
+    // Find JSON boundaries
     const firstBrace = cleaned.indexOf('{');
     const lastBrace = cleaned.lastIndexOf('}');
 
     if (firstBrace === -1 || lastBrace === -1) {
         console.error('❌ No JSON braces found!');
-        console.error('Cleaned text:', cleaned.substring(0, 500));
         throw new Error('No valid JSON structure found');
     }
 
-    // Extract only the JSON content
     cleaned = cleaned.substring(firstBrace, lastBrace + 1);
 
     console.log('✂️ Cleaned length:', cleaned.length);
-    console.log('✂️ First 200 chars:', cleaned.substring(0, 200));
-    console.log('✂️ Last 200 chars:', cleaned.substring(cleaned.length - 200));
     console.log('✅ JSON cleaning complete');
 
     return cleaned;
@@ -69,52 +61,165 @@ router.post('/generate-content', async (req, res) => {
 
         const startTime = Date.now();
 
-        // ✅ EXPLICIT PROMPT - Demands pure JSON only
+        // ✅ SUPER EXPLICIT PROMPT WITH COMPLETE EXAMPLE
         const systemPrompt = `You are an expert Israeli math teacher. Create structured learning content in Hebrew.
 
-**CRITICAL REQUIREMENTS:**
-1. Respond with ONLY a JSON object
-2. NO markdown code blocks (no \`\`\`json)
-3. NO explanatory text before or after
-4. Start with { and end with }
-5. All content in Hebrew
+CRITICAL: Respond with ONLY valid JSON. No markdown, no explanations, just the JSON object.
 
-JSON Structure:
+YOU MUST USE THIS EXACT STRUCTURE - DO NOT DEVIATE:
+
 {
-  "title": "כותרת בעברית",
+  "title": "string in Hebrew",
   "pages": [
     {
-      "title": "כותרת עמוד",
+      "title": "string in Hebrew",
       "content": [
-        {"type": "text", "value": "הסבר"},
-        {"type": "example", "value": "דוגמה", "solution": "פתרון"},
-        {"type": "tip", "value": "טיפ"}
+        {
+          "type": "text",
+          "value": "explanation text in Hebrew"
+        },
+        {
+          "type": "example",
+          "value": "example problem in Hebrew",
+          "solution": "step by step solution in Hebrew"
+        },
+        {
+          "type": "tip",
+          "value": "helpful tip in Hebrew"
+        }
       ],
       "quiz": [
         {
-          "question": "שאלה?",
-          "options": ["1", "2", "3", "4"],
+          "question": "question text in Hebrew?",
+          "options": ["option 1", "option 2", "option 3", "option 4"],
           "correctAnswer": 0,
-          "explanation": "הסבר"
+          "explanation": "why this answer is correct in Hebrew"
         }
       ]
     }
   ]
 }
 
-Requirements:
-- Exactly 3 pages
-- Each page: 3-4 content items + 2 quiz questions
-- Simple, clear explanations
-- Practical examples with solutions`;
+COMPLETE WORKING EXAMPLE:
+{
+  "title": "חיבור וחיסור - מתמטיקה לכיתה ז'",
+  "pages": [
+    {
+      "title": "חיבור מספרים שלמים",
+      "content": [
+        {
+          "type": "text",
+          "value": "חיבור הוא פעולה מתמטית בסיסית שבה אנו מצרפים שני מספרים או יותר. התוצאה נקראת סכום."
+        },
+        {
+          "type": "example",
+          "value": "חשב: 25 + 17",
+          "solution": "25 + 17 = 42. אפשר לפרק: 25 + 10 + 7 = 35 + 7 = 42"
+        },
+        {
+          "type": "tip",
+          "value": "כשמחברים מספרים גדולים, נוח לפרק אותם לעשרות ויחידות."
+        }
+      ],
+      "quiz": [
+        {
+          "question": "מה התוצאה של 34 + 28?",
+          "options": ["52", "62", "56", "60"],
+          "correctAnswer": 1,
+          "explanation": "34 + 28 = 62. פירוק: 30 + 20 = 50, ו-4 + 8 = 12, סה״כ 62"
+        },
+        {
+          "question": "איזו פעולה הפוכה לחיבור?",
+          "options": ["כפל", "חיסור", "חילוק", "שורש"],
+          "correctAnswer": 1,
+          "explanation": "חיסור הוא הפעולה ההפוכה לחיבור. למשל: 5 + 3 = 8, ולכן 8 - 3 = 5"
+        }
+      ]
+    },
+    {
+      "title": "חיסור מספרים שלמים",
+      "content": [
+        {
+          "type": "text",
+          "value": "חיסור הוא פעולה שבה אנו מורידים מספר ממספר אחר. התוצאה נקראת הפרש."
+        },
+        {
+          "type": "example",
+          "value": "חשב: 50 - 23",
+          "solution": "50 - 23 = 27. אפשר לחשוב: 50 - 20 = 30, ואז 30 - 3 = 27"
+        },
+        {
+          "type": "tip",
+          "value": "בחיסור עם השאלה, תמיד נשאל מהספרה השמאלית."
+        }
+      ],
+      "quiz": [
+        {
+          "question": "מה התוצאה של 81 - 37?",
+          "options": ["44", "54", "46", "48"],
+          "correctAnswer": 0,
+          "explanation": "81 - 37 = 44. נשאל: 70 - 30 = 40, ו-11 - 7 = 4, סה״כ 44"
+        },
+        {
+          "question": "מה הפרש בין 100 ל-68?",
+          "options": ["32", "42", "38", "28"],
+          "correctAnswer": 0,
+          "explanation": "100 - 68 = 32"
+        }
+      ]
+    },
+    {
+      "title": "תרגול משולב",
+      "content": [
+        {
+          "type": "text",
+          "value": "בבעיות חיבור וחיסור משולבות, חשוב לבצע את הפעולות לפי הסדר מימין לשמאל."
+        },
+        {
+          "type": "example",
+          "value": "חשב: 45 + 20 - 15",
+          "solution": "קודם: 45 + 20 = 65. אחר כך: 65 - 15 = 50"
+        },
+        {
+          "type": "tip",
+          "value": "תמיד בדקו את התשובה: אם חיברתם והפחתתם, וודאו שהתוצאה הגיונית."
+        }
+      ],
+      "quiz": [
+        {
+          "question": "מה התוצאה של 30 + 15 - 12?",
+          "options": ["33", "27", "35", "23"],
+          "correctAnswer": 0,
+          "explanation": "30 + 15 = 45, ואז 45 - 12 = 33"
+        },
+        {
+          "question": "לדני היו 50 שקלים. הוא קנה משחק ב-35 שקלים וקיבל מתנה של 20 שקלים. כמה כסף יש לו עכשיו?",
+          "options": ["35 שקלים", "30 שקלים", "40 שקלים", "25 שקלים"],
+          "correctAnswer": 0,
+          "explanation": "50 - 35 + 20 = 15 + 20 = 35 שקלים"
+        }
+      ]
+    }
+  ]
+}
 
-        const userPrompt = `Create learning content for:
+RULES:
+1. Respond ONLY with the JSON - no other text
+2. Start with { and end with }
+3. Follow the EXACT structure shown in the example
+4. Create exactly 3 pages
+5. Each page must have "title" at page level (NOT inside content array)
+6. Each page must have "content" array with 3-4 items
+7. Each page must have "quiz" array with 2 questions
+8. All text in Hebrew`;
+
+        const userPrompt = `Create learning content following the EXACT structure from the example above.
 
 Topic: ${topic}
 ${subtopic && subtopic !== 'general' ? `Subtopic: ${subtopic}` : ''}
 Grade: ${grade}
 
-Remember: ONLY JSON, no markdown, start with {`;
+Return ONLY the JSON object.`;
 
         console.log('⏱️ Calling Claude API...');
 
@@ -127,7 +232,7 @@ Remember: ONLY JSON, no markdown, start with {`;
             },
             body: JSON.stringify({
                 model: 'claude-sonnet-4-5-20250929',
-                max_tokens: 2500,
+                max_tokens: 3000,
                 temperature: 0.7,
                 system: systemPrompt,
                 messages: [{
@@ -170,11 +275,7 @@ Remember: ONLY JSON, no markdown, start with {`;
             console.error('❌ Cleaning failed:', cleanError.message);
             return res.status(500).json({
                 success: false,
-                error: 'Failed to clean JSON response',
-                debug: {
-                    cleanError: cleanError.message,
-                    rawSample: rawText.substring(0, 300)
-                }
+                error: 'Failed to clean JSON response'
             });
         }
 
@@ -185,17 +286,15 @@ Remember: ONLY JSON, no markdown, start with {`;
             console.log('✅ JSON parsed successfully!');
         } catch (parseError) {
             console.error('❌ JSON Parse Error:', parseError.message);
-            console.error('📝 Attempted to parse:');
-            console.error('   First 300:', cleanedText.substring(0, 300));
-            console.error('   Last 300:', cleanedText.substring(cleanedText.length - 300));
+            console.error('📝 First 300 chars:', cleanedText.substring(0, 300));
+            console.error('📝 Last 300 chars:', cleanedText.substring(cleanedText.length - 300));
 
             return res.status(500).json({
                 success: false,
                 error: 'Invalid JSON structure from AI',
                 debug: {
                     parseError: parseError.message,
-                    sampleStart: cleanedText.substring(0, 200),
-                    sampleEnd: cleanedText.substring(cleanedText.length - 200)
+                    sample: cleanedText.substring(0, 300)
                 }
             });
         }
@@ -203,19 +302,11 @@ Remember: ONLY JSON, no markdown, start with {`;
         // ✅ Validate structure
         console.log('🔍 Validating content structure...');
 
-        if (!content.title) {
-            console.error('❌ Missing title');
+        if (!content.title || !content.pages || !Array.isArray(content.pages)) {
+            console.error('❌ Invalid root structure');
             return res.status(500).json({
                 success: false,
-                error: 'Content missing title field'
-            });
-        }
-
-        if (!content.pages || !Array.isArray(content.pages)) {
-            console.error('❌ Missing or invalid pages array');
-            return res.status(500).json({
-                success: false,
-                error: 'Content missing valid pages array'
+                error: 'Content missing title or pages array'
             });
         }
 
@@ -231,11 +322,11 @@ Remember: ONLY JSON, no markdown, start with {`;
         for (let i = 0; i < content.pages.length; i++) {
             const page = content.pages[i];
 
-            if (!page.title) {
-                console.error(`❌ Page ${i} missing title`);
+            if (!page.title || typeof page.title !== 'string') {
+                console.error(`❌ Page ${i} missing or invalid title`);
                 return res.status(500).json({
                     success: false,
-                    error: `Page ${i + 1} missing title`
+                    error: `Page ${i + 1} has invalid title`
                 });
             }
 
@@ -243,7 +334,7 @@ Remember: ONLY JSON, no markdown, start with {`;
                 console.error(`❌ Page ${i} missing content array`);
                 return res.status(500).json({
                     success: false,
-                    error: `Page ${i + 1} missing content`
+                    error: `Page ${i + 1} missing content array`
                 });
             }
 
@@ -253,6 +344,18 @@ Remember: ONLY JSON, no markdown, start with {`;
                     success: false,
                     error: `Page ${i + 1} has no content items`
                 });
+            }
+
+            // Validate each content item
+            for (let j = 0; j < page.content.length; j++) {
+                const item = page.content[j];
+                if (!item.type || !item.value) {
+                    console.error(`❌ Page ${i}, content item ${j} invalid`);
+                    return res.status(500).json({
+                        success: false,
+                        error: `Page ${i + 1}, item ${j + 1} missing type or value`
+                    });
+                }
             }
         }
 
