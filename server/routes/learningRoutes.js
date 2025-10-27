@@ -1,227 +1,169 @@
-// server/routes/learningRoutes.js - SUPER EXPLICIT PROMPT
+// server/routes/learningRoutes.js - OPTIMIZED VERSION
 import express from 'express';
 const router = express.Router();
 
+// Cache for generated content (optional - helps reduce API calls)
+const contentCache = new Map();
+const CACHE_DURATION = 1000 * 60 * 30; // 30 minutes
+
 function cleanJsonText(rawText) {
-    console.log('🧹 Starting JSON cleaning...');
-    console.log('📝 Raw length:', rawText.length);
+    let jsonText = rawText.trim();
 
-    let cleaned = rawText.trim();
-
-    // Remove markdown code blocks
-    if (cleaned.startsWith('```json')) {
-        console.log('🔧 Removing ```json prefix');
-        cleaned = cleaned.substring(7);
-    } else if (cleaned.startsWith('```')) {
-        console.log('🔧 Removing ``` prefix');
-        cleaned = cleaned.substring(3);
+    if (jsonText.startsWith('```json')) {
+        jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?$/g, '');
+    } else if (jsonText.startsWith('```')) {
+        jsonText = jsonText.replace(/```\n?/g, '');
     }
 
-    if (cleaned.endsWith('```')) {
-        console.log('🔧 Removing ``` suffix');
-        cleaned = cleaned.substring(0, cleaned.length - 3);
+    const jsonStart = jsonText.indexOf('{');
+    const jsonEnd = jsonText.lastIndexOf('}') + 1;
+
+    if (jsonStart !== -1 && jsonEnd > jsonStart) {
+        jsonText = jsonText.substring(jsonStart, jsonEnd);
     }
 
-    cleaned = cleaned.trim();
+    return jsonText;
+}
 
-    // Find JSON boundaries
-    const firstBrace = cleaned.indexOf('{');
-    const lastBrace = cleaned.lastIndexOf('}');
-
-    if (firstBrace === -1 || lastBrace === -1) {
-        console.error('❌ No JSON braces found!');
-        throw new Error('No valid JSON structure found');
-    }
-
-    cleaned = cleaned.substring(firstBrace, lastBrace + 1);
-
-    console.log('✂️ Cleaned length:', cleaned.length);
-    console.log('✅ JSON cleaning complete');
-
-    return cleaned;
+function getCacheKey(topic, subtopic, grade, personality) {
+    return `${topic}-${subtopic}-${grade}-${personality}`;
 }
 
 router.post('/generate-content', async (req, res) => {
     try {
-        const { topic, subtopic, grade = '7', personality = 'nexon', userId } = req.body;
+        const { topic, subtopic, topicId, subtopicId, grade, personality, userId } = req.body;
 
-        if (!topic) {
+        console.log('📚 API Request received - Generating learning content:', {
+            topic,
+            subtopic,
+            grade,
+            personality,
+            userId,
+            hasApiKey: !!process.env.ANTHROPIC_API_KEY
+        });
+
+        // Validate required fields
+        if (!topic || !grade || !personality) {
             return res.status(400).json({
                 success: false,
-                error: 'Missing required field: topic'
+                error: 'Missing required fields: topic, grade, and personality are required'
             });
         }
 
-        console.log(`🎓 [${userId}] Generating learning content:`, {
-            topic,
-            subtopic: subtopic || 'general',
-            grade,
-            personality
-        });
+        if (!process.env.ANTHROPIC_API_KEY) {
+            console.error('❌ ANTHROPIC_API_KEY not found in environment');
+            return res.status(500).json({
+                success: false,
+                error: 'API key not configured'
+            });
+        }
 
-        const startTime = Date.now();
+        // Check cache first (optional)
+        const cacheKey = getCacheKey(topic, subtopic, grade, personality);
+        const cached = contentCache.get(cacheKey);
+        if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+            console.log('✅ Returning cached content');
+            return res.json({
+                success: true,
+                content: cached.data,
+                cached: true
+            });
+        }
 
-        // ✅ SUPER EXPLICIT PROMPT WITH COMPLETE EXAMPLE
-        const systemPrompt = `You are an expert Israeli math teacher. Create structured learning content in Hebrew.
+        const personalityContext = personality === 'dina' ?
+            'את דינה - מורה סבלנית ומעודדת המסבירה בצורה ברורה וידידותית' :
+            personality === 'ron' ?
+                'אתה רון - מורה אנרגטי ומעורר השראה המשתמש בדוגמאות מעולם הספורט והמשחקים' :
+                'אתה נקסון - מורה AI מקצועי ומתקדם המותאם אישית לכל תלמיד';
 
-CRITICAL: Respond with ONLY valid JSON. No markdown, no explanations, just the JSON object.
+        const learningPrompt = `${personalityContext}
 
-YOU MUST USE THIS EXACT STRUCTURE - DO NOT DEVIATE:
+צור תוכן לימוד למתמטיקה עבור:
+- נושא: ${topic}
+${subtopic ? `- תת-נושא: ${subtopic}` : ''}
+- כיתה: ${grade}
 
+החזר JSON בפורמט הזה בדיוק:
 {
-  "title": "string in Hebrew",
+  "title": "כותרת מושכת לנושא",
+  "introduction": "מבוא קצר",
   "pages": [
     {
-      "title": "string in Hebrew",
+      "title": "יסודות - מה זה ${topic}?",
       "content": [
         {
           "type": "text",
-          "value": "explanation text in Hebrew"
+          "value": "הסבר ראשוני פשוט של הנושא"
         },
         {
           "type": "example",
-          "value": "example problem in Hebrew",
-          "solution": "step by step solution in Hebrew"
+          "value": "דוגמה פשוטה: 5 + 3 = 8",
+          "solution": "כשמחברים 5 ו-3, מקבלים 8"
         },
         {
           "type": "tip",
-          "value": "helpful tip in Hebrew"
+          "value": "טיפ שימושי לזכור"
         }
       ],
       "quiz": [
         {
-          "question": "question text in Hebrew?",
-          "options": ["option 1", "option 2", "option 3", "option 4"],
+          "question": "שאלה פשוטה לבדיקה",
+          "options": ["תשובה 1", "תשובה 2", "תשובה 3", "תשובה נכונה"],
+          "correctAnswer": 3,
+          "explanation": "הסבר קצר"
+        }
+      ]
+    },
+    {
+      "title": "דוגמאות מתקדמות",
+      "content": [
+        {
+          "type": "text",
+          "value": "הסבר מעמיק יותר"
+        },
+        {
+          "type": "example",
+          "value": "דוגמה מורכבת יותר",
+          "solution": "פתרון מפורט"
+        }
+      ],
+      "quiz": [
+        {
+          "question": "שאלה מתקדמת",
+          "options": ["א", "ב", "ג", "ד"],
+          "correctAnswer": 1,
+          "explanation": "הסבר"
+        }
+      ]
+    },
+    {
+      "title": "תרגול וסיכום",
+      "content": [
+        {
+          "type": "text",
+          "value": "סיכום של כל מה שלמדנו"
+        },
+        {
+          "type": "tip",
+          "value": "טיפ חשוב לסיום"
+        }
+      ],
+      "quiz": [
+        {
+          "question": "שאלת סיכום",
+          "options": ["1", "2", "3", "4"],
           "correctAnswer": 0,
-          "explanation": "why this answer is correct in Hebrew"
+          "explanation": "סיכום"
         }
       ]
     }
   ]
 }
 
-COMPLETE WORKING EXAMPLE:
-{
-  "title": "חיבור וחיסור - מתמטיקה לכיתה ז'",
-  "pages": [
-    {
-      "title": "חיבור מספרים שלמים",
-      "content": [
-        {
-          "type": "text",
-          "value": "חיבור הוא פעולה מתמטית בסיסית שבה אנו מצרפים שני מספרים או יותר. התוצאה נקראת סכום."
-        },
-        {
-          "type": "example",
-          "value": "חשב: 25 + 17",
-          "solution": "25 + 17 = 42. אפשר לפרק: 25 + 10 + 7 = 35 + 7 = 42"
-        },
-        {
-          "type": "tip",
-          "value": "כשמחברים מספרים גדולים, נוח לפרק אותם לעשרות ויחידות."
-        }
-      ],
-      "quiz": [
-        {
-          "question": "מה התוצאה של 34 + 28?",
-          "options": ["52", "62", "56", "60"],
-          "correctAnswer": 1,
-          "explanation": "34 + 28 = 62. פירוק: 30 + 20 = 50, ו-4 + 8 = 12, סה״כ 62"
-        },
-        {
-          "question": "איזו פעולה הפוכה לחיבור?",
-          "options": ["כפל", "חיסור", "חילוק", "שורש"],
-          "correctAnswer": 1,
-          "explanation": "חיסור הוא הפעולה ההפוכה לחיבור. למשל: 5 + 3 = 8, ולכן 8 - 3 = 5"
-        }
-      ]
-    },
-    {
-      "title": "חיסור מספרים שלמים",
-      "content": [
-        {
-          "type": "text",
-          "value": "חיסור הוא פעולה שבה אנו מורידים מספר ממספר אחר. התוצאה נקראת הפרש."
-        },
-        {
-          "type": "example",
-          "value": "חשב: 50 - 23",
-          "solution": "50 - 23 = 27. אפשר לחשוב: 50 - 20 = 30, ואז 30 - 3 = 27"
-        },
-        {
-          "type": "tip",
-          "value": "בחיסור עם השאלה, תמיד נשאל מהספרה השמאלית."
-        }
-      ],
-      "quiz": [
-        {
-          "question": "מה התוצאה של 81 - 37?",
-          "options": ["44", "54", "46", "48"],
-          "correctAnswer": 0,
-          "explanation": "81 - 37 = 44. נשאל: 70 - 30 = 40, ו-11 - 7 = 4, סה״כ 44"
-        },
-        {
-          "question": "מה הפרש בין 100 ל-68?",
-          "options": ["32", "42", "38", "28"],
-          "correctAnswer": 0,
-          "explanation": "100 - 68 = 32"
-        }
-      ]
-    },
-    {
-      "title": "תרגול משולב",
-      "content": [
-        {
-          "type": "text",
-          "value": "בבעיות חיבור וחיסור משולבות, חשוב לבצע את הפעולות לפי הסדר מימין לשמאל."
-        },
-        {
-          "type": "example",
-          "value": "חשב: 45 + 20 - 15",
-          "solution": "קודם: 45 + 20 = 65. אחר כך: 65 - 15 = 50"
-        },
-        {
-          "type": "tip",
-          "value": "תמיד בדקו את התשובה: אם חיברתם והפחתתם, וודאו שהתוצאה הגיונית."
-        }
-      ],
-      "quiz": [
-        {
-          "question": "מה התוצאה של 30 + 15 - 12?",
-          "options": ["33", "27", "35", "23"],
-          "correctAnswer": 0,
-          "explanation": "30 + 15 = 45, ואז 45 - 12 = 33"
-        },
-        {
-          "question": "לדני היו 50 שקלים. הוא קנה משחק ב-35 שקלים וקיבל מתנה של 20 שקלים. כמה כסף יש לו עכשיו?",
-          "options": ["35 שקלים", "30 שקלים", "40 שקלים", "25 שקלים"],
-          "correctAnswer": 0,
-          "explanation": "50 - 35 + 20 = 15 + 20 = 35 שקלים"
-        }
-      ]
-    }
-  ]
-}
+חשוב: צור 3-4 דפים, כל דף עם 3-5 content items ו-2-3 שאלות quiz. השתמש בעברית פשוטה וברורה.
+החזר רק את ה-JSON, ללא טקסט נוסף.`;
 
-RULES:
-1. Respond ONLY with the JSON - no other text
-2. Start with { and end with }
-3. Follow the EXACT structure shown in the example
-4. Create exactly 3 pages
-5. Each page must have "title" at page level (NOT inside content array)
-6. Each page must have "content" array with 3-4 items
-7. Each page must have "quiz" array with 2 questions
-8. All text in Hebrew`;
-
-        const userPrompt = `Create learning content following the EXACT structure from the example above.
-
-Topic: ${topic}
-${subtopic && subtopic !== 'general' ? `Subtopic: ${subtopic}` : ''}
-Grade: ${grade}
-
-Return ONLY the JSON object.`;
-
-        console.log('⏱️ Calling Claude API...');
+        console.log('🤖 Calling Claude API...');
 
         const response = await fetch('https://api.anthropic.com/v1/messages', {
             method: 'POST',
@@ -231,160 +173,93 @@ Return ONLY the JSON object.`;
                 'anthropic-version': '2023-06-01'
             },
             body: JSON.stringify({
-                model: 'claude-sonnet-4-5-20250929',
-                max_tokens: 3000,
+                model: 'claude-sonnet-4-20250514',
+                max_tokens: 4000,
                 temperature: 0.7,
-                system: systemPrompt,
                 messages: [{
                     role: 'user',
-                    content: userPrompt
+                    content: learningPrompt
                 }]
             })
         });
 
-        const apiElapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-        console.log(`✅ Claude responded in ${apiElapsed}s (status: ${response.status})`);
+        console.log('📡 API Response status:', response.status);
 
         if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-            console.error('❌ API Error:', JSON.stringify(errorData, null, 2));
+            const errorData = await response.json().catch(() => ({}));
+            console.error('❌ Claude API Error:', {
+                status: response.status,
+                statusText: response.statusText,
+                error: errorData
+            });
             return res.status(500).json({
                 success: false,
-                error: errorData.error?.message || 'Failed to generate content'
+                error: `API Error: ${response.status} ${response.statusText}`,
+                details: errorData
             });
         }
 
         const data = await response.json();
+        console.log('✅ Got response from Claude');
 
-        if (!data.content || !data.content[0] || !data.content[0].text) {
-            console.error('❌ Invalid API response structure');
-            return res.status(500).json({
-                success: false,
-                error: 'Invalid response from AI'
-            });
-        }
+        const contentText = data.content[0].text;
+        console.log('📄 Raw content length:', contentText.length);
+        console.log('📄 First 200 chars:', contentText.substring(0, 200));
 
-        const rawText = data.content[0].text;
-        console.log('📥 Received response from Claude');
-        console.log('📏 Total length:', rawText.length, 'characters');
+        const cleanedText = cleanJsonText(contentText);
+        console.log('🧹 Cleaned JSON length:', cleanedText.length);
 
-        let cleanedText;
+        let learningContent;
         try {
-            cleanedText = cleanJsonText(rawText);
-        } catch (cleanError) {
-            console.error('❌ Cleaning failed:', cleanError.message);
-            return res.status(500).json({
-                success: false,
-                error: 'Failed to clean JSON response'
-            });
-        }
-
-        let content;
-        try {
-            console.log('🔍 Attempting to parse JSON...');
-            content = JSON.parse(cleanedText);
-            console.log('✅ JSON parsed successfully!');
+            learningContent = JSON.parse(cleanedText);
+            console.log('✅ JSON parsed successfully');
+            console.log('📊 Pages count:', learningContent.pages?.length);
         } catch (parseError) {
             console.error('❌ JSON Parse Error:', parseError.message);
-            console.error('📝 First 300 chars:', cleanedText.substring(0, 300));
-            console.error('📝 Last 300 chars:', cleanedText.substring(cleanedText.length - 300));
-
+            console.log('📄 Failed text:', cleanedText.substring(0, 500));
             return res.status(500).json({
                 success: false,
-                error: 'Invalid JSON structure from AI',
-                debug: {
-                    parseError: parseError.message,
-                    sample: cleanedText.substring(0, 300)
-                }
+                error: 'Failed to parse AI response',
+                rawResponse: cleanedText.substring(0, 500)
             });
         }
 
-        // ✅ Validate structure
-        console.log('🔍 Validating content structure...');
+        // Cache the result
+        contentCache.set(cacheKey, {
+            data: learningContent,
+            timestamp: Date.now()
+        });
 
-        if (!content.title || !content.pages || !Array.isArray(content.pages)) {
-            console.error('❌ Invalid root structure');
-            return res.status(500).json({
-                success: false,
-                error: 'Content missing title or pages array'
-            });
-        }
-
-        if (content.pages.length === 0) {
-            console.error('❌ Empty pages array');
-            return res.status(500).json({
-                success: false,
-                error: 'No learning pages generated'
-            });
-        }
-
-        // Validate each page
-        for (let i = 0; i < content.pages.length; i++) {
-            const page = content.pages[i];
-
-            if (!page.title || typeof page.title !== 'string') {
-                console.error(`❌ Page ${i} missing or invalid title`);
-                return res.status(500).json({
-                    success: false,
-                    error: `Page ${i + 1} has invalid title`
-                });
-            }
-
-            if (!page.content || !Array.isArray(page.content)) {
-                console.error(`❌ Page ${i} missing content array`);
-                return res.status(500).json({
-                    success: false,
-                    error: `Page ${i + 1} missing content array`
-                });
-            }
-
-            if (page.content.length === 0) {
-                console.error(`❌ Page ${i} has empty content`);
-                return res.status(500).json({
-                    success: false,
-                    error: `Page ${i + 1} has no content items`
-                });
-            }
-
-            // Validate each content item
-            for (let j = 0; j < page.content.length; j++) {
-                const item = page.content[j];
-                if (!item.type || !item.value) {
-                    console.error(`❌ Page ${i}, content item ${j} invalid`);
-                    return res.status(500).json({
-                        success: false,
-                        error: `Page ${i + 1}, item ${j + 1} missing type or value`
-                    });
-                }
+        // Clean old cache entries (keep last 50)
+        if (contentCache.size > 50) {
+            const entries = Array.from(contentCache.entries());
+            entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
+            for (let i = 0; i < 10; i++) {
+                contentCache.delete(entries[i][0]);
             }
         }
-
-        const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('✅ SUCCESS!');
-        console.log(`⏱️  Total time: ${totalTime}s`);
-        console.log(`📊 Pages: ${content.pages.length}`);
-        console.log(`📝 Title: ${content.title}`);
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
         res.json({
             success: true,
-            content,
-            metadata: {
-                generationTime: totalTime,
-                pages: content.pages.length,
-                model: 'claude-sonnet-4-5'
-            }
+            content: learningContent,
+            cached: false
         });
 
     } catch (error) {
-        console.error('❌ Server Error:', error.message);
-        console.error('Stack trace:', error.stack);
+        console.error('❌ CRITICAL Error in generate-content:', error);
+        console.error('Error stack:', error.stack);
         res.status(500).json({
             success: false,
-            error: error.message || 'Internal server error'
+            error: error.message || 'Internal server error',
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
         });
     }
+});
+
+// Optional: Clear cache endpoint
+router.post('/clear-cache', (req, res) => {
+    contentCache.clear();
+    res.json({ success: true, message: 'Cache cleared' });
 });
 
 export default router;
