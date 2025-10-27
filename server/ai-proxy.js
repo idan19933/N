@@ -74,7 +74,7 @@ app.use('/api', nexonRoutes);
 app.use('/api/learning', learningRoutes);
 app.use('/api/chat', chatRoutes);
 console.log('✅ All routes registered!');
-});
+
 
 // LOG ALL INCOMING REQUESTS
 app.use((req, res, next) => {
