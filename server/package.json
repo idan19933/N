@@ -5,7 +5,7 @@
   "type": "module",
   "main": "server/ai-proxy.js",
   "scripts": {
-    "start": "node ai-proxy.js",
+    "start": "node start-with-migrations.js",
     "dev": "nodemon ai-proxy.js"
   },
   "engines": {
