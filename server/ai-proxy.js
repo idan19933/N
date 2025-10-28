@@ -14,15 +14,16 @@ import personalitySystem from './services/personalityLoader.js';
 import questionHistoryManager from './services/questionHistory.js';
 import SVGGenerator from './services/svgGenerator.js';
 import { bucket } from './config/firebase-admin.js';
-import nexonRoutes from './routes/nexonRoutes.js';
-import notebookService from './services/notebookService.js';
-import notebookRoutes from './routes/notebookRoutes.js';
-import userRoutes from './routes/userRoutes.js';
+
 import curriculumRoutes from './routes/curriculumRoutes.js';
 import learningRoutes from './routes/learningRoutes.js';
 import chatRoutes from './routes/chatRoutes.js';
-
+import nexonRoutes from './routes/nexonRoutes.js';
+import notebookRoutes from './routes/notebookRoutes.js';
+import notebookService from './services/notebookService.js';
+import userRoutes from './routes/userRoutes.js';
 import pool from './config/database.js';
+
 import ISRAELI_CURRICULUM, {
     getGradeConfig,
     getReformNotes,
@@ -58,12 +59,6 @@ app.get('/test', (req, res) => {
     console.error('?? TEST ROUTE HIT!');
     res.json({ success: true, message: 'Server is reachable!' });
 });
-
-app.post('/api/test-progress', (req, res) => {
-    console.error('?? TEST PROGRESS ROUTE HIT!');
-    res.json({ success: true, message: 'Test progress endpoint works!' });
-});
-
 // ==================== REGISTER ROUTES ====================
 console.log('📍 Registering routes...');
 app.use('/api/users', userRoutes);
@@ -73,6 +68,12 @@ app.use('/api', nexonRoutes);
 app.use('/api/learning', learningRoutes);
 app.use('/api/chat', chatRoutes);
 console.log('✅ All routes registered!');
+app.post('/api/test-progress', (req, res) => {
+    console.error('?? TEST PROGRESS ROUTE HIT!');
+    res.json({ success: true, message: 'Test progress endpoint works!' });
+});
+
+
 
 
 // LOG ALL INCOMING REQUESTS
@@ -1362,30 +1363,10 @@ app.post('/api/ai/verify-answer', async (req, res) => {
             throw new Error('No AI API configured');
         }
 
-        // ✨ AUTO-SAVE TO NOTEBOOK (SAVE ALL ANSWERS)
-        console.log('🔍 DEBUG: Checking notebook save conditions...');
-        console.log('🔍 DEBUG: userId =', userId);
-        console.log('🔍 DEBUG: question exists =', !!question);
-
-        if (userId) {
-            try {
-                console.log('📔 Saving to notebook...');
-                const saveResult = await notebookService.saveExerciseToNotebook(userId, {
-                    question: question,
-                    answer: correctAnswer,
-                    userAnswer: userAnswer,
-                    isCorrect: isCorrect,
-                    topic: topic || '',
-                    subtopic: subtopic || '',
-                    timestamp: new Date().toISOString()
-                });
-                console.log('✅ Saved to notebook successfully:', saveResult);
-            } catch (notebookError) {
-                console.error('⚠️ Failed to save to notebook:', notebookError);
-            }
-        } else {
-            console.log('⚠️ No userId provided - skipping notebook save');
-        }
+        // ✨ NOTE: Notebook saves are handled by frontend calling POST /api/notebook
+        // Frontend (MathTutor.jsx) will call the API endpoint after verification
+        // This keeps the verification endpoint focused and prevents duplicate saves
+        console.log('✅ Verification complete - frontend will handle notebook save');
 
         const duration = Date.now() - startTime;
 
