@@ -3,6 +3,9 @@ import { formatMathAnswer, compareMathExpressions } from './utils/mathFormatter.
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+
+// Load environment variables
+dotenv.config();
 import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
@@ -19,6 +22,7 @@ import curriculumRoutes from './routes/curriculumRoutes.js';
 import learningRoutes from './routes/learningRoutes.js';
 import chatRoutes from './routes/chatRoutes.js';
 
+import pool from './config/database.js';
 import ISRAELI_CURRICULUM, {
     getGradeConfig,
     getReformNotes,
@@ -28,7 +32,10 @@ import ISRAELI_CURRICULUM, {
     CURRICULUM_METADATA
 } from './config/israeliCurriculum.js';
 
-dotenv.config();
+// Only load .env in development
+if (process.env.NODE_ENV !== 'production') {
+    dotenv.config();
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -37,6 +44,30 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
+
+// SIMPLE TEST ROUTE
+app.get('/test', (req, res) => {
+    console.error('?? TEST ROUTE HIT!');
+    res.json({ success: true, message: 'Server is reachable!' });
+});
+
+app.post('/api/test-progress', (req, res) => {
+    console.error('?? TEST PROGRESS ROUTE HIT!');
+    res.json({ success: true, message: 'Test progress endpoint works!' });
+    console.error('?? TEST ROUTE HIT!');
+    res.json({ success: true, message: 'Server is reachable!' });
+});
+
+// LOG ALL INCOMING REQUESTS
+app.use((req, res, next) => {
+    console.log('='.repeat(60));
+    console.error('?? INCOMING REQUEST');
+    console.error('?? Method:', req.method);
+    console.error('?? URL:', req.url);
+    console.log('Body:', JSON.stringify(req.body));
+    console.log('='.repeat(60));
+    next();
+});
 app.use(express.json({ limit: '50mb' }));
 
 // ==================== MULTER CONFIGURATION ====================
@@ -1049,218 +1080,149 @@ function buildDynamicQuestionPrompt(topic, subtopic, difficulty, studentProfile,
 }
 // ==================== GENERATE QUESTION ENDPOINT ====================
 // ==================== GENERATE QUESTION ENDPOINT WITH RETRY LOGIC ====================
+// ==================== GENERATE QUESTION ====================
+// ==================== GENERATE QUESTION ====================
 app.post('/api/ai/generate-question', async (req, res) => {
+    console.log('============================================================');
+    console.log('📝 GENERATING QUESTION');
+    console.log('============================================================');
+
     try {
-        const { topic, subtopic, difficulty, studentProfile } = req.body;
+        const { topic, subtopic, difficulty = 'medium', grade = 'grade_8', previousQuestions = [] } = req.body;
 
-        if (!topic || !topic.name) {
-            return res.status(400).json({
-                success: false,
-                error: 'Invalid topic object'
-            });
+        if (!topic) {
+            return res.status(400).json({ success: false, error: 'Topic required' });
         }
 
-        if (!studentProfile || !studentProfile.grade) {
-            return res.status(400).json({
-                success: false,
-                error: 'Invalid student profile'
-            });
-        }
+        console.log('📊 Request:', { topic, subtopic, difficulty, grade });
 
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('📝 SMART QUESTION GENERATION');
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('   Topic:', topic.name);
-        console.log('   Subtopic:', subtopic?.name || 'General');
+        // Build personality-aware prompt with CORRECT property paths
+        const personalityContext = personalitySystem?.loaded ? `
+אתה ${personalitySystem.data.corePersonality.teacherName}, ${personalitySystem.data.corePersonality.role}.
+תכונות האישיות שלך:
+- ${personalitySystem.data.corePersonality.personality}
+- ${personalitySystem.data.corePersonality.teachingStyle}
+- ${personalitySystem.data.corePersonality.communicationTone}
 
-        const gradeId = `grade_${studentProfile.grade}`;
-        const studentId = studentProfile.studentId || studentProfile.name || 'anonymous';
+סגנון שפה:
+- ${personalitySystem.data.languageStyle.hebrewLevel}
+- ${personalitySystem.data.languageStyle.formalityLevel}
+- ${personalitySystem.data.languageStyle.encouragementStyle}
+` : 'אתה נקסון, מורה למתמטיקה ישראלי מנוסה וידידותי.';
 
-        let prompt = buildDynamicQuestionPrompt(topic, subtopic, difficulty, studentProfile, gradeId);
-        const systemPrompt = buildEnhancedSystemPrompt(studentProfile, gradeId, topic, subtopic);
+        const previousQuestionsText = previousQuestions.length > 0
+            ? `\n\nשאלות קודמות (צור שאלה שונה לחלוטין!):\n${previousQuestions.map((q, i) => `${i + 1}. ${q.substring(0, 100)}...`).join('\n')}`
+            : '';
 
-        let attempts = 0;
-        let parsed;
-        const maxAttempts = 3;
+        const topicName = typeof topic === 'object' ? topic.name : topic;
+        const subtopicName = typeof subtopic === 'object' ? subtopic.name : subtopic;
 
-        while (attempts < maxAttempts) {
-            attempts++;
+        const prompt = `${personalityContext}
 
-            if (process.env.ANTHROPIC_API_KEY) {
-                console.log(`   🔄 Attempt ${attempts}/${maxAttempts}`);
+צור שאלת מתמטיקה חדשה ומקורית.
 
-                // 🔥 RETRY LOGIC WITH EXPONENTIAL BACKOFF
-                let apiSuccess = false;
-                let lastError = null;
+נושא: ${topicName}
+${subtopicName ? `תת-נושא (המוקד העיקרי): ${subtopicName}` : ''}
+רמת קושי: ${difficulty}
+כיתה: ${grade}
+${previousQuestionsText}
 
-                for (let retryAttempt = 0; retryAttempt < 3; retryAttempt++) {
-                    try {
-                        // Wait before retry (exponential backoff: 2s, 4s, 8s)
-                        if (retryAttempt > 0) {
-                            const waitTime = Math.pow(2, retryAttempt) * 1000;
-                            console.log(`   ⏳ API Retry ${retryAttempt}/3 - waiting ${waitTime}ms...`);
-                            await new Promise(resolve => setTimeout(resolve, waitTime));
-                        }
+דרישות חובה:
+1. כתוב את כל התוכן בעברית בלבד - אסור לכתוב באנגלית!
+2. השאלה חייבת להיות ישירות על "${subtopicName || topicName}"
+3. השתמש במספרים מעניינים ומגוונים
+4. הוסף הקשר מהחיים האמיתיים (ספורט, קניות, בית ספר וכו')
+5. צור שאלה שונה לחלוטין משאלות קודמות
+6. השאלה צריכה להיות מאתגרת ברמת ${difficulty}
 
-                        const response = await fetch('https://api.anthropic.com/v1/messages', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'x-api-key': process.env.ANTHROPIC_API_KEY,
-                                'anthropic-version': '2023-06-01'
-                            },
-                            body: JSON.stringify({
-                                model: 'claude-3-5-haiku-20241022',
-                                max_tokens: 3000,
-                                temperature: 0.8 + (attempts * 0.1),
-                                system: systemPrompt,
-                                messages: [{ role: 'user', content: prompt }]
-                            })
-                        });
+פורמט JSON חובה (בעברית בלבד!):
+{
+  "question": "השאלה המלאה בעברית",
+  "correctAnswer": "התשובה הנכונה",
+  "hints": ["רמז 1 בעברית", "רמז 2 בעברית", "רמז 3 בעברית"],
+  "explanation": "הסבר מפורט בעברית איך פותרים את השאלה"
+}
 
-                        const data = await response.json();
+חשוב: השתמש ב\\n לשורה חדשה, לא Enter אמיתי. החזר רק JSON, ללא טקסט נוסף.`;
 
-                        // Handle 529 Overloaded error
-                        if (response.status === 529) {
-                            lastError = new Error('Overloaded');
-                            console.log(`   ⚠️ API Overloaded (retry ${retryAttempt + 1}/3)`);
-                            continue; // Try again
-                        }
+        console.log('🔄 Calling Claude API...');
 
-                        // Handle other errors
-                        if (!response.ok) {
-                            lastError = new Error(data.error?.message || `API error: ${response.status}`);
-                            console.log(`   ❌ API Error: ${lastError.message}`);
-
-                            // If it's a rate limit or server error, retry
-                            if (response.status >= 500 || response.status === 429) {
-                                continue;
-                            }
-
-                            // For other errors (like auth), don't retry
-                            throw lastError;
-                        }
-
-                        // Success! Parse the response
-                        const rawText = data.content[0].text;
-                        const jsonText = cleanJsonText(rawText);
-                        parsed = JSON.parse(jsonText);
-
-                        console.log('   ✅ API call successful');
-                        apiSuccess = true;
-                        break; // Exit retry loop
-
-                    } catch (error) {
-                        lastError = error;
-                        console.error(`   ❌ API attempt ${retryAttempt + 1} failed:`, error.message);
-
-                        // If it's the last retry attempt, throw
-                        if (retryAttempt === 2) {
-                            throw error;
-                        }
-
-                        // Otherwise, continue to next retry
-                    }
-                }
-
-                // If all retries failed, throw the last error
-                if (!apiSuccess) {
-                    throw lastError || new Error('All API retry attempts failed');
-                }
-
-                console.log('   ✅ Parsed successfully');
-
-                // Check for similarity with recent questions
-                const topicId = topic.id || topic.name;
-                const recentQuestions = questionHistoryManager.getRecentQuestions(studentId, topicId, 5);
-                const isSimilar = questionHistoryManager.isSimilar(parsed.question, recentQuestions);
-
-                if (isSimilar && attempts < maxAttempts) {
-                    console.log(`   ⚠️ Too similar, retrying...`);
-                    prompt += `\n\n🚨 TOO SIMILAR! Create MORE DIFFERENT!\n`;
-                    continue;
-                } else {
-                    console.log('   ✅ Question is unique');
-                    break;
-                }
-            } else {
-                throw new Error('No AI API configured');
-            }
-        }
-
-        // Validate and process the question
-        const validation = validateQuestionHasRawData(parsed, topic, subtopic);
-        if (!validation.valid) {
-            console.log('   ⚠️ Validation failed - rewriting');
-            parsed = forceRewriteGraphDescription(parsed, topic, subtopic);
-        }
-
-        parsed = ensureVisualDataForGraphQuestions(parsed, topic, subtopic);
-        parsed = detectGeometryVisual(parsed, topic, subtopic);
-
-        if (parsed.visualData?.type?.startsWith('svg-')) {
-            const svgType = parsed.visualData.type.replace('svg-', '');
-            let svg = null;
-
-            try {
-                if (svgType === 'triangle') {
-                    svg = SVGGenerator.generateTriangle(parsed.visualData.svgData);
-                } else if (svgType === 'rectangle') {
-                    svg = SVGGenerator.generateRectangle(parsed.visualData.svgData);
-                } else if (svgType === 'circle') {
-                    svg = SVGGenerator.generateCircle(parsed.visualData.svgData);
-                }
-
-                if (svg) {
-                    parsed.visualData.svg = svg;
-                    console.log('   ✅ SVG generated:', svgType);
-                }
-            } catch (svgError) {
-                console.error('   ❌ SVG error:', svgError);
-            }
-        }
-
-        const topicId = topic.id || topic.name;
-        questionHistoryManager.addQuestion(studentId, topicId, {
-            question: parsed.question,
-            timestamp: Date.now()
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': process.env.ANTHROPIC_API_KEY,
+                'anthropic-version': '2023-06-01'
+            },
+            body: JSON.stringify({
+                model: 'claude-sonnet-4-5-20250929',
+                max_tokens: 2500,
+                temperature: 0.6,
+                system: 'אתה מורה למתמטיקה ישראלי מנוסה. כל התשובות שלך חייבות להיות בעברית בלבד! אסור לך לכתוב באנגלית או בשפה אחרת. צור שאלות מקוריות ומעניינות שמתאימות לתכנית הלימודים הישראלית.',
+                messages: [{
+                    role: 'user',
+                    content: prompt
+                }]
+            })
         });
 
-        console.log('   ✅ Complete');
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(`API error: ${response.status} - ${errorData.error?.message}`);
+        }
 
-        return res.json({
+        const data = await response.json();
+        const rawText = data.content[0].text;
+
+        console.log('📄 Raw response (first 200):', rawText.substring(0, 200));
+
+        // Clean and parse JSON
+        let jsonText = rawText.trim();
+
+        // Remove markdown code blocks if present
+        jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+
+        // Find JSON object
+        const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+            jsonText = jsonMatch[0];
+        }
+
+        const questionData = JSON.parse(jsonText);
+
+        // Validate all required fields
+        if (!questionData.question || !questionData.correctAnswer) {
+            throw new Error('Missing required fields in generated question');
+        }
+
+        // Ensure hints and explanation exist
+        if (!questionData.hints || !Array.isArray(questionData.hints)) {
+            questionData.hints = ['נסה לחשוב על השלב הראשון', 'מה הכלי המתמטי שנלמד?', 'חשוב על דוגמאות דומות'];
+        }
+
+        if (!questionData.explanation) {
+            questionData.explanation = 'הסבר מפורט זמין בהמשך.';
+        }
+
+        console.log('✅ Question generated successfully');
+        console.log('📝 Question:', questionData.question.substring(0, 100));
+
+        res.json({
             success: true,
-            question: {
-                question: parsed.question,
-                correctAnswer: parsed.correctAnswer,
-                hints: parsed.hints || [],
-                explanation: parsed.explanation || '',
-                topic: topic.name,
-                subtopic: subtopic?.name,
-                difficulty: parsed.difficulty || difficulty,
-                gradeLevel: studentProfile.grade,
-                visualData: parsed.visualData || null,
-                curriculumAligned: true,
-                reformYear: CURRICULUM_METADATA.reformYear
-            },
-            model: 'claude-3.5-haiku',
-            personalityActive: personalitySystem.loaded,
-            attemptCount: attempts
+            question: questionData.question,
+            correctAnswer: questionData.correctAnswer,
+            hints: questionData.hints,
+            explanation: questionData.explanation,
+            model: 'claude-sonnet-4-5-20250929',
+            topic: topicName,
+            subtopic: subtopicName
         });
 
     } catch (error) {
-        console.error('❌ Error:', error);
-
-        // Provide user-friendly error messages
-        let errorMessage = error.message;
-        if (error.message === 'Overloaded') {
-            errorMessage = 'השרת עמוס כרגע. אנא נסה שוב בעוד כמה שניות.';
-        }
-
+        console.error('❌ Generate question error:', error);
         res.status(500).json({
             success: false,
-            error: errorMessage
+            error: error.message
         });
     }
 });
@@ -1268,102 +1230,162 @@ app.post('/api/ai/generate-question', async (req, res) => {
 
 
 // Replace your existing endpoint with this:
+// ==================== VERIFY ANSWER ====================
 app.post('/api/ai/verify-answer', async (req, res) => {
-    try {
-        const { question, userAnswer, correctAnswer, studentName, topic, subtopic, userId } = req.body;
+    console.log('============================================================');
+    console.log('🔍 VERIFYING ANSWER');
+    console.log('============================================================');
 
-        console.log('🔍 VERIFYING ANSWER');
+    const startTime = Date.now();
+
+    try {
+        const {
+            question,
+            userAnswer,
+            correctAnswer,
+            topic = '',
+            subtopic = '',
+            userId = null,
+            difficulty = 'medium'
+        } = req.body;
+
+        console.log('📝 Request:', {
+            question: question?.substring(0, 50),
+            userAnswer,
+            correctAnswer,
+            userId,
+            topic,
+            subtopic
+        });
+
+        if (!question || !userAnswer || !correctAnswer) {
+            return res.status(400).json({
+                success: false,
+                error: 'Missing required fields'
+            });
+        }
 
         let isCorrect = false;
+        let confidence = 0;
         let feedback = '';
         let explanation = '';
-        let confidence = 0;
         let model = '';
 
-        // Check for exact match first
-        if (compareMathExpressions(userAnswer, correctAnswer)) {
-            console.log('✅ EXACT MATCH');
+        // AI verification using Anthropic API
+        if (process.env.ANTHROPIC_API_KEY) {
+            const prompt = `אתה מורה למתמטיקה מומחה. בדוק האם תשובת התלמיד נכונה.
 
-            isCorrect = true;
-            confidence = 100;
-            feedback = 'נכון מצוין! 🎉';
-            explanation = 'התשובה שלך נכונה!';
-            model = 'exact-match';
+חשוב מאוד:
+1. ענה רקעברית בלבד - אסור לכתוב באנגלית!
+2. תשובות מתמטיות שוות ערך נחשבות נכונות (למשל: 1/2 = 0.5, 2x = x+x)
+3. התעלם משגיאות כתיב קלות או פורמט
+4. בדוק אם התשובה נכונה מבחינה מתמטית, לא רק זהה טקסטואלית
 
-        } else {
-            // Use AI verification
-            const prompt = `בדוק:\n\nשאלה: ${question}\nתלמיד: ${userAnswer}\nנכון: ${correctAnswer}\n\nJSON:\n{"isCorrect":true/false,"feedback":"...","explanation":"..."}`;
+שאלה: ${question}
+תשובת התלמיד: ${userAnswer}
+התשובה הנכונה: ${correctAnswer}
 
-            if (process.env.ANTHROPIC_API_KEY) {
-                const response = await fetch('https://api.anthropic.com/v1/messages', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'x-api-key': process.env.ANTHROPIC_API_KEY,
-                        'anthropic-version': '2023-06-01'
-                    },
-                    body: JSON.stringify({
-                        model: 'claude-3-5-haiku-20241022',
-                        max_tokens: 1500,
-                        temperature: 0.3,
-                        system: 'אתה נקסון. בדוק שקילות מתמטית. JSON בלבד.',
-                        messages: [{ role: 'user', content: prompt }]
-                    })
-                });
+השב בפורמט JSON בדיוק כך (בעברית בלבד!):
+{
+  "isCorrect": true/false,
+  "feedback": "משוב קצר בעברית לתלמיד (1-2 משפטים)",
+  "explanation": "הסבר מפורט בעברית למה התשובה נכונה או לא נכונה"
+}`;
 
-                const data = await response.json();
+            const response = await fetch('https://api.anthropic.com/v1/messages', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': process.env.ANTHROPIC_API_KEY,
+                    'anthropic-version': '2023-06-01'
+                },
+                body: JSON.stringify({
+                    model: 'claude-sonnet-4-5-20250929',
+                    max_tokens: 2048,
+                    temperature: 0.3,
+                    system: 'אתה מורה למתמטיקה ישראלי מנוסה. כל התשובות שלך חייבות להיות בעברית בלבד! אסור לך לענות באנגלית או בשפה אחרת.',
+                    messages: [{
+                        role: 'user',
+                        content: prompt
+                    }]
+                })
+            });
 
-                if (!response.ok) {
-                    throw new Error(data.error?.message || 'API error');
-                }
-
-                const rawText = data.content[0].text;
-                const jsonText = cleanJsonText(rawText);
-                const parsed = JSON.parse(jsonText);
-
-                isCorrect = parsed.isCorrect;
-                confidence = 95;
-                feedback = parsed.feedback;
-                explanation = parsed.explanation;
-                model = 'claude-3.5-haiku';
-            } else {
-                throw new Error('No AI configured');
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(`API error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
             }
+
+            const data = await response.json();
+            const rawText = data.content[0].text;
+
+            console.log('📄 Raw AI response:', rawText.substring(0, 200));
+
+            // Clean and parse JSON
+            let jsonText = rawText.trim();
+
+            // Remove markdown code blocks if present
+            jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+
+            // Find JSON object
+            const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                jsonText = jsonMatch[0];
+            }
+
+            const parsed = JSON.parse(jsonText);
+
+            isCorrect = parsed.isCorrect === true;
+            confidence = 95;
+            feedback = parsed.feedback || 'בדיקה הושלמה';
+            explanation = parsed.explanation || '';
+            model = 'claude-sonnet-4-5-20250929';
+
+            console.log('✅ Verification complete:', { isCorrect, feedback: feedback.substring(0, 50) });
+        } else {
+            throw new Error('No AI API configured');
         }
 
-        // ✨ AUTO-SAVE TO NOTEBOOK IF CORRECT
-        if (isCorrect && userId) {
+        // ✨ AUTO-SAVE TO NOTEBOOK (SAVE ALL ANSWERS)
+        console.log('🔍 DEBUG: Checking notebook save conditions...');
+        console.log('🔍 DEBUG: userId =', userId);
+        console.log('🔍 DEBUG: question exists =', !!question);
+
+        if (userId) {
             try {
-                console.log('📓 Saving to notebook...');
-                await notebookService.saveExerciseToNotebook(userId, {
+                console.log('📔 Saving to notebook...');
+                const saveResult = await notebookService.saveExerciseToNotebook(userId, {
                     question: question,
                     answer: correctAnswer,
-                    studentAnswer: userAnswer,
-                    isCorrect: true,
-                    topic: topic || 'כללי',
-                    subtopic: subtopic || ''
+                    userAnswer: userAnswer,
+                    isCorrect: isCorrect,
+                    topic: topic || '',
+                    subtopic: subtopic || '',
+                    timestamp: new Date().toISOString()
                 });
-                console.log('✅ Saved to notebook successfully');
+                console.log('✅ Saved to notebook successfully:', saveResult);
             } catch (notebookError) {
-                // Don't fail the request if notebook save fails
-                console.error('⚠️ Failed to save to notebook:', notebookError.message);
-                // Continue anyway - the answer verification is still valid
+                console.error('⚠️ Failed to save to notebook:', notebookError);
             }
+        } else {
+            console.log('⚠️ No userId provided - skipping notebook save');
         }
 
-        // Return the verification result
+        const duration = Date.now() - startTime;
+
         return res.json({
             success: true,
             isCorrect,
             confidence,
             feedback,
             explanation,
-            model
+            model,
+            duration
         });
 
     } catch (error) {
-        console.error('❌ Error:', error);
-        res.status(500).json({
+        console.error('❌ Verify answer error:', error);
+        return res.status(500).json({
             success: false,
             error: error.message
         });
@@ -1450,7 +1472,7 @@ app.post('/api/ai/get-hint', async (req, res) => {
                     'anthropic-version': '2023-06-01'
                 },
                 body: JSON.stringify({
-                    model: 'claude-3-5-haiku-20241022',
+                    model: 'claude-sonnet-4-5-20250929',
                     max_tokens: 500,
                     temperature: 0.7,
                     messages: [{ role: 'user', content: prompt }]
@@ -1500,7 +1522,7 @@ app.post('/api/ai/chat', async (req, res) => {
                     'anthropic-version': '2023-06-01'
                 },
                 body: JSON.stringify({
-                    model: 'claude-3-5-haiku-20241022',
+                    model: 'claude-sonnet-4-5-20250929',
                     max_tokens: wantsFullSolution ? 2000 : 800,
                     temperature: 0.7,
                     messages: [{ role: 'user', content: conversationPrompt }]
@@ -1516,7 +1538,7 @@ app.post('/api/ai/chat', async (req, res) => {
             return res.json({
                 success: true,
                 response: data.content[0].text,
-                model: 'claude-3.5-haiku'
+                model: 'claude-sonnet-4-5-20250929'
             });
         }
 
@@ -1660,7 +1682,7 @@ ${correctAnswer}
                         'anthropic-version': '2023-06-01'
                     },
                     body: JSON.stringify({
-                        model: 'claude-3-5-haiku-20241022',  // ✅ MUST USE SONNET FOR VISION
+                        model: 'claude-sonnet-4-5-20250929',  // ✅ MUST USE SONNET FOR VISION
                         max_tokens: 2000,
                         temperature: 0.5,
                         messages: [{
@@ -1769,7 +1791,7 @@ ${correctAnswer}
         res.json({
             success: true,
             analysis: cleanedAnalysis,
-            model: 'claude-3-5-haiku-20241022',  // ✅ SONNET FOR VISION
+            model: 'claude-sonnet-4-5-20250929',  // ✅ SONNET FOR VISION
             timestamp: new Date().toISOString()
         });
 
@@ -1834,13 +1856,23 @@ app.use('/api/learning', learningRoutes);
 app.use('/api/chat', chatRoutes);
 
 
-app.listen(PORT, async () => {
+
+// ==================== TEST DATABASE CONNECTION ====================
+pool.query('SELECT NOW()', (err, result) => {
+    if (err) {
+        console.error('? Database connection failed:', err.message);
+    } else {
+        console.log('? Database connected successfully!');
+        console.log('   Connection time:', result.rows[0].now);
+    }
+});
+app.listen(PORT, '0.0.0.0', async () => {
     await loadPersonalityFromStorage();
 
     console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('🚀 NEXON AI - SMART TOPIC-BASED QUESTIONS');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log(`📡 Server: http://localhost:${PORT}`);
+    console.log(`📡 Server: http://0.0.0.0:${PORT}`);
     console.log(`   • Personality: ${personalitySystem.loaded ? '✅' : '❌'}`);
     console.log(`   • Smart Topics: ✅`);
     console.log(`   • SVG Support: ✅`);

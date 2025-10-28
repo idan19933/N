@@ -1,8 +1,111 @@
-// server/routes/nexonRoutes.js - COMPLETE WITH NOTEBOOK ROUTES
+// server/routes/nexonRoutes.js - COMPLETE WITH NOTEBOOK & NEXON ASK ROUTES
 import express from 'express';
 import notebookService from '../services/notebookService.js';
+import nexonAskService from '../services/nexonAskService.js';
 
 const router = express.Router();
+
+// ==================== NEXON ASK (INTELLIGENT CHAT) ROUTES ====================
+
+// POST /api/chat/nexon-ask - Main chat endpoint with real data
+router.post('/chat/nexon-ask', async (req, res) => {
+    try {
+        const { userId, message, conversationHistory } = req.body;
+
+        if (!userId || !message) {
+            return res.status(400).json({
+                success: false,
+                error: 'User ID and message required'
+            });
+        }
+
+        console.log('💬 NexonAsk request from user:', userId);
+
+        const result = await nexonAskService.generateResponse(
+            userId,
+            message,
+            conversationHistory || []
+        );
+
+        if (!result.success) {
+            return res.status(500).json(result);
+        }
+
+        res.json(result);
+
+    } catch (error) {
+        console.error('❌ NexonAsk chat error:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// GET /api/chat/topic-help/:topicId/:subtopicId - Get help for specific topic
+router.get('/chat/topic-help/:topicId/:subtopicId', async (req, res) => {
+    try {
+        const { topicId, subtopicId } = req.params;
+        const userId = req.query.userId;
+
+        if (!userId) {
+            return res.status(400).json({
+                success: false,
+                error: 'User ID required'
+            });
+        }
+
+        const result = await nexonAskService.getTopicHelp(userId, topicId, subtopicId);
+        res.json(result);
+
+    } catch (error) {
+        console.error('❌ Topic help error:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// GET /api/chat/student-insights - Get student performance insights
+router.get('/chat/student-insights', async (req, res) => {
+    try {
+        const userId = req.query.userId;
+
+        if (!userId) {
+            return res.status(400).json({
+                success: false,
+                error: 'User ID required'
+            });
+        }
+
+        const context = await nexonAskService.getStudentContext(userId);
+
+        if (!context) {
+            return res.status(500).json({
+                success: false,
+                error: 'Could not load student data'
+            });
+        }
+
+        res.json({
+            success: true,
+            insights: {
+                summary: context.summary,
+                weakTopics: context.weakTopics.slice(0, 5),
+                strongTopics: context.strongTopics.slice(0, 5),
+                recentActivity: context.recentActivity.slice(0, 10)
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ Student insights error:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
 
 // ==================== NOTEBOOK ROUTES ====================
 

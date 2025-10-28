@@ -1,128 +1,79 @@
-// src/services/profileService.js - WITH CLEAN LOGS
-import {
-    doc,
-    getDoc,
-    setDoc,
-    updateDoc,
-    collection,
-    query,
-    getDocs
-} from 'firebase/firestore';
-import { db } from '../config/firebase';
+// src/services/profileService.js - FIXED FOR EXACT BACKEND FORMAT
+const API_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 
-// Enable/disable debug logging
-const DEBUG = false; // Set to true for detailed logs
-
-const log = (...args) => {
-    if (DEBUG) console.log(...args);
-};
-
-class ProfileService {
-    constructor() {
-        log('✅ Profile Service initialized');
-    }
-
-    async getProfile(uid) {
+export const profileService = {
+    async getUserStats(userId) {
         try {
-            log('📡 Getting profile for:', uid);
-
-            const profileRef = doc(db, 'users', uid);
-            const profileSnap = await getDoc(profileRef);
-
-            if (profileSnap.exists()) {
-                const data = profileSnap.data();
-                log('✅ Profile loaded');
-                return {
-                    ...data,
-                    uid,
-                    onboardingCompleted: data.onboardingCompleted || false
-                };
+            if (!userId) {
+                console.warn('⚠️ [ProfileService] No userId provided');
+                return { questionsAnswered: 0, correctAnswers: 0, streak: 0, practiceTime: 0 };
             }
 
-            log('⚠️ No profile found');
-            return null;
+            const url = `${API_URL}/api/curriculum/stats/overall/${userId}`;
+            console.log('🔗 [ProfileService] Fetching from:', url);
 
-        } catch (error) {
-            console.error('❌ Error getting profile:', error);
-            throw error;
-        }
-    }
-
-    async completeOnboarding(uid, profileData) {
-        try {
-            log('📝 Completing onboarding for:', uid);
-
-            const profileRef = doc(db, 'users', uid);
-
-            const newProfile = {
-                ...profileData,
-                uid,
-                onboardingCompleted: true,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-            };
-
-            await setDoc(profileRef, newProfile, { merge: true });
-
-            log('✅ Onboarding completed successfully');
-            return newProfile;
-
-        } catch (error) {
-            console.error('❌ Error completing onboarding:', error);
-            throw error;
-        }
-    }
-
-    async saveProfile(uid, profileData) {
-        return this.completeOnboarding(uid, profileData);
-    }
-
-    async updateProfile(uid, updates) {
-        try {
-            log('📝 Updating profile for:', uid);
-
-            const profileRef = doc(db, 'users', uid);
-
-            await updateDoc(profileRef, {
-                ...updates,
-                updatedAt: new Date().toISOString()
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
             });
 
-            log('✅ Profile updated successfully');
-            return true;
+            console.log('📡 [ProfileService] Response status:', response.status);
 
-        } catch (error) {
-            console.error('❌ Error updating profile:', error);
-            throw error;
-        }
-    }
-
-    async getUserStats(uid) {
-        try {
-            log('📊 Getting stats for:', uid);
-
-            const statsRef = doc(db, 'users', uid, 'stats', 'current');
-            const statsSnap = await getDoc(statsRef);
-
-            if (statsSnap.exists()) {
-                const stats = statsSnap.data();
-                log('✅ Stats loaded');
-                return stats;
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
             }
 
-            const defaultStats = {
-                questionsAnswered: 0,
-                correctAnswers: 0,
-                streak: 0,
-                practiceTime: 0,
-                lastPracticeDate: null
+            const data = await response.json();
+            console.log('📦 [ProfileService] Raw data from API:', data);
+
+            // 🔥 EXACT FIX: Backend returns stats with these EXACT field names
+            const rawStats = data.stats || {};
+            
+            console.log('📦 [ProfileService] Raw stats object:', rawStats);
+            
+            // 🔥 CRITICAL: Backend returns:
+            // - total_exercises: "18" (STRING!)
+            // - total_correct: "2" (STRING!)
+            // - total_topics: "10" (STRING!)
+            // - success_rate: 11 (NUMBER)
+            // Missing: streak, practiceTime
+            
+            const totalExercises = rawStats.total_exercises || rawStats.totalExercises || 0;
+            const correctAnswers = rawStats.total_correct || rawStats.correctAnswers || 0;
+            
+            // These fields don't exist in backend, default to 0
+            const currentStreak = 0;
+            const totalPracticeTime = 0;
+
+            console.log('🔍 [ProfileService] Extracted raw values:', {
+                totalExercises,
+                correctAnswers,
+                currentStreak,
+                totalPracticeTime
+            });
+
+            // 🔥 PARSE STRINGS TO NUMBERS (backend returns strings!)
+            const formattedStats = {
+                questionsAnswered: parseInt(totalExercises) || 0,
+                correctAnswers: parseInt(correctAnswers) || 0,
+                streak: parseInt(currentStreak) || 0,
+                practiceTime: parseInt(totalPracticeTime) || 0
             };
 
-            log('📊 No stats found, returning defaults');
-            return defaultStats;
+            console.log('✅ [ProfileService] Formatted stats:', formattedStats);
+            console.log('✅ [ProfileService] Stats types:', {
+                questionsAnswered: typeof formattedStats.questionsAnswered,
+                correctAnswers: typeof formattedStats.correctAnswers,
+                streak: typeof formattedStats.streak,
+                practiceTime: typeof formattedStats.practiceTime
+            });
+
+            return formattedStats;
 
         } catch (error) {
-            console.error('❌ Error getting stats:', error);
+            console.error('❌ [ProfileService] Error fetching stats:', error);
             return {
                 questionsAnswered: 0,
                 correctAnswers: 0,
@@ -130,141 +81,35 @@ class ProfileService {
                 practiceTime: 0
             };
         }
-    }
+    },
 
-    async updateStats(uid, statUpdates) {
+    async getProfile(userId) {
         try {
-            log('📊 Updating stats for:', uid);
-
-            const statsRef = doc(db, 'users', uid, 'stats', 'current');
-            const statsSnap = await getDoc(statsRef);
-
-            let currentStats = {
-                questionsAnswered: 0,
-                correctAnswers: 0,
-                streak: 0,
-                practiceTime: 0,
-                lastPracticeDate: null
-            };
-
-            if (statsSnap.exists()) {
-                currentStats = statsSnap.data();
-            }
-
-            const newStats = {
-                questionsAnswered: (currentStats.questionsAnswered || 0) + (statUpdates.questionsAnswered || 0),
-                correctAnswers: (currentStats.correctAnswers || 0) + (statUpdates.correctAnswers || 0),
-                practiceTime: (currentStats.practiceTime || 0) + (statUpdates.practiceTime || 0),
-                lastPracticeDate: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-            };
-
-            // Calculate streak
-            const today = new Date().toDateString();
-            const lastDate = currentStats.lastPracticeDate
-                ? new Date(currentStats.lastPracticeDate).toDateString()
-                : null;
-
-            if (lastDate === today) {
-                newStats.streak = currentStats.streak || 1;
-            } else if (lastDate === new Date(Date.now() - 86400000).toDateString()) {
-                newStats.streak = (currentStats.streak || 0) + 1;
-            } else {
-                newStats.streak = 1;
-            }
-
-            await setDoc(statsRef, newStats, { merge: true });
-
-            log('✅ Stats updated');
-            return newStats;
-
+            const response = await fetch(`${API_URL}/api/users/profile/${userId}`);
+            if (!response.ok) return null;
+            const data = await response.json();
+            return data.profile || null;
         } catch (error) {
-            console.error('❌ Error updating stats:', error);
-            throw error;
+            console.error('❌ [ProfileService] Error fetching profile:', error);
+            return null;
         }
-    }
+    },
 
-    async addPracticeSession(uid, sessionData) {
+    async updateProfile(userId, updates) {
         try {
-            log('📝 Adding practice session');
-
-            const sessionsRef = collection(db, 'users', uid, 'sessions');
-            const sessionDoc = doc(sessionsRef);
-
-            const session = {
-                ...sessionData,
-                timestamp: new Date().toISOString(),
-                id: sessionDoc.id
-            };
-
-            await setDoc(sessionDoc, session);
-
-            await this.updateStats(uid, {
-                questionsAnswered: sessionData.questionsAnswered || 1,
-                correctAnswers: sessionData.isCorrect ? 1 : 0,
-                practiceTime: sessionData.timeSpent || 0
+            const response = await fetch(`${API_URL}/api/users/profile/${userId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updates)
             });
-
-            log('✅ Practice session added');
-            return session;
-
-        } catch (error) {
-            console.error('❌ Error adding practice session:', error);
-            throw error;
-        }
-    }
-
-    async getRecentSessions(uid, limit = 10) {
-        try {
-            log('📜 Getting recent sessions');
-
-            const sessionsRef = collection(db, 'users', uid, 'sessions');
-            const q = query(sessionsRef);
-            const querySnapshot = await getDocs(q);
-
-            const sessions = [];
-            querySnapshot.forEach((doc) => {
-                sessions.push({ id: doc.id, ...doc.data() });
-            });
-
-            sessions.sort((a, b) =>
-                new Date(b.timestamp) - new Date(a.timestamp)
-            );
-
-            const recent = sessions.slice(0, limit);
-            log(`✅ Loaded ${recent.length} sessions`);
-
-            return recent;
-
-        } catch (error) {
-            console.error('❌ Error getting sessions:', error);
-            return [];
-        }
-    }
-
-    async needsOnboarding(uid) {
-        try {
-            const profile = await this.getProfile(uid);
-
-            if (!profile) {
-                log('🔍 No profile = needs onboarding');
-                return true;
-            }
-
-            const needs = !profile.onboardingCompleted ||
-                !profile.grade ||
-                !profile.weakTopics ||
-                profile.weakTopics.length === 0;
-
-            log('🔍 Needs onboarding:', needs);
-            return needs;
-
-        } catch (error) {
-            console.error('❌ Error checking onboarding:', error);
+            
+            if (!response.ok) return false;
             return true;
+        } catch (error) {
+            console.error('❌ [ProfileService] Error updating profile:', error);
+            return false;
         }
     }
-}
+};
 
-export const profileService = new ProfileService();
 export default profileService;

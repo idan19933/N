@@ -1,5 +1,5 @@
 // src/components/ai/MathTutor.jsx - COMPLETE WITH VOICE SUPPORT 🎤🔊
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Brain, Send, BookOpen, Target, Sparkles, ChevronRight,
@@ -888,7 +888,8 @@ const MathTutor = ({
                        selectedSubtopic: propSelectedSubtopic,
                        mode: propMode,
                        userId: propUserId,
-                       onClose
+                       onClose,
+                       onAnswerSubmitted
                    }) => {
     // 🔍 DEBUG: Track component mounts
     const mountCount = useRef(0);
@@ -940,6 +941,12 @@ const MathTutor = ({
             propTopicId
         });
 
+        // 🔥 FIX: If launched from dashboard (has onClose) with a topic, go STRAIGHT to practice
+        if (onClose && propSelectedTopic) {
+            console.log('✅ Going STRAIGHT to PRACTICE (from dashboard)');
+            return 'practice';
+        }
+
         // If coming from dashboard with specific mode (random, adaptive, etc), go straight to practice
         if (propMode && propMode !== 'normal') {
             console.log('✅ Going to PRACTICE (special mode)');
@@ -950,9 +957,9 @@ const MathTutor = ({
             console.log('✅ Going to PRACTICE (topic + subtopic)');
             return 'practice';
         }
-        // If coming with just a topic, go to subtopic-select so user can choose "Learn First" or practice
-        if (propSelectedTopic) {
-            console.log('✅ Going to SUBTOPIC-SELECT (topic only)');
+        // If coming with just a topic (standalone, not from dashboard), go to subtopic-select
+        if (propSelectedTopic && !onClose) {
+            console.log('✅ Going to SUBTOPIC-SELECT (topic only, standalone)');
             return 'subtopic-select';
         }
         // Backward compatibility
@@ -1011,11 +1018,22 @@ const MathTutor = ({
     const timerRef = useRef(null);
     const inputRef = useRef(null);
 
-    const currentGrade = propGradeId || nexonProfile?.grade || user?.grade || '8';
-    const currentTrack = nexonProfile?.track || user?.track;
-    const gradeId = getUserGradeId(currentGrade, currentTrack);
-    const gradeConfig = getGradeConfig(gradeId);
-    const availableTopics = gradeConfig?.topics || [];
+    // 🔥 FIX: Wrap in useMemo to prevent infinite re-renders
+    const { currentGrade, currentTrack, gradeId, gradeConfig, availableTopics } = useMemo(() => {
+        const grade = propGradeId || nexonProfile?.grade || user?.grade || '8';
+        const track = nexonProfile?.track || user?.track;
+        const id = getUserGradeId(grade, track);
+        const config = getGradeConfig(id);
+        const topics = config?.topics || [];
+
+        return {
+            currentGrade: grade,
+            currentTrack: track,
+            gradeId: id,
+            gradeConfig: config,
+            availableTopics: topics
+        };
+    }, [propGradeId, nexonProfile?.grade, nexonProfile?.track, user?.grade, user?.track]);
 
     // Moved to mount useEffect to prevent log spam
 
@@ -1066,12 +1084,7 @@ const MathTutor = ({
     useEffect(() => {
         // Auto-start practice when view is 'practice' and no question exists
         if (view === 'practice' && !currentQuestion && !practiceStartedRef.current) {
-            // Skip auto-start only if normal mode WITHOUT subtopic (user needs to pick subtopic)
-            if (propMode === 'normal' && propSelectedTopic && !propSelectedSubtopic) {
-                console.log('⏸️ Normal mode with topic only - waiting for subtopic selection');
-                return;
-            }
-
+            // 🔥 REMOVED CHECK - Always auto-start when coming from dashboard!
             console.log('🚀 Auto-starting practice from dashboard props');
             practiceStartedRef.current = true; // ✅ Mark as started
 
@@ -1393,16 +1406,33 @@ const MathTutor = ({
                 throw new Error('Invalid topic object');
             }
 
+            // 🔥 CRITICAL FIX: For quick practice (no specific subtopic), pick RANDOM subtopic each time!
+            let finalSubtopic = subtopic;
+            if (!finalSubtopic) {
+                const availableSubtopics = getSubtopics(gradeId, topic.id) || [];
+                console.log(`🔍 Topic "${topic.name}" has ${availableSubtopics.length} subtopics`);
+
+                if (availableSubtopics.length > 0) {
+                    // 🎲 Pick a RANDOM subtopic for variety in quick practice!
+                    const randomIndex = Math.floor(Math.random() * availableSubtopics.length);
+                    finalSubtopic = availableSubtopics[randomIndex];
+                    console.log(`🎲 Randomly selected subtopic ${randomIndex + 1}/${availableSubtopics.length}: "${finalSubtopic.name}"`);
+                    // DON'T update selectedSubtopic state - we want it to stay null so next question picks a different random one!
+                } else {
+                    console.log('⚠️ No subtopics found for this topic');
+                }
+            }
+
             const requestBody = {
                 topic: {
                     id: String(topic.id || topic.name || 'unknown'),
                     name: String(topic.name),
                     nameEn: String(topic.nameEn || '')
                 },
-                subtopic: subtopic ? {
-                    id: String(subtopic.id || subtopic.name || 'unknown'),
-                    name: String(subtopic.name || ''),
-                    nameEn: String(subtopic.nameEn || '')
+                subtopic: finalSubtopic ? {
+                    id: String(finalSubtopic.id || finalSubtopic.name || 'unknown'),
+                    name: String(finalSubtopic.name || ''),
+                    nameEn: String(finalSubtopic.nameEn || '')
                 } : null,
                 difficulty: String(topic.difficulty || 'intermediate'),
                 studentProfile: {
@@ -1605,6 +1635,14 @@ const MathTutor = ({
                 hintsUsed: hintCount,
                 attempts: attemptCount + 1
             });
+        }
+
+        // 🔥 CRITICAL: Notify parent component to refresh stats
+        if (onAnswerSubmitted && typeof onAnswerSubmitted === 'function') {
+            console.log('📢 Calling onAnswerSubmitted callback', { isCorrect });
+            onAnswerSubmitted(isCorrect);
+        } else {
+            console.warn('⚠️ onAnswerSubmitted callback not provided');
         }
 
         let pointsEarned = 0;

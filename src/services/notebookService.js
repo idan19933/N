@@ -1,110 +1,119 @@
-// src/services/notebookService.js - FRONTEND NOTEBOOK API
+// src/services/notebookService.js - FIXED TO SAVE ALL EXERCISES
 import axios from 'axios';
 
-const API_URL = 'https://nexons-production-1915.up.railway.app';
+const API_URL = import.meta.env.VITE_BACKEND_URL || 'https://nexons-production-1915.up.railway.app';
 
-// Create axios instance with proper config
-const axiosInstance = axios.create({
-    baseURL: API_URL,
-    timeout: 30000,
-    headers: {
-        'Content-Type': 'application/json',
-    },
-    withCredentials: false // CRITICAL: Don't send credentials for CORS
-});
-
-class NotebookAPI {
+export const notebookService = {
+    /**
+     * Save exercise to notebook (works for BOTH correct and incorrect answers)
+     * @param {string} userId - User ID
+     * @param {Object} exerciseData - Exercise data
+     * @returns {Promise<Object>} Response data
+     */
     async saveExercise(userId, exerciseData) {
         try {
-            console.log('📝 Saving exercise to notebook:', {
-                userId,
-                question: exerciseData.question?.substring(0, 50) + '...',
-                isCorrect: exerciseData.isCorrect
-            });
+            console.log('💾 Saving exercise:', { userId, exerciseData });
 
-            const response = await axiosInstance.post('/api/notebook/save-exercise', {
+            const response = await axios.post(`${API_URL}/api/notebook/save-exercise`, {
                 userId,
                 exerciseData: {
                     question: exerciseData.question,
-                    answer: exerciseData.answer,
-                    studentAnswer: exerciseData.studentAnswer,
-                    isCorrect: exerciseData.isCorrect,
-                    topic: exerciseData.topic || 'לא צוין',
-                    subtopic: exerciseData.subtopic || ''
+                    userAnswer: exerciseData.userAnswer,
+                    correctAnswer: exerciseData.correctAnswer,
+                    isCorrect: exerciseData.isCorrect, // CRITICAL: This tracks if answer is correct or not
+                    topic: exerciseData.topic,
+                    subtopic: exerciseData.subtopic || null,
+                    difficulty: exerciseData.difficulty || 'medium',
+                    timeSpent: exerciseData.timeSpent || 0
                 }
             });
 
-            if (response.data.success) {
-                console.log('✅ Exercise saved to notebook');
-                return response.data;
-            } else {
-                console.error('❌ Failed to save exercise:', response.data.error);
-                return { success: false, error: response.data.error };
-            }
-        } catch (error) {
-            console.error('❌ Notebook save error:', error);
-            return { success: false, error: error.message };
-        }
-    }
+            console.log('✅ Exercise saved successfully:', response.data);
 
-    async getEntries(userId, filters = {}) {
+            return {
+                success: true,
+                data: response.data
+            };
+
+        } catch (error) {
+            console.error('❌ Error saving exercise:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    },
+
+    /**
+     * Get all exercises for a user
+     * @param {string} userId - User ID
+     * @returns {Promise<Array>} Array of exercises
+     */
+    async getUserExercises(userId) {
         try {
-            const params = new URLSearchParams({ userId, ...filters });
-            const response = await axiosInstance.get(`/api/notebook/entries?${params}`);
-            return response.data;
+            const response = await axios.get(`${API_URL}/api/notebook/exercises/${userId}`);
+            return response.data.exercises || [];
         } catch (error) {
-            console.error('❌ Get entries error:', error);
-            return { success: false, error: error.message };
+            console.error('❌ Error fetching exercises:', error);
+            return [];
         }
-    }
+    },
 
-    async getRecentEntries(userId, limit = 5) {
+    /**
+     * Get exercises by topic
+     * @param {string} userId - User ID
+     * @param {string} topic - Topic name
+     * @returns {Promise<Array>} Array of exercises
+     */
+    async getExercisesByTopic(userId, topic) {
         try {
-            const response = await axiosInstance.get('/api/notebook/recent', {
-                params: { userId, limit }
-            });
-            return response.data;
+            const response = await axios.get(`${API_URL}/api/notebook/exercises/${userId}/${topic}`);
+            return response.data.exercises || [];
         } catch (error) {
-            console.error('❌ Get recent entries error:', error);
-            return { success: false, error: error.message };
+            console.error('❌ Error fetching exercises by topic:', error);
+            return [];
         }
-    }
+    },
 
-    async getStats(userId) {
+    /**
+     * Delete an exercise
+     * @param {string} exerciseId - Exercise ID
+     * @returns {Promise<boolean>} Success status
+     */
+    async deleteExercise(exerciseId) {
         try {
-            const response = await axiosInstance.get('/api/notebook/stats', {
-                params: { userId }
-            });
-            return response.data;
+            await axios.delete(`${API_URL}/api/notebook/exercise/${exerciseId}`);
+            return true;
         } catch (error) {
-            console.error('❌ Get stats error:', error);
-            return { success: false, error: error.message };
+            console.error('❌ Error deleting exercise:', error);
+            return false;
         }
-    }
+    },
 
-    async deleteEntry(entryId, userId) {
+    /**
+     * Get user stats (from curriculum endpoint)
+     * @param {string} userId - User ID
+     * @returns {Promise<Object>} Stats object
+     */
+    async getUserStats(userId) {
         try {
-            const response = await axiosInstance.delete(`/api/notebook/entry/${entryId}`, {
-                data: { userId }
-            });
-            return response.data;
+            const response = await axios.get(`${API_URL}/api/curriculum/stats/overall/${userId}`);
+            return {
+                questionsAnswered: response.data.totalExercises || 0,
+                correctAnswers: response.data.correctAnswers || 0,
+                streak: response.data.currentStreak || 0,
+                practiceTime: response.data.totalPracticeTime || 0
+            };
         } catch (error) {
-            console.error('❌ Delete entry error:', error);
-            return { success: false, error: error.message };
+            console.error('❌ Error fetching stats:', error);
+            return {
+                questionsAnswered: 0,
+                correctAnswers: 0,
+                streak: 0,
+                practiceTime: 0
+            };
         }
     }
+};
 
-    async getEntriesByTopic(userId, topicId) {
-        try {
-            const response = await axiosInstance.get(`/api/notebook/topic/${topicId}`, {
-                params: { userId }
-            });
-            return response.data;
-        } catch (error) {
-            console.error('❌ Get topic entries error:', error);
-            return { success: false, error: error.message };
-        }
-    }
-}
-
-export default new NotebookAPI();
+export default notebookService;
