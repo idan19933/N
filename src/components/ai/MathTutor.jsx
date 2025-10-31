@@ -1,4 +1,4 @@
-// src/components/ai/MathTutor.jsx - COMPLETE WITH VOICE SUPPORT 🎤🔊
+// src/components/ai/MathTutor.jsx - COMPLETE MODERN ENHANCED UI 🎨✨
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -32,8 +32,62 @@ import {
     AreaChart,
     ComposedChart
 } from 'recharts';
+import '../../styles/mathFormatting.css';
 
 const API_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+
+// ==================== 🎨 ANIMATION VARIANTS ====================
+const pageTransition = {
+    initial: { opacity: 0, y: 20, scale: 0.98 },
+    animate: {
+        opacity: 1,
+        y: 0,
+        scale: 1,
+        transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] }
+    },
+    exit: {
+        opacity: 0,
+        y: -20,
+        scale: 0.98,
+        transition: { duration: 0.3 }
+    }
+};
+
+const cardHover = {
+    rest: { scale: 1, y: 0 },
+    hover: {
+        scale: 1.03,
+        y: -8,
+        transition: { duration: 0.3, ease: [0.22, 1, 0.36, 1] }
+    },
+    tap: { scale: 0.97 }
+};
+
+const fadeInUp = {
+    hidden: { opacity: 0, y: 30 },
+    visible: (custom = 0) => ({
+        opacity: 1,
+        y: 0,
+        transition: {
+            delay: custom * 0.1,
+            duration: 0.6,
+            ease: [0.22, 1, 0.36, 1]
+        }
+    })
+};
+
+const scaleIn = {
+    hidden: { opacity: 0, scale: 0.8 },
+    visible: {
+        opacity: 1,
+        scale: 1,
+        transition: {
+            type: "spring",
+            stiffness: 200,
+            damping: 20
+        }
+    }
+};
 
 // ==================== 🎤 VOICE SUPPORT HOOK ====================
 const useVoiceSupport = () => {
@@ -131,6 +185,7 @@ const useVoiceSupport = () => {
         toggleVoice
     };
 };
+
 // ==================== 📊 CURRICULUM TRACKING FUNCTION ====================
 const trackCurriculumProgress = async (userId, exerciseData) => {
     if (!userId) {
@@ -203,7 +258,6 @@ const saveExerciseToNotebook = async (userId, exerciseData) => {
     }
 };
 
-
 // ==================== MATH FORMATTER UTILITY ====================
 const formatMathText = (text) => {
     if (!text) return text;
@@ -246,39 +300,133 @@ const formatMathText = (text) => {
     return formatted;
 };
 
-// ==================== MATH DISPLAY COMPONENT ====================
+// ==================== 📝 MATH DISPLAY COMPONENT ====================
 const MathDisplay = ({ children, className = '', inline = false }) => {
-    const formatted = formatMathText(children);
+    if (!children) return null;
 
-    const style = {
-        fontFamily: 'Georgia, "Times New Roman", serif',
-        letterSpacing: '0.02em',
-        lineHeight: inline ? 'inherit' : '1.6'
+    let formatted = formatMathText(children);
+
+    formatted = formatted.replace(/([.?!])\s*([א-ת])\./g, '$1\n\n$2.');
+    formatted = formatted.replace(/\s+([א-ת])\.\s+/g, '\n\n$1. ');
+
+    const paragraphs = formatted.split(/\n\n+/);
+
+    const baseStyle = {
+        fontFamily: "'Segoe UI', 'Assistant', 'Arial', 'Helvetica', sans-serif",
+        direction: 'rtl',
+        textAlign: 'right'
+    };
+
+    const blockStyle = {
+        ...baseStyle,
+        fontSize: '1.4rem',
+        lineHeight: '2.6',
+        letterSpacing: '0.04em',
+        wordSpacing: '0.2em',
+        whiteSpace: 'pre-wrap',
+        wordBreak: 'break-word',
+        overflowWrap: 'break-word',
+        maxWidth: '100%'
+    };
+
+    const inlineStyle = {
+        ...baseStyle,
+        display: 'inline',
+        fontSize: 'inherit',
+        lineHeight: 'inherit'
     };
 
     if (inline) {
         return (
-            <span className={`math-text ${className}`} style={style}>
+            <span className={`math-inline ${className}`} style={inlineStyle}>
                 {formatted}
             </span>
         );
     }
 
     return (
-        <div className={`math-text ${className}`} style={style}>
-            {formatted}
+        <div className={`math-text hebrew-math-mixed ${className}`} style={blockStyle}>
+            {paragraphs.map((paragraph, idx) => {
+                const isListItem = /^[א-ת]\./.test(paragraph.trim());
+                const parts = paragraph.split(/(\$\$[^\$]+\$\$|\$[^\$]+\$)/g);
+
+                return (
+                    <div
+                        key={idx}
+                        style={{
+                            marginBottom: idx < paragraphs.length - 1 ? '1.8rem' : 0,
+                            paddingRight: isListItem ? '0' : '0',
+                            position: 'relative'
+                        }}
+                    >
+                        {parts.map((part, partIdx) => {
+                            if (part.startsWith('$$') && part.endsWith('$$')) {
+                                const math = part.slice(2, -2);
+                                return (
+                                    <div
+                                        key={partIdx}
+                                        className="math-expression-block"
+                                        style={{
+                                            fontFamily: "'Cambria Math', 'Times New Roman', serif",
+                                            fontSize: '1.6rem',
+                                            fontWeight: 600,
+                                            padding: '1.2rem 1.8rem',
+                                            background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(14, 165, 233, 0.06))',
+                                            borderRadius: '12px',
+                                            display: 'block',
+                                            margin: '1.2rem 0',
+                                            border: '2px solid rgba(59, 130, 246, 0.2)',
+                                            direction: 'ltr',
+                                            textAlign: 'center',
+                                            boxShadow: '0 2px 10px rgba(59, 130, 246, 0.08)'
+                                        }}
+                                    >
+                                        {math}
+                                    </div>
+                                );
+                            }
+                            else if (part.startsWith('$') && part.endsWith('$')) {
+                                const math = part.slice(1, -1);
+                                return (
+                                    <span
+                                        key={partIdx}
+                                        className="math-expression-inline"
+                                        style={{
+                                            fontFamily: "'Cambria Math', 'Times New Roman', serif",
+                                            fontSize: '1.3rem',
+                                            fontWeight: 600,
+                                            padding: '0.3rem 0.8rem',
+                                            background: 'rgba(59, 130, 246, 0.08)',
+                                            borderRadius: '8px',
+                                            display: 'inline-block',
+                                            margin: '0 0.4rem',
+                                            border: '1px solid rgba(59, 130, 246, 0.15)',
+                                            direction: 'ltr',
+                                            whiteSpace: 'nowrap'
+                                        }}
+                                    >
+                                        {math}
+                                    </span>
+                                );
+                            }
+
+                            return part.split('\n').map((line, lineIdx, arr) => (
+                                <React.Fragment key={`${partIdx}-${lineIdx}`}>
+                                    <span style={{ display: 'inline' }}>{line}</span>
+                                    {lineIdx < arr.length - 1 && <br />}
+                                </React.Fragment>
+                            ));
+                        })}
+                    </div>
+                );
+            })}
         </div>
     );
 };
 
 // ==================== SVG VISUAL COMPONENT ====================
 const SVGVisual = ({ visualData }) => {
-    console.log('🔺 Rendering SVG Visual:', visualData?.type);
-
-    if (!visualData?.svg) {
-        console.warn('⚠️ No SVG data in visualData');
-        return null;
-    }
+    if (!visualData?.svg) return null;
 
     const getTitle = (type) => {
         switch (type) {
@@ -290,16 +438,14 @@ const SVGVisual = ({ visualData }) => {
         }
     };
 
-    const Icon = Target;
-
     return (
         <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50 rounded-2xl border-4 border-purple-300 p-6 mb-6 shadow-xl"
+            className="bg-gradient-to-br from-blue-50 via-cyan-50 to-sky-50 rounded-2xl border-4 border-blue-300 p-6 mb-6 shadow-xl"
         >
             <div className="flex items-center gap-3 mb-4 bg-white/80 backdrop-blur-sm rounded-xl p-3">
-                <Icon className="w-6 h-6 text-purple-600" />
+                <Target className="w-6 h-6 text-blue-600" />
                 <span className="font-black text-xl text-gray-800">{getTitle(visualData.type)}</span>
             </div>
 
@@ -313,60 +459,56 @@ const SVGVisual = ({ visualData }) => {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.3 }}
-                    className="mt-6 p-5 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-2xl border-3 border-blue-300 shadow-lg"
+                    className="mt-6 p-5 bg-gradient-to-r from-cyan-50 to-sky-50 rounded-2xl border-3 border-cyan-300 shadow-lg"
                 >
-                    <div className="text-base font-black text-blue-900 mb-3 flex items-center gap-2">
+                    <div className="text-base font-black text-cyan-900 mb-3 flex items-center gap-2">
                         📐 מידות התרשים:
                     </div>
-                    <div className="text-base text-blue-900 space-y-2">
+                    <div className="text-base text-cyan-900 space-y-2">
                         {visualData.svgData.sideA && (
                             <div className="flex items-center gap-3 bg-white/70 p-2 rounded-lg">
-                                <span className="font-mono bg-purple-200 px-3 py-1 rounded-lg font-bold text-lg">A</span>
+                                <span className="font-mono bg-blue-200 px-3 py-1 rounded-lg font-bold text-lg">A</span>
                                 <span className="font-bold">צלע: {visualData.svgData.sideA} ס"מ</span>
                             </div>
                         )}
                         {visualData.svgData.sideB && (
                             <div className="flex items-center gap-3 bg-white/70 p-2 rounded-lg">
-                                <span className="font-mono bg-pink-200 px-3 py-1 rounded-lg font-bold text-lg">B</span>
+                                <span className="font-mono bg-cyan-200 px-3 py-1 rounded-lg font-bold text-lg">B</span>
                                 <span className="font-bold">צלע: {visualData.svgData.sideB} ס"מ</span>
                             </div>
                         )}
                         {visualData.svgData.sideC && (
                             <div className="flex items-center gap-3 bg-white/70 p-2 rounded-lg">
-                                <span className="font-mono bg-orange-200 px-3 py-1 rounded-lg font-bold text-lg">C</span>
+                                <span className="font-mono bg-sky-200 px-3 py-1 rounded-lg font-bold text-lg">C</span>
                                 <span className="font-bold">צלע: {visualData.svgData.sideC} ס"מ</span>
                             </div>
                         )}
                         {visualData.svgData.width && (
                             <div className="flex items-center gap-3 bg-white/70 p-2 rounded-lg">
                                 <span className="font-bold text-lg">רוחב:</span>
-                                <span className="text-lg font-black text-purple-700">{visualData.svgData.width} ס"מ</span>
+                                <span className="text-lg font-black text-blue-700">{visualData.svgData.width} ס"מ</span>
                             </div>
                         )}
                         {visualData.svgData.height && (
                             <div className="flex items-center gap-3 bg-white/70 p-2 rounded-lg">
                                 <span className="font-bold text-lg">גובה:</span>
-                                <span className="text-lg font-black text-pink-700">{visualData.svgData.height} ס"מ</span>
+                                <span className="text-lg font-black text-cyan-700">{visualData.svgData.height} ס"מ</span>
                             </div>
                         )}
                         {visualData.svgData.radius && (
                             <div className="flex items-center gap-3 bg-white/70 p-2 rounded-lg">
                                 <span className="font-bold text-lg">רדיוס:</span>
-                                <span className="text-lg font-black text-orange-700">{visualData.svgData.radius} ס"מ</span>
+                                <span className="text-lg font-black text-sky-700">{visualData.svgData.radius} ס"מ</span>
                             </div>
                         )}
                     </div>
                 </motion.div>
             )}
-
-            <div className="text-sm text-gray-600 text-center mt-4 font-semibold bg-yellow-50 p-2 rounded-lg">
-                ✨ תרשים אינטראקטיבי - הניח עכבר על האלמנטים
-            </div>
         </motion.div>
     );
 };
 
-// ==================== BOX PLOT COMPONENT ====================
+// ==================== BOX PLOT & CHART COMPONENTS ====================
 const BoxPlotVisualization = ({ data, label = 'תרשים קופסה' }) => {
     if (!data || data.length === 0) return null;
 
@@ -388,17 +530,17 @@ const BoxPlotVisualization = ({ data, label = 'תרשים קופסה' }) => {
         <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl border-4 border-purple-300 p-6 mb-6 shadow-xl"
+            className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-2xl border-4 border-blue-300 p-6 mb-6 shadow-xl"
         >
             <div className="flex items-center gap-3 mb-6 bg-white/80 backdrop-blur-sm rounded-xl p-3">
-                <Box className="w-6 h-6 text-purple-600" />
+                <Box className="w-6 h-6 text-blue-600" />
                 <span className="font-black text-xl text-gray-800">{label}</span>
             </div>
 
             <div className="relative h-48 bg-white rounded-2xl p-8 mb-6 shadow-inner">
                 <div className="absolute bottom-12 left-8 right-8 h-24">
                     <div
-                        className="absolute bg-purple-500 h-1"
+                        className="absolute bg-blue-500 h-1"
                         style={{
                             left: `${((min - min) / range) * 100}%`,
                             width: `${((q1 - min) / range) * 100}%`,
@@ -406,17 +548,15 @@ const BoxPlotVisualization = ({ data, label = 'תרשים קופסה' }) => {
                             transform: 'translateY(-50%)'
                         }}
                     />
-
                     <div
-                        className="absolute bg-purple-700 w-1 h-12"
+                        className="absolute bg-blue-700 w-1 h-12"
                         style={{
                             left: `${((min - min) / range) * 100}%`,
                             top: '25%'
                         }}
                     />
-
                     <div
-                        className="absolute bg-gradient-to-r from-purple-200 to-purple-300 border-4 border-purple-600 rounded-lg shadow-lg"
+                        className="absolute bg-gradient-to-r from-blue-200 to-cyan-300 border-4 border-blue-600 rounded-lg shadow-lg"
                         style={{
                             left: `${((q1 - min) / range) * 100}%`,
                             width: `${((q3 - q1) / range) * 100}%`,
@@ -425,15 +565,14 @@ const BoxPlotVisualization = ({ data, label = 'תרשים קופסה' }) => {
                         }}
                     >
                         <div
-                            className="absolute bg-purple-900 w-1 h-full"
+                            className="absolute bg-blue-900 w-1 h-full"
                             style={{
                                 left: `${((median - q1) / (q3 - q1)) * 100}%`
                             }}
                         />
                     </div>
-
                     <div
-                        className="absolute bg-purple-500 h-1"
+                        className="absolute bg-blue-500 h-1"
                         style={{
                             left: `${((q3 - min) / range) * 100}%`,
                             width: `${((max - q3) / range) * 100}%`,
@@ -441,9 +580,8 @@ const BoxPlotVisualization = ({ data, label = 'תרשים קופסה' }) => {
                             transform: 'translateY(-50%)'
                         }}
                     />
-
                     <div
-                        className="absolute bg-purple-700 w-1 h-12"
+                        className="absolute bg-blue-700 w-1 h-12"
                         style={{
                             left: `${((max - min) / range) * 100}%`,
                             top: '25%'
@@ -453,47 +591,46 @@ const BoxPlotVisualization = ({ data, label = 'תרשים קופסה' }) => {
 
                 <div className="absolute bottom-0 left-8 right-8 flex justify-between text-xs font-bold text-gray-700">
                     <span className="bg-white px-2 py-1 rounded shadow">Min<br/>{min}</span>
-                    <span className="bg-purple-100 px-2 py-1 rounded shadow">Q1<br/>{q1}</span>
-                    <span className="bg-purple-200 px-2 py-1 rounded shadow border-2 border-purple-900">Q2<br/>{median}</span>
-                    <span className="bg-purple-100 px-2 py-1 rounded shadow">Q3<br/>{q3}</span>
+                    <span className="bg-blue-100 px-2 py-1 rounded shadow">Q1<br/>{q1}</span>
+                    <span className="bg-cyan-200 px-2 py-1 rounded shadow border-2 border-blue-900">Q2<br/>{median}</span>
+                    <span className="bg-blue-100 px-2 py-1 rounded shadow">Q3<br/>{q3}</span>
                     <span className="bg-white px-2 py-1 rounded shadow">Max<br/>{max}</span>
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                <div className="bg-purple-50 p-3 rounded-lg border border-purple-200">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
                     <div className="text-xs text-gray-600 mb-1">רבעון ראשון</div>
-                    <div className="text-xl font-bold text-purple-700">Q1 = {q1}</div>
+                    <div className="text-xl font-bold text-blue-700">Q1 = {q1}</div>
                 </div>
-                <div className="bg-purple-100 p-3 rounded-lg border-2 border-purple-600">
+                <div className="bg-cyan-100 p-3 rounded-lg border-2 border-cyan-600">
                     <div className="text-xs text-gray-600 mb-1">חציון</div>
-                    <div className="text-xl font-bold text-purple-900">Q2 = {median}</div>
+                    <div className="text-xl font-bold text-cyan-900">Q2 = {median}</div>
                 </div>
-                <div className="bg-purple-50 p-3 rounded-lg border border-purple-200">
+                <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
                     <div className="text-xs text-gray-600 mb-1">רבעון שלישי</div>
-                    <div className="text-xl font-bold text-purple-700">Q3 = {q3}</div>
+                    <div className="text-xl font-bold text-blue-700">Q3 = {q3}</div>
                 </div>
-                <div className="bg-yellow-50 p-3 rounded-lg border-2 border-yellow-400">
+                <div className="bg-amber-50 p-3 rounded-lg border-2 border-amber-400">
                     <div className="text-xs text-gray-700 mb-1 font-semibold">תחום בין-רבעוני</div>
-                    <div className="text-xl font-bold text-yellow-700">IQR = {iqr}</div>
+                    <div className="text-xl font-bold text-amber-700">IQR = {iqr}</div>
                 </div>
             </div>
         </motion.div>
     );
 };
 
-// ==================== BAR CHART & HISTOGRAM COMPONENTS ====================
-const BarChartVisualization = ({ data, xLabel = 'קטגוריה', yLabel = 'ערך', label = 'גרף עמודות', color = '#9333ea' }) => {
+const BarChartVisualization = ({ data, xLabel = 'קטגוריה', yLabel = 'ערך', label = 'גרף עמודות', color = '#3b82f6' }) => {
     if (!data || data.length === 0) return null;
 
     return (
         <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl border-4 border-purple-300 p-6 mb-6 shadow-xl"
+            className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-2xl border-4 border-blue-300 p-6 mb-6 shadow-xl"
         >
             <div className="flex items-center gap-3 mb-4 bg-white/80 backdrop-blur-sm rounded-xl p-3">
-                <BarChart3 className="w-6 h-6 text-purple-600" />
+                <BarChart3 className="w-6 h-6 text-blue-600" />
                 <span className="font-black text-xl text-gray-800">{label}</span>
             </div>
 
@@ -503,7 +640,7 @@ const BarChartVisualization = ({ data, xLabel = 'קטגוריה', yLabel = 'ער
                         <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                         <XAxis dataKey="x" stroke="#6b7280" label={{ value: xLabel, position: 'insideBottom', offset: -5 }} />
                         <YAxis stroke="#6b7280" label={{ value: yLabel, angle: -90, position: 'insideLeft' }} />
-                        <Tooltip contentStyle={{ backgroundColor: '#ffffff', border: '2px solid #9333ea', borderRadius: '8px' }} />
+                        <Tooltip contentStyle={{ backgroundColor: '#ffffff', border: '2px solid #3b82f6', borderRadius: '8px' }} />
                         <Bar dataKey="y" fill={color} radius={[8, 8, 0, 0]} />
                     </RechartsBarChart>
                 </ResponsiveContainer>
@@ -528,8 +665,7 @@ const HistogramVisualization = ({ data, bins = 5, xLabel = 'טווח', yLabel = 
 
         histogramData.push({
             x: `${binStart.toFixed(1)}-${binEnd.toFixed(1)}`,
-            y: count,
-            label: `${binStart.toFixed(1)} - ${binEnd.toFixed(1)}: ${count} תצפיות`
+            y: count
         });
     }
 
@@ -537,10 +673,10 @@ const HistogramVisualization = ({ data, bins = 5, xLabel = 'טווח', yLabel = 
         <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl border-4 border-purple-300 p-6 mb-6 shadow-xl"
+            className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-2xl border-4 border-blue-300 p-6 mb-6 shadow-xl"
         >
             <div className="flex items-center gap-3 mb-4 bg-white/80 backdrop-blur-sm rounded-xl p-3">
-                <BarChart3 className="w-6 h-6 text-purple-600" />
+                <BarChart3 className="w-6 h-6 text-blue-600" />
                 <span className="font-black text-xl text-gray-800">{label}</span>
             </div>
 
@@ -550,8 +686,8 @@ const HistogramVisualization = ({ data, bins = 5, xLabel = 'טווח', yLabel = 
                         <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                         <XAxis dataKey="x" stroke="#6b7280" label={{ value: xLabel, position: 'insideBottom', offset: -5 }} />
                         <YAxis stroke="#6b7280" label={{ value: yLabel, angle: -90, position: 'insideLeft' }} />
-                        <Tooltip contentStyle={{ backgroundColor: '#ffffff', border: '2px solid #9333ea', borderRadius: '8px' }} />
-                        <Bar dataKey="y" fill="#ec4899" radius={[8, 8, 0, 0]} />
+                        <Tooltip contentStyle={{ backgroundColor: '#ffffff', border: '2px solid #3b82f6', borderRadius: '8px' }} />
+                        <Bar dataKey="y" fill="#0ea5e9" radius={[8, 8, 0, 0]} />
                     </RechartsBarChart>
                 </ResponsiveContainer>
             </div>
@@ -569,7 +705,7 @@ const VisualGraph = ({ visualData }) => {
         return <SVGVisual visualData={visualData} />;
     }
 
-    const { points, data, equation, xRange = [-10, 10], yRange = [-10, 10], color = '#9333ea', label = 'גרף', xLabel = 'x', yLabel = 'y', bins = 5 } = visualData;
+    const { points, data, equation, xRange = [-10, 10], yRange = [-10, 10], color = '#3b82f6', label = 'גרף', xLabel = 'x', yLabel = 'y', bins = 5 } = visualData;
 
     if (type === 'boxplot' && data) {
         return <BoxPlotVisualization data={data} label={label} />;
@@ -585,9 +721,9 @@ const VisualGraph = ({ visualData }) => {
 
     if (type === 'scatter' && points && points.length > 0) {
         return (
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl border-4 border-purple-300 p-6 mb-6 shadow-xl">
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-2xl border-4 border-blue-300 p-6 mb-6 shadow-xl">
                 <div className="flex items-center gap-3 mb-4 bg-white/80 backdrop-blur-sm rounded-xl p-3">
-                    <LineChart className="w-6 h-6 text-purple-600" />
+                    <LineChart className="w-6 h-6 text-blue-600" />
                     <span className="font-black text-xl text-gray-800">{label}</span>
                 </div>
                 <div className="bg-white rounded-2xl p-4 shadow-inner">
@@ -596,7 +732,7 @@ const VisualGraph = ({ visualData }) => {
                             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                             <XAxis dataKey="x" type="number" stroke="#6b7280" domain={xRange} />
                             <YAxis dataKey="y" type="number" stroke="#6b7280" domain={yRange} />
-                            <Tooltip contentStyle={{ backgroundColor: '#ffffff', border: '2px solid #9333ea', borderRadius: '8px' }} />
+                            <Tooltip contentStyle={{ backgroundColor: '#ffffff', border: '2px solid #3b82f6', borderRadius: '8px' }} />
                             <ReferenceLine x={0} stroke="#9ca3af" strokeWidth={1} />
                             <ReferenceLine y={0} stroke="#9ca3af" strokeWidth={1} />
                             <Scatter data={points} fill={color} />
@@ -648,9 +784,9 @@ const VisualGraph = ({ visualData }) => {
     if (graphData.length === 0) return null;
 
     return (
-        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl border-4 border-purple-300 p-6 mb-6 shadow-xl">
+        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-2xl border-4 border-blue-300 p-6 mb-6 shadow-xl">
             <div className="flex items-center gap-3 mb-4 bg-white/80 backdrop-blur-sm rounded-xl p-3">
-                <LineChart className="w-6 h-6 text-purple-600" />
+                <LineChart className="w-6 h-6 text-blue-600" />
                 <span className="font-black text-xl text-gray-800">{label}</span>
                 {equation && <span className="text-sm text-gray-600 font-mono bg-white px-3 py-1 rounded-lg shadow"><MathDisplay inline>{equation}</MathDisplay></span>}
             </div>
@@ -660,7 +796,7 @@ const VisualGraph = ({ visualData }) => {
                         <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                         <XAxis dataKey="x" stroke="#6b7280" />
                         <YAxis stroke="#6b7280" domain={yRange} />
-                        <Tooltip contentStyle={{ backgroundColor: '#ffffff', border: '2px solid #9333ea', borderRadius: '8px' }} />
+                        <Tooltip contentStyle={{ backgroundColor: '#ffffff', border: '2px solid #3b82f6', borderRadius: '8px' }} />
                         <ReferenceLine x={0} stroke="#9ca3af" strokeWidth={2} />
                         <ReferenceLine y={0} stroke="#9ca3af" strokeWidth={2} />
                         <Line type="monotone" dataKey="y" stroke={color} strokeWidth={3} dot={false} />
@@ -671,7 +807,6 @@ const VisualGraph = ({ visualData }) => {
     );
 };
 
-// ==================== AI CHAT SIDEBAR ====================
 // ==================== AI CHAT SIDEBAR ====================
 const AIChatSidebar = ({ question, studentProfile, isOpen, onToggle, currentAnswer }) => {
     const [messages, setMessages] = useState([]);
@@ -746,15 +881,28 @@ const AIChatSidebar = ({ question, studentProfile, isOpen, onToggle, currentAnsw
 
     if (!isOpen) {
         return (
-            <motion.button initial={{ x: -100 }} animate={{ x: 0 }} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={onToggle} className="fixed right-4 top-1/2 -translate-y-1/2 bg-gradient-to-r from-purple-600 to-pink-600 text-white p-4 rounded-full shadow-2xl z-50">
+            <motion.button
+                initial={{ x: -100 }}
+                animate={{ x: 0 }}
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={onToggle}
+                className="fixed right-4 top-1/2 -translate-y-1/2 bg-gradient-to-r from-blue-600 to-cyan-600 text-white p-4 rounded-full shadow-2xl z-50"
+            >
                 <MessageCircle className="w-6 h-6" />
             </motion.button>
         );
     }
 
     return (
-        <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} className="fixed right-0 top-0 h-full w-96 bg-white shadow-2xl z-50 flex flex-col" dir="rtl">
-            <div className="bg-gradient-to-r from-purple-600 to-pink-600 text-white p-4 flex items-center justify-between">
+        <motion.div
+            initial={{ x: '100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '100%' }}
+            className="fixed right-0 top-0 h-full w-96 bg-white shadow-2xl z-50 flex flex-col"
+            dir="rtl"
+        >
+            <div className="bg-gradient-to-r from-blue-600 to-cyan-600 text-white p-4 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                     <Brain className="w-6 h-6" />
                     <span className="font-bold">עוזר AI - נקסון</span>
@@ -764,10 +912,15 @@ const AIChatSidebar = ({ question, studentProfile, isOpen, onToggle, currentAnsw
                 </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gradient-to-b from-purple-50 to-pink-50">
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gradient-to-b from-blue-50 to-cyan-50">
                 {messages.map((message, index) => (
-                    <motion.div key={index} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className={`flex ${message.role === 'user' ? 'justify-start' : 'justify-end'}`}>
-                        <div className={`max-w-[85%] rounded-2xl p-4 ${message.role === 'user' ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white' : 'bg-white shadow-lg text-gray-900'}`}>
+                    <motion.div
+                        key={index}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className={`flex ${message.role === 'user' ? 'justify-start' : 'justify-end'}`}
+                    >
+                        <div className={`max-w-[85%] rounded-2xl p-4 ${message.role === 'user' ? 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white' : 'bg-white shadow-lg text-gray-900'}`}>
                             <div className="whitespace-pre-wrap text-sm">
                                 <MathDisplay inline>{message.content}</MathDisplay>
                             </div>
@@ -779,7 +932,7 @@ const AIChatSidebar = ({ question, studentProfile, isOpen, onToggle, currentAnsw
                     <div className="flex justify-end">
                         <div className="bg-white rounded-2xl p-4 shadow-lg">
                             <div className="flex items-center gap-2">
-                                <Loader2 className="w-4 h-4 animate-spin text-purple-600" />
+                                <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
                                 <span className="text-sm text-gray-600">נקסון חושב...</span>
                             </div>
                         </div>
@@ -791,7 +944,11 @@ const AIChatSidebar = ({ question, studentProfile, isOpen, onToggle, currentAnsw
             {messages.length <= 1 && (
                 <div className="p-3 grid grid-cols-2 gap-2 bg-white border-t">
                     {quickActions.map((action, index) => (
-                        <button key={index} onClick={() => sendMessage(action.prompt)} className="p-2 rounded-xl bg-purple-50 hover:bg-purple-100 transition-all border border-purple-200 text-xs font-bold text-gray-700">
+                        <button
+                            key={index}
+                            onClick={() => sendMessage(action.prompt)}
+                            className="p-2 rounded-xl bg-blue-50 hover:bg-blue-100 transition-all border border-blue-200 text-xs font-bold text-gray-700"
+                        >
                             {action.label}
                         </button>
                     ))}
@@ -800,8 +957,20 @@ const AIChatSidebar = ({ question, studentProfile, isOpen, onToggle, currentAnsw
 
             <div className="p-4 bg-white border-t">
                 <div className="flex gap-2">
-                    <input type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && sendMessage()} placeholder="שאל אותי..." disabled={loading} className="flex-1 px-3 py-2 rounded-xl bg-gray-100 border border-gray-300 focus:border-purple-500 focus:outline-none text-sm" />
-                    <button onClick={() => sendMessage()} disabled={!input.trim() || loading} className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl disabled:opacity-50">
+                    <input
+                        type="text"
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                        placeholder="שאל אותי..."
+                        disabled={loading}
+                        className="flex-1 px-3 py-2 rounded-xl bg-gray-100 border border-gray-300 focus:border-blue-500 focus:outline-none text-sm"
+                    />
+                    <button
+                        onClick={() => sendMessage()}
+                        disabled={!input.trim() || loading}
+                        className="px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-xl disabled:opacity-50"
+                    >
                         <Send className="w-4 h-4" />
                     </button>
                 </div>
@@ -813,22 +982,81 @@ const AIChatSidebar = ({ question, studentProfile, isOpen, onToggle, currentAnsw
 // ==================== THINKING ANIMATION ====================
 const ThinkingAnimation = ({ message = "נקסון חושב..." }) => {
     return (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center justify-center py-16">
-            <motion.div animate={{ rotate: 360, scale: [1, 1.1, 1] }} transition={{ rotate: { duration: 2, repeat: Infinity, ease: "linear" }, scale: { duration: 1.5, repeat: Infinity, ease: "easeInOut" } }} className="relative mb-6">
-                <motion.div animate={{ rotate: -360, scale: [1, 1.2, 1] }} transition={{ rotate: { duration: 3, repeat: Infinity, ease: "linear" }, scale: { duration: 2, repeat: Infinity, ease: "easeInOut" } }} className="absolute inset-0 w-32 h-32 border-4 border-purple-200 rounded-full" style={{ borderTopColor: 'transparent', borderRightColor: 'transparent' }} />
-                <motion.div animate={{ rotate: 360, scale: [1, 1.15, 1] }} transition={{ rotate: { duration: 2.5, repeat: Infinity, ease: "linear" }, scale: { duration: 1.8, repeat: Infinity, ease: "easeInOut", delay: 0.2 } }} className="absolute inset-2 w-28 h-28 border-4 border-pink-200 rounded-full" style={{ borderBottomColor: 'transparent', borderLeftColor: 'transparent' }} />
-                <div className="w-32 h-32 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center shadow-2xl">
+        <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="flex flex-col items-center justify-center py-16"
+        >
+            <motion.div
+                animate={{
+                    rotate: 360,
+                    scale: [1, 1.1, 1]
+                }}
+                transition={{
+                    rotate: { duration: 2, repeat: Infinity, ease: "linear" },
+                    scale: { duration: 1.5, repeat: Infinity, ease: "easeInOut" }
+                }}
+                className="relative mb-6"
+            >
+                <motion.div
+                    animate={{
+                        rotate: -360,
+                        scale: [1, 1.2, 1]
+                    }}
+                    transition={{
+                        rotate: { duration: 3, repeat: Infinity, ease: "linear" },
+                        scale: { duration: 2, repeat: Infinity, ease: "easeInOut" }
+                    }}
+                    className="absolute inset-0 w-32 h-32 border-4 border-blue-200 rounded-full"
+                    style={{
+                        borderTopColor: 'transparent',
+                        borderRightColor: 'transparent'
+                    }}
+                />
+                <motion.div
+                    animate={{
+                        rotate: 360,
+                        scale: [1, 1.15, 1]
+                    }}
+                    transition={{
+                        rotate: { duration: 2.5, repeat: Infinity, ease: "linear" },
+                        scale: { duration: 1.8, repeat: Infinity, ease: "easeInOut", delay: 0.2 }
+                    }}
+                    className="absolute inset-2 w-28 h-28 border-4 border-cyan-200 rounded-full"
+                    style={{
+                        borderBottomColor: 'transparent',
+                        borderLeftColor: 'transparent'
+                    }}
+                />
+                <div className="w-32 h-32 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-full flex items-center justify-center shadow-2xl">
                     <Brain className="w-16 h-16 text-white" />
                 </div>
             </motion.div>
 
-            <motion.div animate={{ opacity: [0.5, 1, 0.5] }} transition={{ duration: 1.5, repeat: Infinity }} className="text-xl font-bold text-gray-700 mb-2">
+            <motion.div
+                animate={{ opacity: [0.5, 1, 0.5] }}
+                transition={{ duration: 1.5, repeat: Infinity }}
+                className="text-xl font-bold text-gray-700 mb-2"
+            >
                 {message}
             </motion.div>
 
             <div className="flex gap-2">
                 {[0, 1, 2].map((i) => (
-                    <motion.div key={i} animate={{ y: [0, -10, 0], scale: [1, 1.2, 1] }} transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.2 }} className="w-3 h-3 bg-purple-500 rounded-full" />
+                    <motion.div
+                        key={i}
+                        animate={{
+                            y: [0, -10, 0],
+                            scale: [1, 1.2, 1]
+                        }}
+                        transition={{
+                            duration: 0.6,
+                            repeat: Infinity,
+                            delay: i * 0.2
+                        }}
+                        className="w-3 h-3 bg-blue-500 rounded-full"
+                    />
                 ))}
             </div>
         </motion.div>
@@ -841,17 +1069,27 @@ const LiveFeedbackIndicator = ({ status }) => {
 
     return (
         <AnimatePresence mode="wait">
-            <motion.div key={status} initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }} className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
+            <motion.div
+                key={status}
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8 }}
+                className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-2"
+            >
                 {status === 'checking' && (
                     <>
-                        <Loader2 className="w-4 h-4 text-purple-500 animate-spin" />
-                        <span className="text-sm text-purple-600 font-medium">בודק...</span>
+                        <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+                        <span className="text-sm text-blue-600 font-medium">בודק...</span>
                     </>
                 )}
 
                 {status === 'correct' && (
                     <>
-                        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 500 }}>
+                        <motion.div
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            transition={{ type: "spring", stiffness: 500 }}
+                        >
                             <CheckCircle2 className="w-5 h-5 text-green-500" />
                         </motion.div>
                         <span className="text-sm text-green-600 font-bold">נכון! ✓</span>
@@ -860,7 +1098,11 @@ const LiveFeedbackIndicator = ({ status }) => {
 
                 {status === 'wrong' && (
                     <>
-                        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 500 }}>
+                        <motion.div
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            transition={{ type: "spring", stiffness: 500 }}
+                        >
                             <XCircle className="w-5 h-5 text-red-500" />
                         </motion.div>
                         <span className="text-sm text-red-600 font-medium">לא נכון</span>
@@ -869,10 +1111,14 @@ const LiveFeedbackIndicator = ({ status }) => {
 
                 {status === 'partial' && (
                     <>
-                        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 500 }}>
-                            <AlertCircle className="w-5 h-5 text-yellow-500" />
+                        <motion.div
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            transition={{ type: "spring", stiffness: 500 }}
+                        >
+                            <AlertCircle className="w-5 h-5 text-amber-500" />
                         </motion.div>
-                        <span className="text-sm text-yellow-600 font-medium">כמעט!</span>
+                        <span className="text-sm text-amber-600 font-medium">כמעט!</span>
                     </>
                 )}
             </motion.div>
@@ -891,86 +1137,37 @@ const MathTutor = ({
                        onClose,
                        onAnswerSubmitted
                    }) => {
-    // 🔍 DEBUG: Track component mounts
     const mountCount = useRef(0);
+    const initStartedRef = useRef(false);
+
     useEffect(() => {
         mountCount.current += 1;
         console.log(`🎨 MathTutor MOUNTED (count: ${mountCount.current})`);
-        console.log('🎯 MathTutor initialized with props:', {
-            propSelectedTopic: propSelectedTopic?.name,
-            propSelectedSubtopic: propSelectedSubtopic?.name,
-            propMode,
-            propUserId,
-            initialView: view
-        });
         return () => console.log(`🗑️ MathTutor UNMOUNTING`);
     }, []);
-
-    // 🔍 DEBUG: Track prop changes
-    useEffect(() => {
-        console.log('🔄 Props changed:', {
-            selectedTopic: propSelectedTopic?.name,
-            selectedSubtopic: propSelectedSubtopic?.name,
-            mode: propMode,
-            userId: propUserId
-        });
-    }, [propSelectedTopic, propSelectedSubtopic, propMode, propUserId]);
 
     const user = useAuthStore(state => state.user);
     const nexonProfile = useAuthStore(state => state.nexonProfile);
 
-    // 🔥 HELPER: Get user ID - using useCallback to prevent recreation
     const getUserId = useCallback(() => {
-        // Use prop userId first
         if (propUserId) return propUserId;
         if (!user) return null;
-        // Try different possible ID fields
         const id = user.id || user.uid || user.userId || user.student_id;
         if (!id) return null;
-        // Convert to integer
         const numId = parseInt(id);
         return isNaN(numId) ? null : numId;
     }, [propUserId, user]);
 
-
-    const [view, setView] = useState(() => {
-        console.log('🔍 INITIAL VIEW DECISION:', {
-            propMode,
-            propSelectedTopic,
-            propSelectedSubtopic,
-            propTopicId
-        });
-
-        // 🔥 FIX: If launched from dashboard (has onClose) with a topic, go STRAIGHT to practice
-        if (onClose && propSelectedTopic) {
-            console.log('✅ Going STRAIGHT to PRACTICE (from dashboard)');
-            return 'practice';
-        }
-
-        // If coming from dashboard with specific mode (random, adaptive, etc), go straight to practice
-        if (propMode && propMode !== 'normal') {
-            console.log('✅ Going to PRACTICE (special mode)');
-            return 'practice';
-        }
-        // If coming with topic AND subtopic, go to practice
-        if (propSelectedTopic && propSelectedSubtopic) {
-            console.log('✅ Going to PRACTICE (topic + subtopic)');
-            return 'practice';
-        }
-        // If coming with just a topic (standalone, not from dashboard), go to subtopic-select
-        if (propSelectedTopic && !onClose) {
-            console.log('✅ Going to SUBTOPIC-SELECT (topic only, standalone)');
-            return 'subtopic-select';
-        }
-        // Backward compatibility
-        if (propTopicId) {
-            console.log('✅ Going to SUBTOPIC-SELECT (topicId)');
-            return 'subtopic-select';
-        }
-        console.log('✅ Going to HOME (no props)');
+    const determineInitialView = useCallback(() => {
+        if (onClose && propSelectedTopic) return 'practice';
+        if (propMode && propMode !== 'normal') return 'practice';
+        if (propSelectedTopic && propSelectedSubtopic) return 'practice';
+        if (propSelectedTopic && !onClose) return 'subtopic-select';
+        if (propTopicId) return 'subtopic-select';
         return 'home';
-    });
+    }, [onClose, propSelectedTopic, propSelectedSubtopic, propMode, propTopicId]);
 
+    const [view, setView] = useState(determineInitialView);
     const [selectedTopic, setSelectedTopic] = useState(propSelectedTopic || null);
     const [selectedSubtopic, setSelectedSubtopic] = useState(propSelectedSubtopic || null);
     const [practiceMode, setPracticeMode] = useState(propMode || 'normal');
@@ -988,19 +1185,17 @@ const MathTutor = ({
 
     const [chatOpen, setChatOpen] = useState(false);
 
-    // 🔥 IMAGE UPLOAD STATES
     const [uploadedImage, setUploadedImage] = useState(null);
     const [imagePreview, setImagePreview] = useState(null);
     const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
     const [imageAnalysisResult, setImageAnalysisResult] = useState(null);
     const fileInputRef = useRef(null);
 
-    // 🎤 VOICE SUPPORT
     const voice = useVoiceSupport();
 
     const autoCheckTimerRef = useRef(null);
     const lastCheckedAnswerRef = useRef('');
-    const practiceStartedRef = useRef(false); // ✅ Prevent infinite loop
+    const practiceStartedRef = useRef(false);
 
     const [sessionStats, setSessionStats] = useState({
         correct: 0,
@@ -1018,7 +1213,6 @@ const MathTutor = ({
     const timerRef = useRef(null);
     const inputRef = useRef(null);
 
-    // 🔥 FIX: Wrap in useMemo to prevent infinite re-renders
     const { currentGrade, currentTrack, gradeId, gradeConfig, availableTopics } = useMemo(() => {
         const grade = propGradeId || nexonProfile?.grade || user?.grade || '8';
         const track = nexonProfile?.track || user?.track;
@@ -1035,39 +1229,25 @@ const MathTutor = ({
         };
     }, [propGradeId, nexonProfile?.grade, nexonProfile?.track, user?.grade, user?.track]);
 
-    // Moved to mount useEffect to prevent log spam
-
-    // 🔍 DEBUG: Track currentQuestion state
     useEffect(() => {
-        console.log('📝 currentQuestion changed:', {
-            hasQuestion: !!currentQuestion,
-            questionText: currentQuestion?.question?.substring(0, 50),
-            isGenerating: isGeneratingQuestion
-        });
-    }, [currentQuestion, isGeneratingQuestion]);
-
-    useEffect(() => {
-        if (propTopicId && availableTopics.length > 0 && !selectedTopic) {
-            console.log('🔍 Looking for topic:', propTopicId);
+        if (propTopicId && availableTopics.length > 0 && !selectedTopic && !initStartedRef.current) {
+            initStartedRef.current = true;
 
             const topic = availableTopics.find(t => t.id === propTopicId);
 
             if (topic) {
-                console.log('✅ Found topic:', topic);
                 setSelectedTopic(topic);
 
                 const subtopics = getSubtopics(gradeId, topic.id) || [];
-                console.log('📚 Subtopics:', subtopics.length);
 
                 if (subtopics.length === 0) {
-                    console.log('▶️ Starting practice directly');
-                    startPractice(topic, null);
+                    setTimeout(() => {
+                        startPractice(topic, null);
+                    }, 0);
                 } else {
-                    console.log('📋 Showing subtopic selection');
                     setView('subtopic-select');
                 }
             } else {
-                console.warn('⚠️ Topic not found');
                 const basicTopic = {
                     id: propTopicId,
                     name: propTopicId,
@@ -1076,27 +1256,24 @@ const MathTutor = ({
                     difficulty: 'intermediate'
                 };
                 setSelectedTopic(basicTopic);
-                startPractice(basicTopic, null);
+                setTimeout(() => {
+                    startPractice(basicTopic, null);
+                }, 0);
             }
         }
-    }, [propTopicId, availableTopics, selectedTopic, gradeId]);
+    }, [propTopicId, availableTopics.length]);
 
     useEffect(() => {
-        // Auto-start practice when view is 'practice' and no question exists
-        if (view === 'practice' && !currentQuestion && !practiceStartedRef.current) {
-            // 🔥 REMOVED CHECK - Always auto-start when coming from dashboard!
-            console.log('🚀 Auto-starting practice from dashboard props');
-            practiceStartedRef.current = true; // ✅ Mark as started
+        if (view === 'practice' && !currentQuestion && !practiceStartedRef.current && !initStartedRef.current) {
+            practiceStartedRef.current = true;
 
             let topicToUse = propSelectedTopic;
             let subtopicToUse = propSelectedSubtopic;
 
-            // For modes without specific topic, pick random topic
             if (!topicToUse && availableTopics.length > 0) {
                 if (propMode === 'random' || propMode === 'ai-adaptive') {
                     const randomIndex = Math.floor(Math.random() * availableTopics.length);
                     topicToUse = availableTopics[randomIndex];
-                    console.log('🎲 Selected random topic:', topicToUse.name);
                 } else if (propMode === 'weakness-only') {
                     const profileData = nexonProfile || user;
                     const weakTopics = profileData?.weakTopics || [];
@@ -1107,13 +1284,11 @@ const MathTutor = ({
                         if (weakTopicObjs.length > 0) {
                             const randomIndex = Math.floor(Math.random() * weakTopicObjs.length);
                             topicToUse = weakTopicObjs[randomIndex];
-                            console.log('🎯 Selected weakness topic:', topicToUse.name);
                         }
                     }
                     if (!topicToUse) {
                         const randomIndex = Math.floor(Math.random() * availableTopics.length);
                         topicToUse = availableTopics[randomIndex];
-                        console.log('🎲 Fallback to random topic:', topicToUse.name);
                     }
                 }
             }
@@ -1122,7 +1297,7 @@ const MathTutor = ({
                 startPractice(topicToUse, subtopicToUse);
             }, 100);
         }
-    }, [view, propMode, propSelectedTopic, propSelectedSubtopic, currentQuestion]); // ✅ Removed availableTopics
+    }, [view, currentQuestion]);
 
     useEffect(() => {
         if (isTimerRunning) {
@@ -1135,7 +1310,6 @@ const MathTutor = ({
         };
     }, [isTimerRunning]);
 
-    // 🎤 Auto-read questions when they load
     useEffect(() => {
         if (currentQuestion && voice.voiceEnabled) {
             setTimeout(() => {
@@ -1144,7 +1318,6 @@ const MathTutor = ({
         }
     }, [currentQuestion]);
 
-    // 🎤 Auto-read feedback when received
     useEffect(() => {
         if (finalFeedback && voice.voiceEnabled) {
             const feedbackText = finalFeedback.isCorrect
@@ -1188,7 +1361,6 @@ const MathTutor = ({
         };
     }, [userAnswer, finalFeedback]);
 
-    // 🔥 IMAGE UPLOAD HANDLERS
     const handleImageUpload = (event) => {
         const file = event.target.files[0];
         if (!file) return;
@@ -1231,50 +1403,33 @@ const MathTutor = ({
             formData.append('mathFeeling', nexonProfile?.mathFeeling || 'okay');
             formData.append('learningStyle', nexonProfile?.learningStyle || 'visual');
 
-            console.log('📤 Sending image for analysis...');
-            console.log('   URL:', `${API_URL}/api/ai/analyze-handwritten-work`);
-            console.log('   Image:', uploadedImage.name, uploadedImage.size, 'bytes');
-
             const response = await fetch(`${API_URL}/api/ai/analyze-handwritten-work`, {
                 method: 'POST',
                 body: formData
             });
 
-            console.log('📥 Response status:', response.status, response.statusText);
-
-            // Check if response is JSON
             const contentType = response.headers.get('content-type');
             if (!contentType || !contentType.includes('application/json')) {
-                console.error('❌ Non-JSON response:', contentType);
                 const textResponse = await response.text();
-                console.error('Response text:', textResponse.substring(0, 200));
                 throw new Error('שרת החזיר תשובה לא תקינה');
             }
 
             const data = await response.json();
-            console.log('📊 Response data:', data);
 
-            // Check for success
             if (!response.ok) {
-                console.error('❌ HTTP Error:', response.status, data);
                 throw new Error(data.error || `שגיאת שרת: ${response.status}`);
             }
 
             if (!data.success) {
-                console.error('❌ API Error:', data.error);
                 throw new Error(data.error || 'שגיאה בניתוח התמונה');
             }
 
-            // Validate analysis structure
             if (!data.analysis) {
-                console.error('❌ Missing analysis in response:', data);
                 throw new Error('התשובה מהשרת לא תקינה');
             }
 
-            console.log('✅ Analysis received:', data.analysis);
             setImageAnalysisResult(data.analysis);
 
-            // 🔥 SAVE TO NOTEBOOK
             const userId = getUserId();
             if (userId) {
                 await saveExerciseToNotebook(userId, {
@@ -1287,8 +1442,6 @@ const MathTutor = ({
                 });
             }
 
-            // 📊 TRACK CURRICULUM PROGRESS
-            console.log('🔍 About to track progress (image), userId:', userId, 'isCorrect:', data.analysis.isCorrect);
             if (userId) {
                 await trackCurriculumProgress(userId, {
                     topicId: selectedTopic?.id,
@@ -1302,7 +1455,6 @@ const MathTutor = ({
                 });
             }
 
-            // Update stats if correct
             if (data.analysis.isCorrect) {
                 const pointsEarned = Math.max(100 - (hintCount * 10) - (attemptCount * 20), 10);
                 setSessionStats(prev => {
@@ -1332,7 +1484,6 @@ const MathTutor = ({
         } catch (error) {
             console.error('❌ Image analysis error:', error);
 
-            // User-friendly error messages
             let errorMessage = 'שגיאה בניתוח התמונה';
 
             if (error.message.includes('fetch')) {
@@ -1366,9 +1517,7 @@ const MathTutor = ({
     };
 
     const startPractice = async (topic, subtopic) => {
-        console.log('🎮 Starting practice:', { topic: topic?.name, subtopic: subtopic?.name });
-
-        practiceStartedRef.current = true; // ✅ Set BEFORE changing view to prevent useEffect trigger
+        practiceStartedRef.current = true;
 
         setSelectedTopic(topic);
         setSelectedSubtopic(subtopic);
@@ -1406,20 +1555,13 @@ const MathTutor = ({
                 throw new Error('Invalid topic object');
             }
 
-            // 🔥 CRITICAL FIX: For quick practice (no specific subtopic), pick RANDOM subtopic each time!
             let finalSubtopic = subtopic;
             if (!finalSubtopic) {
                 const availableSubtopics = getSubtopics(gradeId, topic.id) || [];
-                console.log(`🔍 Topic "${topic.name}" has ${availableSubtopics.length} subtopics`);
 
                 if (availableSubtopics.length > 0) {
-                    // 🎲 Pick a RANDOM subtopic for variety in quick practice!
                     const randomIndex = Math.floor(Math.random() * availableSubtopics.length);
                     finalSubtopic = availableSubtopics[randomIndex];
-                    console.log(`🎲 Randomly selected subtopic ${randomIndex + 1}/${availableSubtopics.length}: "${finalSubtopic.name}"`);
-                    // DON'T update selectedSubtopic state - we want it to stay null so next question picks a different random one!
-                } else {
-                    console.log('⚠️ No subtopics found for this topic');
                 }
             }
 
@@ -1446,8 +1588,6 @@ const MathTutor = ({
                 }
             };
 
-            console.log('📤 Sending question request:', requestBody);
-
             const response = await fetch(`${API_URL}/api/ai/generate-question`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1462,10 +1602,8 @@ const MathTutor = ({
             let data;
             try {
                 const text = await response.text();
-                console.log('📥 Raw response (first 200 chars):', text.substring(0, 200));
                 data = JSON.parse(text);
             } catch (parseError) {
-                console.error('❌ JSON Parse Error:', parseError);
                 throw new Error(`Invalid JSON response: ${parseError.message}`);
             }
 
@@ -1481,18 +1619,10 @@ const MathTutor = ({
                 throw new Error('No question data received');
             }
 
-            console.log('✅ Question received successfully');
-
             await new Promise(resolve => setTimeout(resolve, 1500));
-            console.log('🔍 About to set currentQuestion:', {
-                hasQuestion: !!data.question,
-                questionText: typeof data.question === 'string' ? data.question.substring(0, 50) : 'not a string',
-                dataKeys: Object.keys(data)
-            });
 
-            // ✅ FIX: Backend returns flat structure, restructure it for frontend
             setCurrentQuestion({
-                question: data.question,  // The actual question text string
+                question: data.question,
                 correctAnswer: data.correctAnswer,
                 hints: data.hints || [],
                 explanation: data.explanation || '',
@@ -1506,7 +1636,7 @@ const MathTutor = ({
 
             let displayMessage = 'שגיאה ביצירת שאלה';
             if (error.message.includes('fetch')) {
-                displayMessage = 'לא ניתן להתחבר לשרת. בדוק שהשרת רץ על the backend server';
+                displayMessage = 'לא ניתן להתחבר לשרת. בדוק שהשרת רץ';
             } else if (error.message.includes('JSON')) {
                 displayMessage = 'שגיאת תקשורת עם השרת. נסה שוב.';
             } else if (error.message) {
@@ -1572,19 +1702,7 @@ const MathTutor = ({
 
         if (!result || lastCheckedAnswerRef.current !== userAnswer) {
             try {
-                // ✅ DEBUG LOGGING for answer verification
-                console.log('🔍 submitAnswer - Debug Info:');
-                console.log('🔍 userAnswer:', userAnswer);
-                console.log('🔍 currentQuestion.question:', currentQuestion?.question);
-                console.log('🔍 currentQuestion.correctAnswer:', currentQuestion?.correctAnswer);
-                console.log('🔍 propUserId:', propUserId);
-                console.log('🔍 user?.uid:', user?.uid);
-                console.log('🔍 selectedTopic?.name:', selectedTopic?.name);
-                console.log('🔍 selectedSubtopic?.name:', selectedSubtopic?.name);
-
-                // ✅ Use propUserId (passed from parent) as primary source
                 const actualUserId = propUserId || user?.uid || null;
-                console.log('🔍 Final userId to send to verification:', actualUserId);
 
                 result = await aiVerification.verifyAnswer(
                     userAnswer,
@@ -1593,13 +1711,11 @@ const MathTutor = ({
                     {
                         studentName: nexonProfile?.name || user?.displayName || user?.name || 'תלמיד',
                         grade: currentGrade,
-                        userId: actualUserId,  // ✅ Include userId in verification context
+                        userId: actualUserId,
                         topic: selectedTopic?.name,
                         subtopic: selectedSubtopic?.name
                     }
                 );
-
-                console.log('✅ Verification result:', result);
             } catch (error) {
                 console.error('❌ Submit error:', error);
                 toast.error('שגיאה בבדיקת תשובה');
@@ -1609,7 +1725,6 @@ const MathTutor = ({
 
         const isCorrect = result.isCorrect;
 
-        // 🔥 SAVE TO NOTEBOOK
         const userId = getUserId();
         if (userId) {
             await saveExerciseToNotebook(userId, {
@@ -1622,8 +1737,6 @@ const MathTutor = ({
             });
         }
 
-        // 📊 TRACK CURRICULUM PROGRESS
-        console.log('🔍 About to track progress, userId:', userId, 'isCorrect:', isCorrect);
         if (userId) {
             await trackCurriculumProgress(userId, {
                 topicId: selectedTopic?.id,
@@ -1637,12 +1750,8 @@ const MathTutor = ({
             });
         }
 
-        // 🔥 CRITICAL: Notify parent component to refresh stats
         if (onAnswerSubmitted && typeof onAnswerSubmitted === 'function') {
-            console.log('📢 Calling onAnswerSubmitted callback', { isCorrect });
             onAnswerSubmitted(isCorrect);
-        } else {
-            console.warn('⚠️ onAnswerSubmitted callback not provided');
         }
 
         let pointsEarned = 0;
@@ -1743,7 +1852,6 @@ const MathTutor = ({
     const handleExitPractice = () => {
         const confirmed = window.confirm('האם אתה בטוח שברצונך לצאת מהתרגול?');
         if (confirmed && onClose) {
-            console.log('🔙 User confirmed exit');
             onClose();
         }
     };
@@ -1766,871 +1874,881 @@ const MathTutor = ({
         }
     };
 
-    // ==================== VIEW: HOME ====================
+    // ==================== 📱 RENDER VIEWS ====================
+
+    // HOME VIEW
     if (view === 'home') {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 p-4" dir="rtl">
-                <div className="max-w-4xl mx-auto pt-12">
-                    <motion.div initial={{ opacity: 0, y: -30 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-12">
-                        <motion.div animate={{ rotate: [0, 10, -10, 0] }} transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }} className="inline-block mb-6">
-                            <div className="w-28 h-28 bg-white/20 backdrop-blur-xl rounded-full flex items-center justify-center mx-auto shadow-2xl border-4 border-white/30">
-                                <Brain className="w-16 h-16 text-white" />
-                            </div>
+            <motion.div
+                key="home"
+                {...pageTransition}
+                className="min-h-screen bg-gradient-to-br from-blue-50 via-cyan-50 to-purple-50 p-4 md:p-8"
+                dir="rtl"
+            >
+                <div className="max-w-7xl mx-auto">
+                    {/* Header */}
+                    <motion.div
+                        initial={{ opacity: 0, y: -20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="text-center mb-8 md:mb-12"
+                    >
+                        <motion.div
+                            animate={{ rotate: [0, 10, -10, 0] }}
+                            transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}
+                            className="text-6xl md:text-8xl mb-4"
+                        >
+                            🧠
                         </motion.div>
-
-                        <h1 className="text-7xl font-black text-white mb-4 drop-shadow-2xl">נקסון</h1>
-                        <p className="text-3xl text-white/90 mb-2 font-bold">המורה הדיגיטלי שלך 🎓</p>
-                        <p className="text-xl text-white/80 font-semibold">
-                            {gradeConfig?.name} • {availableTopics.length} נושאים מגניבים 🚀
+                        <h1 className="text-4xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 mb-3">
+                            נקסון - המורה שלך למתמטיקה
+                        </h1>
+                        <p className="text-lg md:text-xl text-gray-700 font-medium">
+                            {nexonProfile?.name ? `היי ${nexonProfile.name}! ` : ''}בואו ללמוד מתמטיקה בדרך חכמה ומהנה! 🎯
                         </p>
                     </motion.div>
 
-                    <div className="grid grid-cols-3 gap-6 mb-8">
-                        {[
-                            { icon: Trophy, label: 'הרמה שלך', value: 'Level 5', color: 'yellow', emoji: '🏆' },
-                            { icon: Flame, label: 'רצף תשובות', value: '12', color: 'orange', emoji: '🔥' },
-                            { icon: Star, label: 'נקודות', value: '2,450', color: 'blue', emoji: '⭐' }
-                        ].map((stat, i) => (
-                            <motion.div key={i} initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.1 }} whileHover={{ scale: 1.05 }} className="bg-white/30 backdrop-blur-xl rounded-3xl p-6 text-center shadow-xl border-2 border-white/40">
-                                <div className="text-5xl mb-2">{stat.emoji}</div>
-                                <div className="text-3xl font-black text-white drop-shadow-lg">{stat.value}</div>
-                                <div className="text-sm text-white/90 font-bold">{stat.label}</div>
-                            </motion.div>
-                        ))}
+                    {/* Quick Actions */}
+                    <div className="grid md:grid-cols-2 gap-6 mb-8">
+                        <motion.button
+                            variants={cardHover}
+                            initial="rest"
+                            whileHover="hover"
+                            whileTap="tap"
+                            onClick={() => setView('topic-select')}
+                            className="bg-gradient-to-br from-blue-500 to-cyan-600 text-white rounded-3xl p-8 shadow-2xl"
+                        >
+                            <BookOpen className="w-16 h-16 mb-4 mx-auto" />
+                            <h3 className="text-2xl font-black mb-2">תרגול לפי נושא</h3>
+                            <p className="text-blue-100">בחר נושא ספציפי ותתחיל לתרגל</p>
+                        </motion.button>
+
+                        <motion.button
+                            variants={cardHover}
+                            initial="rest"
+                            whileHover="hover"
+                            whileTap="tap"
+                            onClick={() => {
+                                setPracticeMode('random');
+                                setView('practice');
+                            }}
+                            className="bg-gradient-to-br from-purple-500 to-pink-600 text-white rounded-3xl p-8 shadow-2xl"
+                        >
+                            <Sparkles className="w-16 h-16 mb-4 mx-auto" />
+                            <h3 className="text-2xl font-black mb-2">תרגול אקראי</h3>
+                            <p className="text-purple-100">תרגל שאלות מנושאים שונים</p>
+                        </motion.button>
                     </div>
 
-                    <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setView('topic-select')} className="w-full bg-white text-purple-600 rounded-3xl py-8 font-black text-2xl shadow-2xl hover:shadow-3xl transition-all mb-6 flex items-center justify-center gap-4">
-                        <Play className="w-8 h-8" />
-                        בואו נתחיל! 🎉
-                        <Sparkles className="w-8 h-8" />
-                    </motion.button>
-
-                    <motion.button whileHover={{ scale: 1.02 }} onClick={() => toast.success('סטטיסטיקות בקרוב!')} className="w-full bg-white/20 backdrop-blur-xl text-white rounded-3xl py-5 font-bold text-lg hover:bg-white/30 transition-all flex items-center justify-center gap-3 border-2 border-white/30">
-                        <BarChart3 className="w-6 h-6" />
-                        הסטטיסטיקה שלי 📊
-                    </motion.button>
+                    {/* Stats Cards */}
+                    {sessionStats.total > 0 && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="grid grid-cols-2 md:grid-cols-4 gap-4"
+                        >
+                            <div className="bg-white rounded-2xl p-6 shadow-lg">
+                                <Trophy className="w-8 h-8 text-yellow-500 mx-auto mb-2" />
+                                <div className="text-3xl font-black text-gray-800">{sessionStats.points}</div>
+                                <div className="text-sm text-gray-600">נקודות</div>
+                            </div>
+                            <div className="bg-white rounded-2xl p-6 shadow-lg">
+                                <Flame className="w-8 h-8 text-orange-500 mx-auto mb-2" />
+                                <div className="text-3xl font-black text-gray-800">{sessionStats.streak}</div>
+                                <div className="text-sm text-gray-600">רצף נוכחי</div>
+                            </div>
+                            <div className="bg-white rounded-2xl p-6 shadow-lg">
+                                <CheckCircle2 className="w-8 h-8 text-green-500 mx-auto mb-2" />
+                                <div className="text-3xl font-black text-gray-800">{sessionStats.correct}</div>
+                                <div className="text-sm text-gray-600">תשובות נכונות</div>
+                            </div>
+                            <div className="bg-white rounded-2xl p-6 shadow-lg">
+                                <BarChart3 className="w-8 h-8 text-blue-500 mx-auto mb-2" />
+                                <div className="text-3xl font-black text-gray-800">{sessionStats.total}</div>
+                                <div className="text-sm text-gray-600">סה"כ שאלות</div>
+                            </div>
+                        </motion.div>
+                    )}
                 </div>
-            </div>
+            </motion.div>
         );
     }
 
-    // ==================== VIEW: TOPIC SELECT ====================
+    // TOPIC SELECT VIEW
     if (view === 'topic-select') {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50 p-4" dir="rtl">
-                <div className="max-w-5xl mx-auto">
-                    <div className="flex items-center justify-between mb-8">
-                        <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handleBackNavigation} className="flex items-center gap-2 text-purple-600 hover:text-purple-700 font-bold bg-white px-6 py-3 rounded-2xl shadow-lg">
-                            <ArrowLeft className="w-5 h-5" />
-                            חזרה
-                        </motion.button>
-                        <h2 className="text-3xl font-black text-gray-800">בחר נושא לתרגול 📚</h2>
-                        <div className="w-32" />
-                    </div>
+            <motion.div
+                key="topic-select"
+                {...pageTransition}
+                className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 p-4 md:p-8"
+                dir="rtl"
+            >
+                <div className="max-w-7xl mx-auto">
+                    {/* Back Button */}
+                    <motion.button
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        onClick={handleBackNavigation}
+                        className="mb-6 flex items-center gap-2 bg-white px-6 py-3 rounded-2xl shadow-lg hover:shadow-xl transition-all"
+                    >
+                        <ArrowLeft className="w-5 h-5" />
+                        <span className="font-bold">חזרה</span>
+                    </motion.button>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {availableTopics.map((topic, index) => {
-                            const subtopics = getSubtopics(gradeId, topic.id) || [];
-                            const hasSubtopics = subtopics.length > 0;
+                    {/* Header */}
+                    <motion.div
+                        initial={{ opacity: 0, y: -20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="text-center mb-8"
+                    >
+                        <h2 className="text-3xl md:text-5xl font-black text-gray-800 mb-3">
+                            בחר נושא לתרגול
+                        </h2>
+                        <p className="text-lg text-gray-600">
+                            כיתה {currentGrade} {currentTrack && `- מסלול ${currentTrack}`}
+                        </p>
+                    </motion.div>
 
-                            return (
-                                <motion.div key={topic.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} whileHover={{ scale: 1.03, y: -5 }} className="bg-white rounded-3xl shadow-xl hover:shadow-2xl transition-all p-8 cursor-pointer border-4 border-transparent hover:border-purple-300" onClick={() => {
+                    {/* Topics Grid */}
+                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {availableTopics.map((topic, index) => (
+                            <motion.button
+                                key={topic.id}
+                                custom={index}
+                                variants={fadeInUp}
+                                initial="hidden"
+                                animate="visible"
+                                whileHover="hover"
+                                whileTap="tap"
+                                onClick={() => {
                                     setSelectedTopic(topic);
-                                    if (hasSubtopics) {
+                                    const subtopics = getSubtopics(gradeId, topic.id) || [];
+                                    if (subtopics.length > 0) {
                                         setView('subtopic-select');
                                     } else {
                                         startPractice(topic, null);
                                     }
-                                }}>
-                                    <div className="text-6xl mb-4">{topic.icon}</div>
-                                    <h3 className="text-2xl font-black text-gray-800 mb-2">{topic.name}</h3>
-                                    <p className="text-base text-gray-500 mb-4 font-semibold">{topic.nameEn}</p>
-
-                                    {hasSubtopics && (
-                                        <div className="text-sm text-gray-400 flex items-center gap-1 font-semibold">
-                                            <ChevronRight className="w-4 h-4" />
-                                            {subtopics.length} תתי-נושאים
-                                        </div>
-                                    )}
-                                </motion.div>
-                            );
-                        })}
+                                }}
+                                className="bg-white rounded-3xl p-6 shadow-xl hover:shadow-2xl transition-all text-right"
+                            >
+                                <div className="text-5xl mb-4">{topic.icon}</div>
+                                <h3 className="text-2xl font-black text-gray-800 mb-2">
+                                    {topic.name}
+                                </h3>
+                                <div className={`inline-block px-4 py-2 rounded-full text-sm font-bold ${
+                                    topic.difficulty === 'easy' ? 'bg-green-100 text-green-700' :
+                                        topic.difficulty === 'intermediate' ? 'bg-yellow-100 text-yellow-700' :
+                                            'bg-red-100 text-red-700'
+                                }`}>
+                                    {topic.difficulty === 'easy' ? 'קל' :
+                                        topic.difficulty === 'intermediate' ? 'בינוני' : 'מתקדם'}
+                                </div>
+                                <ChevronRight className="w-6 h-6 text-gray-400 mx-auto mt-4" />
+                            </motion.button>
+                        ))}
                     </div>
                 </div>
-            </div>
+            </motion.div>
         );
     }
 
-    // ==================== VIEW: SUBTOPIC SELECT ====================
+    // SUBTOPIC SELECT VIEW
     if (view === 'subtopic-select' && selectedTopic) {
         const subtopics = getSubtopics(gradeId, selectedTopic.id) || [];
 
         return (
-            <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50 p-4" dir="rtl">
-                <div className="max-w-4xl mx-auto">
-                    <div className="flex items-center justify-between mb-8">
-                        <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handleBackNavigation} className="flex items-center gap-2 text-purple-600 hover:text-purple-700 font-bold bg-white px-6 py-3 rounded-2xl shadow-lg">
-                            <ArrowLeft className="w-5 h-5" />
-                            {onClose ? 'חזרה ללוח הבקרה' : 'חזרה'}
-                        </motion.button>
-                    </div>
+            <motion.div
+                key="subtopic-select"
+                {...pageTransition}
+                className="min-h-screen bg-gradient-to-br from-blue-50 via-cyan-50 to-purple-50 p-4 md:p-8"
+                dir="rtl"
+            >
+                <div className="max-w-7xl mx-auto">
+                    {/* Back Button */}
+                    <motion.button
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        onClick={handleBackNavigation}
+                        className="mb-6 flex items-center gap-2 bg-white px-6 py-3 rounded-2xl shadow-lg"
+                    >
+                        <ArrowLeft className="w-5 h-5" />
+                        <span className="font-bold">חזרה</span>
+                    </motion.button>
 
-                    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-gradient-to-br from-purple-600 to-pink-600 rounded-3xl p-8 mb-8 shadow-2xl">
-                        <div className="flex items-center gap-4 text-white">
-                            <div className="text-6xl">{selectedTopic.icon}</div>
-                            <div>
-                                <h1 className="text-3xl md:text-4xl font-black mb-2">{selectedTopic.name}</h1>
-                                <p className="text-white/90 text-lg">{selectedTopic.nameEn}</p>
-                            </div>
-                        </div>
+                    {/* Header */}
+                    <motion.div
+                        initial={{ opacity: 0, y: -20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="text-center mb-8"
+                    >
+                        <div className="text-6xl mb-4">{selectedTopic.icon}</div>
+                        <h2 className="text-3xl md:text-5xl font-black text-gray-800 mb-3">
+                            {selectedTopic.name}
+                        </h2>
+                        <p className="text-lg text-gray-600">בחר תת-נושא</p>
                     </motion.div>
 
-                    {subtopics.length > 0 ? (
-                        <>
-                            <h2 className="text-2xl font-black text-gray-800 mb-6">בחר תת-נושא:</h2>
-
-                            {/* LEARNING SPACE BUTTON */}
+                    {/* Subtopics */}
+                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {subtopics.map((subtopic, index) => (
                             <motion.button
-                                initial={{ opacity: 0, scale: 0.9 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                whileHover={{ scale: 1.03 }}
-                                whileTap={{ scale: 0.97 }}
-                                onClick={() => setView('learning-space')}
-                                className="w-full bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-2xl p-6 shadow-xl hover:shadow-2xl transition-all mb-6"
+                                key={subtopic.id}
+                                custom={index}
+                                variants={fadeInUp}
+                                initial="hidden"
+                                animate="visible"
+                                whileHover="hover"
+                                whileTap="tap"
+                                onClick={() => startPractice(selectedTopic, subtopic)}
+                                className="bg-white rounded-3xl p-6 shadow-xl hover:shadow-2xl transition-all"
                             >
-                                <div className="flex items-center justify-center gap-4">
-                                    <BookOpen className="w-8 h-8" />
-                                    <div>
-                                        <h3 className="text-2xl font-black mb-1">📚 למד תחילה</h3>
-                                        <p className="text-white/90 text-sm">למד את החומר עם הסברים ודוגמאות לפני התרגול</p>
-                                    </div>
-                                    <Sparkles className="w-8 h-8" />
-                                </div>
+                                <Target className="w-12 h-12 text-blue-500 mb-4 mx-auto" />
+                                <h3 className="text-xl font-black text-gray-800 mb-2">
+                                    {subtopic.name}
+                                </h3>
+                                <ChevronRight className="w-6 h-6 text-gray-400 mx-auto mt-4" />
                             </motion.button>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <motion.button initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={() => startPractice(selectedTopic, null)} className="bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-2xl p-6 shadow-xl hover:shadow-2xl transition-all">
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-16 h-16 bg-white/20 rounded-xl flex items-center justify-center text-3xl">🎯</div>
-                                        <div className="flex-1 text-right">
-                                            <h3 className="text-xl font-black mb-1">תרגל הכל</h3>
-                                            <p className="text-white/90 text-sm">כל התתי-נושאים ביחד</p>
-                                        </div>
-                                        <ChevronRight className="w-6 h-6" />
-                                    </div>
-                                </motion.button>
-
-                                {subtopics.map((subtopic, index) => (
-                                    <motion.button key={subtopic.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: (index + 1) * 0.1 }} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={() => startPractice(selectedTopic, subtopic)} className="bg-white hover:bg-purple-50 rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all border-2 border-gray-200 hover:border-purple-400">
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center text-white text-2xl font-black">{index + 1}</div>
-                                            <div className="flex-1 text-right">
-                                                <h3 className="text-lg font-black text-gray-800 mb-1">{subtopic.name}</h3>
-                                                {subtopic.nameEn && <p className="text-gray-500 text-sm">{subtopic.nameEn}</p>}
-                                            </div>
-                                            <ChevronRight className="w-6 h-6 text-purple-600" />
-                                        </div>
-                                    </motion.button>
-                                ))}
-                            </div>
-                        </>
-                    ) : (
-                        <motion.button initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => startPractice(selectedTopic, null)} className="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-3xl py-8 font-black text-2xl shadow-2xl hover:shadow-3xl transition-all flex items-center justify-center gap-4">
-                            <Play className="w-8 h-8" />
-                            התחל תרגול
-                            <Sparkles className="w-8 h-8" />
-                        </motion.button>
-                    )}
+                        ))}
+                    </div>
                 </div>
-            </div>
+            </motion.div>
         );
     }
 
-    // ==================== VIEW: LEARNING SPACE ====================
-    if (view === 'learning-space' && selectedTopic) {
-        const subtopics = getSubtopics(gradeId, selectedTopic.id) || [];
+    // PRACTICE VIEW
+    if (view === 'practice') {
+        if (isGeneratingQuestion) {
+            return (
+                <motion.div
+                    key="generating"
+                    {...pageTransition}
+                    className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 flex items-center justify-center"
+                    dir="rtl"
+                >
+                    <ThinkingAnimation message="נקסון מכין שאלה מיוחדת בשבילך..." />
+                </motion.div>
+            );
+        }
+
+        if (!currentQuestion) {
+            return (
+                <motion.div
+                    key="loading"
+                    {...pageTransition}
+                    className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 flex items-center justify-center"
+                    dir="rtl"
+                >
+                    <Loader2 className="w-16 h-16 animate-spin text-blue-600" />
+                </motion.div>
+            );
+        }
 
         return (
-            <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 p-4" dir="rtl">
+            <motion.div
+                key="practice"
+                {...pageTransition}
+                className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 p-4 md:p-8"
+                dir="rtl"
+            >
+                {/* AI Chat Sidebar */}
+                <AIChatSidebar
+                    question={currentQuestion}
+                    studentProfile={{
+                        name: nexonProfile?.name || user?.name || 'תלמיד',
+                        topic: selectedTopic?.name,
+                        grade: currentGrade,
+                        personality: nexonProfile?.personality,
+                        mathFeeling: nexonProfile?.mathFeeling,
+                        learningStyle: nexonProfile?.learningStyle
+                    }}
+                    isOpen={chatOpen}
+                    onToggle={() => setChatOpen(!chatOpen)}
+                    currentAnswer={userAnswer}
+                />
+
                 <div className="max-w-5xl mx-auto">
-                    {/* Header */}
-                    <div className="flex items-center justify-between mb-8">
-                        <motion.button
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={() => setView('subtopic-select')}
-                            className="flex items-center gap-2 text-blue-600 hover:text-blue-700 font-bold bg-white px-6 py-3 rounded-2xl shadow-lg"
+                    {/* Top Bar */}
+                    <div className="flex items-center justify-between mb-6 bg-white rounded-2xl p-4 shadow-lg">
+                        <button
+                            onClick={handleBackNavigation}
+                            className="flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-xl hover:bg-gray-200"
                         >
                             <ArrowLeft className="w-5 h-5" />
-                            חזרה לבחירת נושאים
-                        </motion.button>
+                            <span className="font-bold">יציאה</span>
+                        </button>
 
-                        <motion.button
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={() => startPractice(selectedTopic, null)}
-                            className="flex items-center gap-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white px-6 py-3 rounded-2xl font-bold shadow-lg hover:shadow-xl"
-                        >
-                            <Target className="w-5 h-5" />
-                            עבור לתרגול
-                        </motion.button>
+                        <div className="flex items-center gap-4">
+                            {/* Timer */}
+                            <div className="flex items-center gap-2 bg-blue-50 px-4 py-2 rounded-xl">
+                                <Clock className="w-5 h-5 text-blue-600" />
+                                <span className="font-mono font-bold text-blue-900">
+                                    {formatTime(timer)}
+                                </span>
+                            </div>
+
+                            {/* Voice Toggle */}
+                            <button
+                                onClick={voice.toggleVoice}
+                                className="p-3 bg-purple-50 rounded-xl hover:bg-purple-100"
+                            >
+                                {voice.voiceEnabled ? (
+                                    <Volume2 className="w-5 h-5 text-purple-600" />
+                                ) : (
+                                    <VolumeX className="w-5 h-5 text-gray-400" />
+                                )}
+                            </button>
+
+                            {/* Stats */}
+                            <div className="flex items-center gap-2 bg-green-50 px-4 py-2 rounded-xl">
+                                <Trophy className="w-5 h-5 text-green-600" />
+                                <span className="font-bold text-green-900">{sessionStats.points}</span>
+                            </div>
+
+                            {sessionStats.streak > 0 && (
+                                <div className="flex items-center gap-2 bg-orange-50 px-4 py-2 rounded-xl">
+                                    <Flame className="w-5 h-5 text-orange-600" />
+                                    <span className="font-bold text-orange-900">{sessionStats.streak}</span>
+                                </div>
+                            )}
+                        </div>
                     </div>
 
-                    {/* Title */}
+                    {/* Question Card */}
                     <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-3xl p-8 mb-8 shadow-2xl"
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="bg-white rounded-3xl p-8 shadow-2xl mb-6"
                     >
-                        <div className="flex items-center gap-4 text-white">
-                            <div className="text-6xl">{selectedTopic.icon}</div>
-                            <div className="flex-1">
-                                <h1 className="text-4xl font-black mb-2">📚 מרחב למידה: {selectedTopic.name}</h1>
-                                <p className="text-white/90 text-lg">למד את החומר בצורה מעניינת עם דוגמאות ותרגילים</p>
+                        {/* Topic Badge */}
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="text-3xl">{selectedTopic?.icon}</div>
+                            <div>
+                                <div className="font-black text-lg text-gray-800">
+                                    {selectedTopic?.name}
+                                </div>
+                                {selectedSubtopic && (
+                                    <div className="text-sm text-gray-600">
+                                        {selectedSubtopic.name}
+                                    </div>
+                                )}
                             </div>
                         </div>
-                    </motion.div>
 
-                    {/* Learning Sections */}
-                    <div className="space-y-6">
-                        {subtopics.length > 0 ? (
-                            subtopics.map((subtopic, index) => (
-                                <motion.div
-                                    key={subtopic.id}
-                                    initial={{ opacity: 0, y: 20 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ delay: index * 0.1 }}
-                                    className="bg-white rounded-3xl shadow-xl overflow-hidden border-2 border-blue-200"
-                                >
-                                    {/* Section Header */}
-                                    <div className="bg-gradient-to-r from-blue-500 to-indigo-500 p-6">
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center text-2xl font-black text-white">
-                                                {index + 1}
-                                            </div>
-                                            <div className="flex-1">
-                                                <h2 className="text-2xl font-black text-white">{subtopic.name}</h2>
-                                                {subtopic.nameEn && <p className="text-white/80">{subtopic.nameEn}</p>}
-                                            </div>
-                                        </div>
-                                    </div>
+                        {/* Question Text */}
+                        <div className="mb-8">
+                            <div className="flex items-start gap-3 mb-4">
+                                <Brain className="w-8 h-8 text-blue-600 flex-shrink-0 mt-2" />
+                                <div className="flex-1">
+                                    <MathDisplay>{currentQuestion.question}</MathDisplay>
+                                </div>
+                            </div>
+                        </div>
 
-                                    {/* Explanation Section */}
-                                    <div className="p-8">
-                                        <div className="mb-6">
-                                            <div className="flex items-center gap-3 mb-4">
-                                                <Lightbulb className="w-6 h-6 text-yellow-500" />
-                                                <h3 className="text-xl font-bold text-gray-800">💡 הסבר</h3>
-                                            </div>
-                                            <div className="bg-blue-50 rounded-2xl p-6 text-gray-700 text-lg leading-relaxed">
-                                                <p className="mb-4">
-                                                    {subtopic.name === 'פיתגורס' && 'משפט פיתגורס הוא אחד הכלים החשובים בגאומטריה! הוא עוזר לנו למצוא את אורך הצלעות במשולש ישר-זווית.'}
-                                                    {subtopic.name === 'שטח משולש' && 'שטח המשולש הוא הגודל של המשטח שהמשולש תופס. זה כמו לשאול - כמה אריחים קטנים צריך כדי לכסות את המשולש?'}
-                                                    {subtopic.name === 'היקף משולש' && 'היקף המשולש הוא סך כל אורכי הצלעות. זה כמו ללכת סביב המשולש ולמדוד את כל הדרך!'}
-                                                    {!['פיתגורס', 'שטח משולש', 'היקף משולש'].includes(subtopic.name) && `${subtopic.name} הוא נושא מרכזי במתמטיקה. בואו נלמד אותו יחד צעד אחר צעד!`}
-                                                </p>
-                                                <div className="bg-white rounded-xl p-4 border-2 border-blue-300">
-                                                    <p className="font-bold text-blue-700 mb-2">🎯 הנוסחה:</p>
-                                                    <p className="text-2xl font-black text-center text-blue-900">
-                                                        {subtopic.name === 'פיתגורס' && 'a² + b² = c²'}
-                                                        {subtopic.name === 'שטח משולש' && 'שטח = (בסיס × גובה) ÷ 2'}
-                                                        {subtopic.name === 'היקף משולש' && 'היקף = a + b + c'}
-                                                        {!['פיתגורס', 'שטח משולש', 'היקף משולש'].includes(subtopic.name) && 'נוסחה בהסבר'}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </div>
+                        {/* Visual Graph */}
+                        {currentQuestion.visualData && (
+                            <VisualGraph visualData={currentQuestion.visualData} />
+                        )}
 
-                                        {/* Example Section */}
-                                        <div className="mb-6">
-                                            <div className="flex items-center gap-3 mb-4">
-                                                <Star className="w-6 h-6 text-yellow-500" />
-                                                <h3 className="text-xl font-bold text-gray-800">⭐ דוגמה</h3>
-                                            </div>
-                                            <div className="bg-yellow-50 rounded-2xl p-6">
-                                                <p className="text-gray-700 text-lg mb-3">
-                                                    {subtopic.name === 'פיתגורס' && '📐 משולש עם צלעות a=3 ס"מ, b=4 ס"מ. מה אורך c?'}
-                                                    {subtopic.name === 'שטח משולש' && '📐 משולש עם בסיס 8 ס"מ וגובה 5 ס"מ. מה השטח?'}
-                                                    {subtopic.name === 'היקף משולש' && '📐 משולש עם צלעות 5 ס"מ, 7 ס"מ, 9 ס"מ. מה ההיקף?'}
-                                                    {!['פיתגורס', 'שטח משולש', 'היקף משולש'].includes(subtopic.name) && '📐 דוגמה לנושא זה'}
-                                                </p>
-                                                <div className="bg-white rounded-xl p-4 border-2 border-yellow-400">
-                                                    <p className="font-bold text-yellow-700 mb-2">✅ פתרון:</p>
-                                                    <div className="text-gray-800 space-y-2">
-                                                        {subtopic.name === 'פיתגורס' && (
-                                                            <>
-                                                                <p>1. נציב בנוסחה: 3² + 4² = c²</p>
-                                                                <p>2. נחשב: 9 + 16 = c²</p>
-                                                                <p>3. נקבל: 25 = c²</p>
-                                                                <p className="font-bold text-green-600">4. תשובה: c = 5 ס"מ ✨</p>
-                                                            </>
-                                                        )}
-                                                        {subtopic.name === 'שטח משולש' && (
-                                                            <>
-                                                                <p>1. נציב בנוסחה: (8 × 5) ÷ 2</p>
-                                                                <p>2. נכפול: 40 ÷ 2</p>
-                                                                <p className="font-bold text-green-600">3. תשובה: שטח = 20 סמ"ר ✨</p>
-                                                            </>
-                                                        )}
-                                                        {subtopic.name === 'היקף משולש' && (
-                                                            <>
-                                                                <p>1. נחבר את כל הצלעות: 5 + 7 + 9</p>
-                                                                <p className="font-bold text-green-600">2. תשובה: היקף = 21 ס"מ ✨</p>
-                                                            </>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Practice Button */}
-                                        <motion.button
-                                            whileHover={{ scale: 1.02 }}
-                                            whileTap={{ scale: 0.98 }}
-                                            onClick={() => startPractice(selectedTopic, subtopic)}
-                                            className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-2xl py-5 font-bold text-lg shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-3"
-                                        >
-                                            <Target className="w-6 h-6" />
-                                            תרגל את {subtopic.name}
-                                            <ChevronRight className="w-6 h-6" />
-                                        </motion.button>
-                                    </div>
-                                </motion.div>
-                            ))
-                        ) : (
-                            // No subtopics - general topic explanation
+                        {/* Hints */}
+                        {currentHints.length > 0 && (
                             <motion.div
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                className="bg-white rounded-3xl shadow-xl p-8"
+                                className="mb-6"
                             >
-                                <div className="text-center mb-6">
-                                    <div className="text-6xl mb-4">{selectedTopic.icon}</div>
-                                    <h2 className="text-3xl font-black text-gray-800 mb-4">למד את {selectedTopic.name}</h2>
-                                    <p className="text-gray-600 text-lg">נושא מרכזי במתמטיקה - בואו נתרגל!</p>
+                                {currentHints.map((hint, index) => (
+                                    <div
+                                        key={index}
+                                        className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 mb-3"
+                                    >
+                                        <div className="flex items-start gap-3">
+                                            <Lightbulb className="w-6 h-6 text-amber-600 flex-shrink-0" />
+                                            <div className="flex-1">
+                                                <div className="font-bold text-amber-900 mb-1">
+                                                    רמז {index + 1}:
+                                                </div>
+                                                <MathDisplay>{hint}</MathDisplay>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </motion.div>
+                        )}
+
+                        {/* Answer Input */}
+                        {!finalFeedback?.isCorrect && (
+                            <div className="relative mb-6">
+                                <input
+                                    ref={inputRef}
+                                    type="text"
+                                    value={userAnswer}
+                                    onChange={(e) => setUserAnswer(e.target.value)}
+                                    onKeyPress={(e) => e.key === 'Enter' && submitAnswer()}
+                                    placeholder="הקלד את תשובתך כאן..."
+                                    className="w-full px-6 py-4 pr-20 text-2xl font-bold text-center border-4 border-blue-300 rounded-2xl focus:outline-none focus:border-blue-500 bg-blue-50"
+                                    disabled={finalFeedback !== null}
+                                />
+                                <LiveFeedbackIndicator status={feedbackStatus} />
+                            </div>
+                        )}
+
+                        {/* Live Feedback */}
+                        {liveFeedback && !finalFeedback && (
+                            <motion.div
+                                initial={{ opacity: 0, y: -10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className={`mb-6 p-4 rounded-2xl border-2 ${
+                                    liveFeedback.isCorrect
+                                        ? 'bg-green-50 border-green-300'
+                                        : liveFeedback.isPartial
+                                            ? 'bg-amber-50 border-amber-300'
+                                            : 'bg-red-50 border-red-300'
+                                }`}
+                            >
+                                <div className="flex items-start gap-3">
+                                    {liveFeedback.isCorrect ? (
+                                        <CheckCircle2 className="w-6 h-6 text-green-600 flex-shrink-0" />
+                                    ) : liveFeedback.isPartial ? (
+                                        <AlertCircle className="w-6 h-6 text-amber-600 flex-shrink-0" />
+                                    ) : (
+                                        <XCircle className="w-6 h-6 text-red-600 flex-shrink-0" />
+                                    )}
+                                    <div className="flex-1">
+                                        <MathDisplay>{liveFeedback.feedback}</MathDisplay>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        )}
+
+                        {/* Final Feedback */}
+                        {finalFeedback && (
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0.95 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                className={`mb-6 p-6 rounded-2xl border-4 ${
+                                    finalFeedback.isCorrect
+                                        ? 'bg-gradient-to-br from-green-50 to-emerald-50 border-green-400'
+                                        : 'bg-gradient-to-br from-red-50 to-pink-50 border-red-400'
+                                }`}
+                            >
+                                <div className="flex items-center gap-4 mb-4">
+                                    {finalFeedback.isCorrect ? (
+                                        <>
+                                            <CheckCircle2 className="w-12 h-12 text-green-600" />
+                                            <div>
+                                                <div className="text-2xl font-black text-green-900">
+                                                    מעולה! תשובה נכונה! 🎉
+                                                </div>
+                                                <div className="text-green-700 font-bold">
+                                                    +{finalFeedback.pointsEarned} נקודות
+                                                </div>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <XCircle className="w-12 h-12 text-red-600" />
+                                            <div>
+                                                <div className="text-2xl font-black text-red-900">
+                                                    התשובה לא נכונה
+                                                </div>
+                                                <div className="text-red-700 font-bold">
+                                                    נסיון {finalFeedback.attemptNumber}
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
 
+                                <div className="bg-white/80 rounded-xl p-4 mb-4">
+                                    <MathDisplay>{finalFeedback.feedback}</MathDisplay>
+                                </div>
+
+                                {!finalFeedback.isCorrect && currentQuestion.correctAnswer && (
+                                    <div className="bg-blue-50 rounded-xl p-4 border-2 border-blue-300">
+                                        <div className="font-bold text-blue-900 mb-2">
+                                            התשובה הנכונה:
+                                        </div>
+                                        <div className="text-2xl font-black text-blue-600">
+                                            <MathDisplay>{currentQuestion.correctAnswer}</MathDisplay>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {currentQuestion.explanation && (
+                                    <div className="bg-purple-50 rounded-xl p-4 mt-4 border-2 border-purple-300">
+                                        <div className="font-bold text-purple-900 mb-2">
+                                            הסבר:
+                                        </div>
+                                        <MathDisplay>{currentQuestion.explanation}</MathDisplay>
+                                    </div>
+                                )}
+                            </motion.div>
+                        )}
+
+                        {/* Image Upload Section */}
+                        {!finalFeedback?.isCorrect && (
+                            <div className="border-t-2 border-gray-200 pt-6 mt-6">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h3 className="font-black text-lg text-gray-800">
+                                        פתרת על נייר? העלה תמונה! 📸
+                                    </h3>
+                                </div>
+
+                                {!imagePreview ? (
+                                    <label className="flex flex-col items-center justify-center w-full h-32 border-4 border-dashed border-blue-300 rounded-2xl cursor-pointer bg-blue-50 hover:bg-blue-100 transition-all">
+                                        <div className="flex flex-col items-center">
+                                            <Camera className="w-10 h-10 text-blue-600 mb-2" />
+                                            <span className="font-bold text-blue-900">
+                                                לחץ להעלאת תמונה
+                                            </span>
+                                        </div>
+                                        <input
+                                            ref={fileInputRef}
+                                            type="file"
+                                            accept="image/*"
+                                            onChange={handleImageUpload}
+                                            className="hidden"
+                                        />
+                                    </label>
+                                ) : (
+                                    <div className="relative">
+                                        <img
+                                            src={imagePreview}
+                                            alt="Uploaded work"
+                                            className="w-full max-h-64 object-contain rounded-2xl border-4 border-blue-300 bg-white"
+                                        />
+                                        <button
+                                            onClick={clearUploadedImage}
+                                            className="absolute top-2 left-2 p-2 bg-red-500 text-white rounded-full hover:bg-red-600"
+                                        >
+                                            <X className="w-5 h-5" />
+                                        </button>
+
+                                        {!imageAnalysisResult && (
+                                            <motion.button
+                                                whileHover={{ scale: 1.05 }}
+                                                whileTap={{ scale: 0.95 }}
+                                                onClick={analyzeUploadedWork}
+                                                disabled={isAnalyzingImage}
+                                                className="w-full mt-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-black text-lg py-4 rounded-2xl shadow-xl hover:shadow-2xl transition-all disabled:opacity-50 flex items-center justify-center gap-3"
+                                            >
+                                                {isAnalyzingImage ? (
+                                                    <>
+                                                        <Loader2 className="w-6 h-6 animate-spin" />
+                                                        מנתח את הפתרון שלך...
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Brain className="w-6 h-6" />
+                                                        נתח את הפתרון שלי
+                                                        <Sparkles className="w-6 h-6" />
+                                                    </>
+                                                )}
+                                            </motion.button>
+                                        )}
+
+                                        {imageAnalysisResult && (
+                                            <motion.div
+                                                initial={{ opacity: 0, y: 20 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                className={`mt-4 p-6 rounded-2xl border-4 ${
+                                                    imageAnalysisResult.isCorrect
+                                                        ? 'bg-green-50 border-green-400'
+                                                        : 'bg-red-50 border-red-400'
+                                                }`}
+                                            >
+                                                <div className="flex items-center gap-3 mb-4">
+                                                    {imageAnalysisResult.isCorrect ? (
+                                                        <CheckCircle2 className="w-10 h-10 text-green-600" />
+                                                    ) : (
+                                                        <XCircle className="w-10 h-10 text-red-600" />
+                                                    )}
+                                                    <div className={`text-2xl font-black ${
+                                                        imageAnalysisResult.isCorrect ? 'text-green-900' : 'text-red-900'
+                                                    }`}>
+                                                        {imageAnalysisResult.isCorrect ? 'פתרון נכון! 🎉' : 'יש טעות בפתרון'}
+                                                    </div>
+                                                </div>
+
+                                                <div className="bg-white/80 rounded-xl p-4">
+                                                    <MathDisplay>{imageAnalysisResult.feedback}</MathDisplay>
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Action Buttons */}
+                        <div className="flex flex-wrap gap-3 mt-6">
+                            {!finalFeedback?.isCorrect && (
+                                <>
+                                    <motion.button
+                                        whileHover={{ scale: 1.05 }}
+                                        whileTap={{ scale: 0.95 }}
+                                        onClick={submitAnswer}
+                                        disabled={!userAnswer.trim() || finalFeedback !== null}
+                                        className="flex-1 bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-black text-xl py-4 rounded-2xl shadow-xl hover:shadow-2xl transition-all disabled:opacity-50 flex items-center justify-center gap-3"
+                                    >
+                                        <Send className="w-6 h-6" />
+                                        {finalFeedback ? 'נשלח' : 'שלח תשובה'}
+                                    </motion.button>
+
+                                    {hintCount < 3 && (
+                                        <motion.button
+                                            whileHover={{ scale: 1.05 }}
+                                            whileTap={{ scale: 0.95 }}
+                                            onClick={getHint}
+                                            className="px-6 py-4 bg-amber-500 text-white font-black rounded-2xl shadow-xl hover:shadow-2xl transition-all flex items-center gap-2"
+                                        >
+                                            <Lightbulb className="w-6 h-6" />
+                                            רמז ({3 - hintCount})
+                                        </motion.button>
+                                    )}
+
+                                    {voice.isListening ? (
+                                        <motion.button
+                                            whileHover={{ scale: 1.05 }}
+                                            whileTap={{ scale: 0.95 }}
+                                            onClick={voice.stopListening}
+                                            className="px-6 py-4 bg-red-500 text-white font-black rounded-2xl shadow-xl animate-pulse flex items-center gap-2"
+                                        >
+                                            <Mic className="w-6 h-6" />
+                                            עצור
+                                        </motion.button>
+                                    ) : (
+                                        <motion.button
+                                            whileHover={{ scale: 1.05 }}
+                                            whileTap={{ scale: 0.95 }}
+                                            onClick={() => voice.startListening((text) => setUserAnswer(text))}
+                                            className="px-6 py-4 bg-purple-500 text-white font-black rounded-2xl shadow-xl hover:shadow-2xl transition-all flex items-center gap-2"
+                                        >
+                                            <Mic className="w-6 h-6" />
+                                            דבר
+                                        </motion.button>
+                                    )}
+                                </>
+                            )}
+
+                            {finalFeedback?.isCorrect && (
                                 <motion.button
                                     whileHover={{ scale: 1.05 }}
                                     whileTap={{ scale: 0.95 }}
-                                    onClick={() => startPractice(selectedTopic, null)}
-                                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-3xl py-6 font-black text-2xl shadow-2xl hover:shadow-3xl transition-all flex items-center justify-center gap-4"
+                                    onClick={nextQuestion}
+                                    className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-black text-xl py-4 rounded-2xl shadow-xl hover:shadow-2xl transition-all flex items-center justify-center gap-3"
                                 >
-                                    <Play className="w-8 h-8" />
-                                    התחל תרגול
-                                    <Sparkles className="w-8 h-8" />
+                                    <ChevronRight className="w-6 h-6" />
+                                    שאלה הבאה
+                                    <Sparkles className="w-6 h-6" />
                                 </motion.button>
-                            </motion.div>
-                        )}
-                    </div>
+                            )}
+
+                            {finalFeedback && !finalFeedback.isCorrect && (
+                                <motion.button
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    onClick={tryAgain}
+                                    className="flex-1 bg-gradient-to-r from-orange-600 to-red-600 text-white font-black text-xl py-4 rounded-2xl shadow-xl hover:shadow-2xl transition-all flex items-center justify-center gap-3"
+                                >
+                                    <RefreshCw className="w-6 h-6" />
+                                    נסה שוב
+                                </motion.button>
+                            )}
+
+                            <motion.button
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
+                                onClick={endSession}
+                                className="px-6 py-4 bg-gray-600 text-white font-black rounded-2xl shadow-xl hover:shadow-2xl transition-all"
+                            >
+                                סיום
+                            </motion.button>
+                        </div>
+                    </motion.div>
                 </div>
-            </div>
+            </motion.div>
         );
     }
 
-    // ==================== VIEW: PRACTICE (WITH IMAGE UPLOAD) ====================
-    if (view === 'practice') {
-        // 🔍 DEBUG RENDER STATE
-        console.log('🎨 RENDERING practice view:', {
-            isGeneratingQuestion,
-            hasCurrentQuestion: !!currentQuestion,
-            questionKeys: currentQuestion ? Object.keys(currentQuestion) : [],
-            questionText: currentQuestion?.question,
-            topicName: selectedTopic?.name,
-            subtopicName: selectedSubtopic?.name
-        });
+    // RESULTS VIEW
+    if (view === 'results') {
+        const accuracy = sessionStats.total > 0
+            ? Math.round((sessionStats.correct / sessionStats.total) * 100)
+            : 0;
+
+        const avgTime = sessionStats.questionTimes.length > 0
+            ? Math.round(
+                sessionStats.questionTimes.reduce((a, b) => a + b, 0) /
+                sessionStats.questionTimes.length
+            )
+            : 0;
 
         return (
-            <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50 p-4" dir="rtl">
+            <motion.div
+                key="results"
+                {...pageTransition}
+                className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 p-4 md:p-8"
+                dir="rtl"
+            >
                 <div className="max-w-4xl mx-auto">
-                    <motion.div initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="bg-gradient-to-r from-purple-500 via-pink-500 to-orange-400 rounded-3xl shadow-2xl p-5 mb-6">
-                        <div className="flex items-center justify-between">
-                            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={endSession} className="bg-white/20 backdrop-blur-md text-white px-6 py-3 rounded-2xl font-bold hover:bg-white/30 transition-all flex items-center gap-2 shadow-lg">
-                                <ArrowLeft className="w-5 h-5" />
-                                סיים
-                            </motion.button>
+                    {/* Celebration Header */}
+                    <motion.div
+                        initial={{ opacity: 0, y: -50 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="text-center mb-12"
+                    >
+                        <motion.div
+                            animate={{ rotate: [0, 10, -10, 10, 0], scale: [1, 1.2, 1] }}
+                            transition={{ duration: 1, repeat: 3 }}
+                            className="text-8xl mb-6"
+                        >
+                            🎉
+                        </motion.div>
+                        <h2 className="text-4xl md:text-6xl font-black text-gray-800 mb-4">
+                            כל הכבוד!
+                        </h2>
+                        <p className="text-xl text-gray-600">
+                            סיימת את האימון - הנה התוצאות שלך
+                        </p>
+                    </motion.div>
 
-                            <div className="flex items-center gap-4">
-                                <motion.div animate={{ scale: [1, 1.05, 1] }} transition={{ duration: 1, repeat: Infinity }} className="flex items-center gap-2 bg-white/20 backdrop-blur-md px-5 py-3 rounded-2xl shadow-lg">
-                                    <Clock className="w-6 h-6 text-white" />
-                                    <span className="font-mono text-2xl font-black text-white drop-shadow-lg">{formatTime(timer)}</span>
-                                </motion.div>
+                    {/* Stats Cards */}
+                    <div className="grid md:grid-cols-2 gap-6 mb-8">
+                        <motion.div
+                            variants={scaleIn}
+                            initial="hidden"
+                            animate="visible"
+                            className="bg-gradient-to-br from-yellow-400 to-orange-500 text-white rounded-3xl p-8 shadow-2xl"
+                        >
+                            <Trophy className="w-16 h-16 mb-4 mx-auto" />
+                            <div className="text-6xl font-black mb-2">{sessionStats.points}</div>
+                            <div className="text-xl font-bold">נקודות כוללות</div>
+                        </motion.div>
 
-                                <motion.div animate={sessionStats.streak > 0 ? { rotate: [0, 10, -10, 0] } : {}} transition={{ duration: 0.5 }} className="flex items-center gap-2 bg-gradient-to-r from-orange-400 to-red-500 px-5 py-3 rounded-2xl shadow-lg">
-                                    <Flame className="w-6 h-6 text-white" />
-                                    <span className="text-2xl font-black text-white drop-shadow-lg">{sessionStats.streak}</span>
-                                </motion.div>
+                        <motion.div
+                            variants={scaleIn}
+                            initial="hidden"
+                            animate="visible"
+                            transition={{ delay: 0.1 }}
+                            className="bg-gradient-to-br from-green-400 to-emerald-500 text-white rounded-3xl p-8 shadow-2xl"
+                        >
+                            <Target className="w-16 h-16 mb-4 mx-auto" />
+                            <div className="text-6xl font-black mb-2">{accuracy}%</div>
+                            <div className="text-xl font-bold">דיוק</div>
+                        </motion.div>
 
-                                <motion.div animate={sessionStats.points > 0 ? { scale: [1, 1.1, 1] } : {}} className="flex items-center gap-2 bg-gradient-to-r from-yellow-400 to-yellow-500 px-5 py-3 rounded-2xl shadow-lg">
-                                    <Star className="w-6 h-6 text-white" />
-                                    <span className="text-2xl font-black text-white drop-shadow-lg">{sessionStats.points}</span>
-                                </motion.div>
+                        <motion.div
+                            variants={scaleIn}
+                            initial="hidden"
+                            animate="visible"
+                            transition={{ delay: 0.2 }}
+                            className="bg-gradient-to-br from-blue-400 to-cyan-500 text-white rounded-3xl p-8 shadow-2xl"
+                        >
+                            <CheckCircle2 className="w-16 h-16 mb-4 mx-auto" />
+                            <div className="text-6xl font-black mb-2">
+                                {sessionStats.correct}/{sessionStats.total}
+                            </div>
+                            <div className="text-xl font-bold">תשובות נכונות</div>
+                        </motion.div>
 
-                                <div className="bg-white/20 backdrop-blur-md px-5 py-3 rounded-2xl shadow-lg">
-                                    <div className="text-xl font-black text-white drop-shadow-lg">{sessionStats.correct}/{sessionStats.total}</div>
-                                    <div className="text-xs text-white/80 font-semibold">שאלות נכונות</div>
+                        <motion.div
+                            variants={scaleIn}
+                            initial="hidden"
+                            animate="visible"
+                            transition={{ delay: 0.3 }}
+                            className="bg-gradient-to-br from-purple-400 to-pink-500 text-white rounded-3xl p-8 shadow-2xl"
+                        >
+                            <Flame className="w-16 h-16 mb-4 mx-auto" />
+                            <div className="text-6xl font-black mb-2">{sessionStats.maxStreak}</div>
+                            <div className="text-xl font-bold">רצף מקסימלי</div>
+                        </motion.div>
+                    </div>
+
+                    {/* Additional Stats */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.4 }}
+                        className="bg-white rounded-3xl p-8 shadow-2xl mb-8"
+                    >
+                        <h3 className="text-2xl font-black text-gray-800 mb-6 flex items-center gap-3">
+                            <BarChart3 className="w-8 h-8 text-blue-600" />
+                            סטטיסטיקה נוספת
+                        </h3>
+
+                        <div className="grid md:grid-cols-3 gap-6">
+                            <div className="text-center">
+                                <Clock className="w-12 h-12 text-blue-500 mx-auto mb-3" />
+                                <div className="text-3xl font-black text-gray-800 mb-1">
+                                    {formatTime(avgTime)}
                                 </div>
+                                <div className="text-gray-600 font-medium">זמן ממוצע לשאלה</div>
+                            </div>
+
+                            <div className="text-center">
+                                <TrendingUp className="w-12 h-12 text-green-500 mx-auto mb-3" />
+                                <div className="text-3xl font-black text-gray-800 mb-1">
+                                    {sessionStats.attempts}
+                                </div>
+                                <div className="text-gray-600 font-medium">ניסיונות כוללים</div>
+                            </div>
+
+                            <div className="text-center">
+                                <Award className="w-12 h-12 text-purple-500 mx-auto mb-3" />
+                                <div className="text-3xl font-black text-gray-800 mb-1">
+                                    {accuracy >= 90 ? 'מצוין' : accuracy >= 70 ? 'טוב מאוד' : 'בסדר'}
+                                </div>
+                                <div className="text-gray-600 font-medium">ביצועים</div>
                             </div>
                         </div>
-
-                        {sessionStats.total > 0 && (
-                            <motion.div initial={{ width: 0 }} animate={{ width: '100%' }} className="mt-4 h-4 bg-white/20 rounded-full overflow-hidden">
-                                <motion.div initial={{ width: 0 }} animate={{ width: `${(sessionStats.correct / sessionStats.total) * 100}%` }} transition={{ duration: 0.5 }} className="h-full bg-gradient-to-r from-green-400 to-emerald-500 rounded-full shadow-lg" />
-                            </motion.div>
-                        )}
                     </motion.div>
 
-                    <motion.div key={currentQuestion?.question || 'loading'} initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} className="bg-white rounded-3xl shadow-2xl p-10 mb-4 border-4 border-purple-200" style={{ background: 'linear-gradient(135deg, #ffffff 0%, #faf5ff 50%, #fef3c7 100%)' }}>
-                        <AnimatePresence mode="wait">
-                            {isGeneratingQuestion ? (
-                                <ThinkingAnimation message="נקסון מכין שאלה מיוחדת בשבילך... ✨" />
-                            ) : currentQuestion ? (
-                                <motion.div key="question-content" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
-                                    <div className="flex items-center justify-between mb-6">
-                                        <div className="flex items-center gap-3 bg-purple-100 px-5 py-3 rounded-2xl shadow-md">
-                                            <span className="text-4xl">{selectedTopic?.icon}</span>
-                                            <div>
-                                                <div className="font-black text-gray-800 text-lg">{selectedTopic?.name}</div>
-                                                {selectedSubtopic && <div className="text-sm text-gray-500 font-semibold">{selectedSubtopic.name}</div>}
-                                            </div>
-                                        </div>
-
-                                        {attemptCount > 0 && (
-                                            <div className="flex items-center gap-2 bg-orange-100 px-4 py-2 rounded-full border-2 border-orange-300">
-                                                <RefreshCw className="w-5 h-5 text-orange-600" />
-                                                <span className="text-base font-bold text-orange-600">ניסיון {attemptCount + 1}</span>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <div className="mb-8">
-                                        <div className="text-3xl font-black text-gray-800 mb-4 leading-relaxed">
-                                            <MathDisplay>{currentQuestion.question}</MathDisplay>
-                                        </div>
-                                    </div>
-
-                                    {currentQuestion.visualData && (
-                                        <div className="mb-6">
-                                            <VisualGraph visualData={currentQuestion.visualData} />
-                                        </div>
-                                    )}
-
-                                    {currentHints.length > 0 && (
-                                        <div className="mb-6 space-y-3">
-                                            {currentHints.map((hint, index) => (
-                                                <motion.div key={index} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="bg-yellow-50 border-r-4 border-yellow-400 p-5 rounded-2xl shadow-md">
-                                                    <div className="flex items-start gap-3">
-                                                        <Lightbulb className="w-6 h-6 text-yellow-600 flex-shrink-0 mt-1" />
-                                                        <div className="text-gray-700 text-lg font-semibold">
-                                                            <MathDisplay inline>{hint}</MathDisplay>
-                                                        </div>
-                                                    </div>
-                                                </motion.div>
-                                            ))}
-                                        </div>
-                                    )}
-
-                                    {liveFeedback && !finalFeedback && (
-                                        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`mb-6 p-5 rounded-2xl border-3 ${feedbackStatus === 'correct' ? 'bg-green-50 border-green-300' : feedbackStatus === 'partial' ? 'bg-yellow-50 border-yellow-300' : 'bg-red-50 border-red-300'}`}>
-                                            <div className="flex items-center gap-3 text-base">
-                                                {feedbackStatus === 'correct' && <CheckCircle2 className="w-6 h-6 text-green-600" />}
-                                                {feedbackStatus === 'partial' && <AlertCircle className="w-6 h-6 text-yellow-600" />}
-                                                {feedbackStatus === 'wrong' && <XCircle className="w-6 h-6 text-red-600" />}
-                                                <span className="font-bold text-gray-700">
-                                                    <MathDisplay inline>{liveFeedback.explanation}</MathDisplay>
-                                                </span>
-                                            </div>
-                                        </motion.div>
-                                    )}
-
-                                    {finalFeedback && (
-                                        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`mb-6 p-8 rounded-3xl ${finalFeedback.isCorrect ? 'bg-green-50 border-4 border-green-300' : finalFeedback.isPartial ? 'bg-yellow-50 border-4 border-yellow-300' : 'bg-red-50 border-4 border-red-300'}`}>
-                                            <div className="flex items-center gap-4 mb-4">
-                                                {finalFeedback.isCorrect ? <CheckCircle2 className="w-10 h-10 text-green-600" /> : <XCircle className="w-10 h-10 text-red-600" />}
-                                                <div className="flex-1">
-                                                    <div className="text-2xl font-black">
-                                                        <MathDisplay inline>{finalFeedback.feedback}</MathDisplay>
-                                                    </div>
-                                                    {finalFeedback.isCorrect && finalFeedback.pointsEarned > 0 && (
-                                                        <div className="text-base text-gray-600 font-bold">+{finalFeedback.pointsEarned} נקודות • {formatTime(finalFeedback.timeTaken)}</div>
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            {finalFeedback.explanation && (
-                                                <div className="bg-white/70 rounded-2xl p-5 mb-4">
-                                                    <div className="font-black text-gray-700 mb-2 text-lg">💡 הסבר:</div>
-                                                    <div className="text-gray-700 text-base">
-                                                        <MathDisplay>{finalFeedback.explanation}</MathDisplay>
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {!finalFeedback.isCorrect && (
-                                                <div className="bg-white/70 rounded-2xl p-5">
-                                                    <div className="font-black text-gray-700 mb-2 text-lg">התשובה הנכונה:</div>
-                                                    <div className="text-3xl font-black text-gray-800">
-                                                        <MathDisplay className="text-4xl">{currentQuestion.correctAnswer}</MathDisplay>
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </motion.div>
-                                    )}
-
-                                    {/* 🔥 IMAGE ANALYSIS RESULT */}
-                                    {imageAnalysisResult && (
-                                        <motion.div
-                                            initial={{ opacity: 0, y: 10 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            className={`mb-6 p-6 rounded-2xl border-4 ${
-                                                imageAnalysisResult.isCorrect
-                                                    ? 'bg-green-50 border-green-300'
-                                                    : 'bg-orange-50 border-orange-300'
-                                            }`}
-                                        >
-                                            <div className="flex items-center gap-3 mb-4">
-                                                {imageAnalysisResult.isCorrect ? (
-                                                    <CheckCircle2 className="w-8 h-8 text-green-600" />
-                                                ) : (
-                                                    <AlertCircle className="w-8 h-8 text-orange-600" />
-                                                )}
-                                                <h3 className="text-xl font-bold text-gray-800">
-                                                    {imageAnalysisResult.isCorrect ? '🎉 מעולה!' : '🤔 כמעט!'}
-                                                </h3>
-                                            </div>
-
-                                            {imageAnalysisResult.detectedAnswer && (
-                                                <div className="bg-white/70 rounded-xl p-4 mb-4">
-                                                    <div className="font-bold text-gray-700 mb-2">מה שזיהיתי:</div>
-                                                    <div className="text-2xl font-black text-gray-800">
-                                                        {imageAnalysisResult.detectedAnswer}
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            <div className="bg-white/70 rounded-xl p-4 mb-4">
-                                                <div className="font-bold text-gray-700 mb-2">משוב:</div>
-                                                <div className="text-base text-gray-800 whitespace-pre-wrap">
-                                                    {imageAnalysisResult.feedback}
-                                                </div>
-                                            </div>
-
-                                            {imageAnalysisResult.stepsAnalysis && imageAnalysisResult.stepsAnalysis.length > 0 && (
-                                                <div className="bg-white/70 rounded-xl p-4">
-                                                    <div className="font-bold text-gray-700 mb-2">ניתוח השלבים שלך:</div>
-                                                    <div className="text-sm text-gray-700 space-y-2">
-                                                        {imageAnalysisResult.stepsAnalysis.map((step, index) => (
-                                                            <div key={index} className="flex items-start gap-2">
-                                                                <span className="font-bold">{index + 1}.</span>
-                                                                <span>{step}</span>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {!imageAnalysisResult.matchesQuestion && (
-                                                <div className="bg-red-100 rounded-xl p-4 mt-4 border-2 border-red-300">
-                                                    <div className="font-bold text-red-700 mb-2">⚠️ שים לב!</div>
-                                                    <div className="text-sm text-red-700">
-                                                        נראה שפתרת שאלה אחרת. וודא שאתה פותר את השאלה הנוכחית!
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </motion.div>
-                                    )}
-
-                                    {/* 🔥 ANSWER INPUT SECTION WITH IMAGE UPLOAD */}
-                                    {!finalFeedback && (
-                                        <div className="space-y-4">
-                                            {/* Text Input with Voice */}
-                                            <div className="relative">
-                                                <input
-                                                    ref={inputRef}
-                                                    type="text"
-                                                    value={userAnswer}
-                                                    onChange={(e) => setUserAnswer(e.target.value)}
-                                                    onKeyPress={(e) => e.key === 'Enter' && submitAnswer()}
-                                                    placeholder="כתוב/י את התשובה... ✍️"
-                                                    className="w-full px-8 py-5 pr-20 text-2xl border-4 border-purple-300 rounded-3xl focus:ring-4 focus:ring-purple-200 focus:border-purple-400 transition-all font-bold"
-                                                />
-                                                {/* 🎤 Voice Input Button */}
-                                                <motion.button
-                                                    whileHover={{ scale: 1.1 }}
-                                                    whileTap={{ scale: 0.9 }}
-                                                    onClick={() => voice.startListening(
-                                                        (transcript) => {
-                                                            setUserAnswer(transcript);
-                                                            toast.success('התשובה הוקלדה! 📝');
-                                                        },
-                                                        (error) => toast.error('שגיאה בזיהוי הקול, נסה שוב')
-                                                    )}
-                                                    disabled={voice.isListening}
-                                                    className={`absolute left-4 top-1/2 -translate-y-1/2 p-3 rounded-full ${
-                                                        voice.isListening
-                                                            ? 'bg-red-500 animate-pulse'
-                                                            : 'bg-gradient-to-r from-purple-500 to-pink-500 hover:shadow-lg'
-                                                    } text-white transition-all disabled:opacity-50`}
-                                                >
-                                                    <Mic className={`w-6 h-6 ${voice.isListening ? 'animate-bounce' : ''}`} />
-                                                </motion.button>
-                                                <LiveFeedbackIndicator status={feedbackStatus} />
-                                            </div>
-
-                                            {/* OR Divider */}
-                                            <div className="flex items-center gap-4">
-                                                <div className="flex-1 h-px bg-gray-300"></div>
-                                                <span className="text-gray-500 font-bold">או</span>
-                                                <div className="flex-1 h-px bg-gray-300"></div>
-                                            </div>
-
-                                            {/* 🔥 IMAGE UPLOAD SECTION */}
-                                            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-6 border-2 border-blue-200">
-                                                <div className="flex items-center gap-3 mb-4">
-                                                    <Camera className="w-6 h-6 text-blue-600" />
-                                                    <h3 className="text-lg font-bold text-gray-800">צלם את הפתרון שלך 📸</h3>
-                                                </div>
-
-                                                {!imagePreview ? (
-                                                    <div className="text-center">
-                                                        <input
-                                                            ref={fileInputRef}
-                                                            type="file"
-                                                            accept="image/*"
-                                                            capture="environment"
-                                                            onChange={handleImageUpload}
-                                                            className="hidden"
-                                                        />
-                                                        <button
-                                                            onClick={() => fileInputRef.current?.click()}
-                                                            className="w-full px-6 py-4 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl font-bold hover:shadow-lg transition-all flex items-center justify-center gap-3"
-                                                        >
-                                                            <Upload className="w-5 h-5" />
-                                                            העלה תמונה של הפתרון
-                                                        </button>
-                                                        <p className="text-sm text-gray-600 mt-2">
-                                                            צלם את הפתרון שלך בכתב יד והעלה כאן 📝
-                                                        </p>
-                                                    </div>
-                                                ) : (
-                                                    <div className="space-y-4">
-                                                        <div className="relative rounded-xl overflow-hidden border-4 border-blue-300">
-                                                            <img
-                                                                src={imagePreview}
-                                                                alt="Uploaded work"
-                                                                className="w-full max-h-96 object-contain bg-white"
-                                                            />
-                                                            <button
-                                                                onClick={clearUploadedImage}
-                                                                className="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full hover:bg-red-600 transition-all shadow-lg"
-                                                            >
-                                                                <X className="w-5 h-5" />
-                                                            </button>
-                                                        </div>
-
-                                                        <button
-                                                            onClick={analyzeUploadedWork}
-                                                            disabled={isAnalyzingImage}
-                                                            className="w-full px-6 py-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-bold hover:shadow-lg transition-all flex items-center justify-center gap-3 disabled:opacity-50"
-                                                        >
-                                                            {isAnalyzingImage ? (
-                                                                <>
-                                                                    <Loader2 className="w-5 h-5 animate-spin" />
-                                                                    מנתח את הפתרון...
-                                                                </>
-                                                            ) : (
-                                                                <>
-                                                                    <Sparkles className="w-5 h-5" />
-                                                                    בדוק את הפתרון שלי
-                                                                </>
-                                                            )}
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </div>
-
-                                            {/* 🎤 Voice Control Button */}
-                                            <div className="flex justify-end mb-4">
-                                                <motion.button
-                                                    whileHover={{ scale: 1.05 }}
-                                                    whileTap={{ scale: 0.95 }}
-                                                    onClick={voice.toggleVoice}
-                                                    className={`flex items-center gap-2 px-4 py-3 rounded-2xl font-bold transition-all shadow-lg ${
-                                                        voice.voiceEnabled
-                                                            ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white'
-                                                            : 'bg-gray-200 text-gray-600'
-                                                    }`}
-                                                >
-                                                    {voice.voiceEnabled ? (
-                                                        <>
-                                                            <Volume2 className="w-5 h-5" />
-                                                            קול פעיל 🔊
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <VolumeX className="w-5 h-5" />
-                                                            קול כבוי 🔇
-                                                        </>
-                                                    )}
-                                                </motion.button>
-                                            </div>
-
-                                            {/* Regular Action Buttons */}
-                                            <div className="grid grid-cols-3 gap-4">
-                                                <motion.button
-                                                    whileHover={{ scale: 1.05 }}
-                                                    whileTap={{ scale: 0.95 }}
-                                                    onClick={() => setChatOpen(true)}
-                                                    className="flex items-center justify-center gap-2 px-4 py-5 bg-blue-500 text-white rounded-3xl font-black hover:bg-blue-600 transition-all text-lg shadow-xl"
-                                                >
-                                                    <MessageCircle className="w-6 h-6" />
-                                                    שוחח עם נקסון
-                                                </motion.button>
-
-                                                <motion.button
-                                                    whileHover={{ scale: 1.05 }}
-                                                    whileTap={{ scale: 0.95 }}
-                                                    onClick={getHint}
-                                                    disabled={hintCount >= 3}
-                                                    className="flex items-center justify-center gap-2 px-4 py-5 bg-yellow-500 text-white rounded-3xl font-black hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-lg shadow-xl"
-                                                >
-                                                    <Lightbulb className="w-6 h-6" />
-                                                    רמז ({3 - hintCount})
-                                                </motion.button>
-
-                                                <motion.button
-                                                    whileHover={{ scale: 1.05 }}
-                                                    whileTap={{ scale: 0.95 }}
-                                                    onClick={submitAnswer}
-                                                    disabled={!userAnswer.trim()}
-                                                    className="flex items-center justify-center gap-2 px-4 py-5 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-3xl font-black hover:shadow-2xl disabled:opacity-50 disabled:cursor-not-allowed transition-all text-lg shadow-xl"
-                                                >
-                                                    <CheckCircle2 className="w-6 h-6" />
-                                                    שלח תשובה
-                                                </motion.button>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {finalFeedback && (
-                                        <div className="flex gap-4">
-                                            {!finalFeedback.isCorrect && (
-                                                <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={tryAgain} className="flex-1 flex items-center justify-center gap-2 px-6 py-5 bg-orange-500 text-white rounded-3xl font-black hover:bg-orange-600 transition-all text-lg shadow-xl">
-                                                    <RefreshCw className="w-6 h-6" />
-                                                    נסה שוב
-                                                </motion.button>
-                                            )}
-
-                                            {finalFeedback.isCorrect && (
-                                                <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={nextQuestion} className="w-full flex items-center justify-center gap-2 px-6 py-5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-3xl font-black hover:shadow-2xl transition-all text-lg shadow-xl">
-                                                    <Sparkles className="w-6 h-6" />
-                                                    שאלה הבאה
-                                                    <ChevronRight className="w-6 h-6" />
-                                                </motion.button>
-                                            )}
-                                        </div>
-                                    )}
-                                </motion.div>
-                            ) : null}
-                        </AnimatePresence>
-                    </motion.div>
-                </div>
-
-                <AnimatePresence>
-                    {currentQuestion && (
-                        <AIChatSidebar question={currentQuestion} studentProfile={{ name: nexonProfile?.name || user?.name || 'תלמיד', grade: currentGrade, topic: selectedTopic?.name, personality: nexonProfile?.personality || 'nexon', mathFeeling: nexonProfile?.mathFeeling, learningStyle: nexonProfile?.learningStyle }} currentAnswer={userAnswer} isOpen={chatOpen} onToggle={() => setChatOpen(!chatOpen)} />
-                    )}
-                </AnimatePresence>
-            </div>
-        );
-    }
-
-    // ==================== VIEW: RESULTS ====================
-    if (view === 'results') {
-        const avgTime = sessionStats.questionTimes.length > 0 ? Math.round(sessionStats.questionTimes.reduce((a, b) => a + b, 0) / sessionStats.questionTimes.length) : 0;
-        const accuracy = sessionStats.total > 0 ? Math.round((sessionStats.correct / sessionStats.total) * 100) : 0;
-        const avgAttempts = sessionStats.total > 0 ? (sessionStats.attempts / sessionStats.total).toFixed(1) : 0;
-
-        return (
-            <div className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 p-4 flex items-center justify-center" dir="rtl">
-                <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full">
-                    <div className="text-center mb-6">
-                        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", delay: 0.2 }}>
-                            <Award className="w-20 h-20 text-yellow-500 mx-auto mb-4" />
-                        </motion.div>
-                        <h2 className="text-3xl font-bold text-gray-800 mb-2">סיימת!</h2>
-                        <p className="text-gray-600">תוצאות המפגש</p>
-                    </div>
-
-                    <div className="space-y-4 mb-6">
-                        {[
-                            { icon: Target, label: 'דיוק', value: `${accuracy}%`, color: 'purple' },
-                            { icon: CheckCircle2, label: 'נכונות', value: `${sessionStats.correct}/${sessionStats.total}`, color: 'green' },
-                            { icon: TrendingUp, label: 'ניסיונות ממוצעים', value: avgAttempts, color: 'blue' },
-                            { icon: Flame, label: 'רצף מקסימלי', value: sessionStats.maxStreak, color: 'orange' },
-                            { icon: Star, label: 'נקודות', value: sessionStats.points, color: 'yellow' },
-                            { icon: Clock, label: 'זמן ממוצע', value: formatTime(avgTime), color: 'pink' }
-                        ].map((stat, i) => (
-                            <div key={i} className={`bg-${stat.color}-50 rounded-2xl p-4 flex items-center justify-between`}>
-                                <div>
-                                    <div className="text-sm text-gray-600">{stat.label}</div>
-                                    <div className={`text-3xl font-bold text-${stat.color}-600`}>{stat.value}</div>
-                                </div>
-                                <stat.icon className={`w-10 h-10 text-${stat.color}-400`} />
-                            </div>
-                        ))}
-                    </div>
-
-                    <div className="space-y-3">
-                        <button onClick={() => startPractice(selectedTopic, selectedSubtopic)} className="w-full py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-2xl font-bold hover:shadow-lg transition-all">
-                            תרגל שוב
-                        </button>
-
-                        <button onClick={() => {
-                            if (onClose) {
-                                handleExitPractice();
-                            } else {
+                    {/* Action Buttons */}
+                    <div className="grid md:grid-cols-2 gap-6">
+                        <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => {
                                 setView('topic-select');
-                                setSelectedTopic(null);
-                                setSelectedSubtopic(null);
-                            }
-                        }} className="w-full py-4 bg-gray-100 text-gray-700 rounded-2xl font-bold hover:bg-gray-200 transition-all">
-                            {onClose ? 'חזרה ללוח הבקרה' : 'נושא אחר'}
-                        </button>
+                                setSessionStats({
+                                    correct: 0,
+                                    total: 0,
+                                    attempts: 0,
+                                    streak: 0,
+                                    maxStreak: 0,
+                                    points: 0,
+                                    startTime: null,
+                                    questionTimes: []
+                                });
+                            }}
+                            className="bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-black text-xl py-6 rounded-2xl shadow-2xl hover:shadow-3xl transition-all flex items-center justify-center gap-3"
+                        >
+                            <RefreshCw className="w-8 h-8" />
+                            תרגול נוסף
+                        </motion.button>
 
-                        {!onClose && (
-                            <button onClick={() => setView('home')} className="w-full py-4 bg-white border-2 border-gray-200 text-gray-700 rounded-2xl font-bold hover:border-gray-300 transition-all">
-                                חזרה לדף הבית
-                            </button>
-                        )}
+                        <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => {
+                                if (onClose) {
+                                    onClose();
+                                } else {
+                                    setView('home');
+                                }
+                            }}
+                            className="bg-gradient-to-r from-purple-600 to-pink-600 text-white font-black text-xl py-6 rounded-2xl shadow-2xl hover:shadow-3xl transition-all flex items-center justify-center gap-3"
+                        >
+                            <ArrowLeft className="w-8 h-8" />
+                            חזרה לדף הבית
+                        </motion.button>
                     </div>
-                </motion.div>
-            </div>
+                </div>
+            </motion.div>
         );
     }
 
     return null;
 };
 
-// ✅ Prevent unnecessary re-renders when parent component updates
-export default React.memo(MathTutor, (prevProps, nextProps) => {
-    // Deep comparison for object props
-    const topicChanged = JSON.stringify(prevProps.selectedTopic) !== JSON.stringify(nextProps.selectedTopic);
-    const subtopicChanged = JSON.stringify(prevProps.selectedSubtopic) !== JSON.stringify(nextProps.selectedSubtopic);
-
-    // Only re-render if these specific props actually change
-    const shouldNotUpdate = (
-        prevProps.topicId === nextProps.topicId &&
-        prevProps.gradeId === nextProps.gradeId &&
-        prevProps.mode === nextProps.mode &&
-        prevProps.userId === nextProps.userId &&
-        !topicChanged &&
-        !subtopicChanged
-    );
-
-    if (!shouldNotUpdate) {
-        console.log('🔄 MathTutor re-rendering due to prop change');
-    }
-
-    return shouldNotUpdate;
-});
+export default React.memo(MathTutor);

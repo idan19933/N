@@ -1,4 +1,4 @@
-// src/store/authStore.js - WITH PERSISTENCE + FIRESTORE PROFILE LOADING
+// src/store/authStore.js - FIXED VERSION WITH CONDITIONAL FIELD HANDLING
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import {
@@ -223,9 +223,9 @@ const useAuthStore = create(
                 try {
                     // 🔥 CRITICAL FIX: Read from FIRESTORE, not backend API
                     console.log('📖 Reading profile from Firestore:', user.uid);
-                    
+
                     const profileDoc = await getDoc(doc(db, 'studentProfiles', user.uid));
-                    
+
                     if (!profileDoc.exists()) {
                         console.log('⚠️ No profile found in Firestore - onboarding needed');
                         set({
@@ -281,6 +281,7 @@ const useAuthStore = create(
                 if (!user) throw new Error('No user');
 
                 try {
+                    // 🔥 FIX: Only include fields that are actually provided (not undefined)
                     const profileData = {
                         uid: user.uid,
                         email: user.email,
@@ -290,11 +291,6 @@ const useAuthStore = create(
                         gradeLevel: data.grade,
                         educationLevel: data.educationLevel || (parseInt(data.grade.replace('grade', '')) <= 9 ? 'middle' : 'high'),
                         track: data.track || 'standard',
-                        mathFeeling: data.mathFeeling,
-                        learningStyle: data.learningStyle,
-                        goalFocus: data.goalFocus,
-                        weakTopics: data.weakTopics || [],
-                        strugglesText: data.strugglesText || '',
                         onboardingCompleted: true,
                         nexonProfile: true,
                         role: 'user',
@@ -302,6 +298,18 @@ const useAuthStore = create(
                         updatedAt: new Date().toISOString(),
                         completedAt: new Date().toISOString()
                     };
+
+                    // 🔥 FIX: Only add optional fields if they exist
+                    if (data.mathFeeling) profileData.mathFeeling = data.mathFeeling;
+                    if (data.learningStyle) profileData.learningStyle = data.learningStyle;
+                    if (data.goalFocus) profileData.goalFocus = data.goalFocus;
+                    if (data.weakTopics) profileData.weakTopics = data.weakTopics;
+                    if (data.strugglesText) profileData.strugglesText = data.strugglesText;
+                    if (data.confidenceLevel) profileData.confidenceLevel = data.confidenceLevel;
+                    if (data.studyHabits) profileData.studyHabits = data.studyHabits;
+                    if (data.annualGoals) profileData.annualGoals = data.annualGoals;
+
+                    console.log('📝 Profile data to save:', profileData);
 
                     // Save to Firestore
                     const userRef = doc(db, 'users', user.uid);
@@ -453,7 +461,7 @@ const useAuthStore = create(
         {
             name: 'nexon-auth-storage', // localStorage key
             storage: createJSONStorage(() => localStorage),
-            
+
             // 🔥 CRITICAL: Only persist these specific fields
             partialize: (state) => ({
                 user: state.user,

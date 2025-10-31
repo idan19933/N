@@ -1,0 +1,230 @@
+/* src/styles/math-chat.css - Mathematical Chat Styling */
+
+/* Base math content styling */
+.math-renderer {
+    line-height: 1.8;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+
+/* Prevent breaking mathematical expressions */
+.math-inline {
+    display: inline-block;
+    white-space: nowrap;
+    margin: 0 2px;
+    padding: 2px 4px;
+    background-color: rgba(139, 92, 246, 0.05);
+    border-radius: 4px;
+    font-family: 'KaTeX_Main', 'Times New Roman', serif;
+}
+
+/* Block equations */
+.math-block {
+    display: block;
+    margin: 16px 0;
+    padding: 12px 16px;
+    background-color: rgba(139, 92, 246, 0.05);
+    border-left: 3px solid #8b5cf6;
+    border-radius: 4px;
+    overflow-x: auto;
+    white-space: nowrap;
+    text-align: center;
+}
+
+/* KaTeX overrides for better mobile display */
+.katex {
+    font-size: 1.1em !important;
+    line-height: 1.4 !important;
+}
+
+.katex-display {
+    margin: 0.5em 0 !important;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0.5em 0;
+}
+
+/* Mathematical operators spacing */
+.math-content .operator {
+    margin: 0 0.3em;
+}
+
+/* Fraction display */
+.frac {
+    display: inline-flex;
+    flex-direction: column;
+    vertical-align: middle;
+    text-align: center;
+    font-size: 0.9em;
+    margin: 0 0.2em;
+}
+
+.frac-num {
+    border-bottom: 1px solid currentColor;
+    padding-bottom: 2px;
+}
+
+.frac-den {
+    padding-top: 2px;
+}
+
+/* Mobile-specific adjustments */
+@media (max-width: 640px) {
+    .math-renderer {
+        font-size: 14px;
+        line-height: 2;
+    }
+
+    .math-inline {
+        padding: 1px 3px;
+        margin: 0 1px;
+    }
+
+    .math-block {
+        margin: 12px -8px;
+        padding: 10px 12px;
+        font-size: 13px;
+    }
+
+    .katex {
+        font-size: 1em !important;
+    }
+
+    /* Allow horizontal scroll for long equations on mobile */
+    .equation-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        margin: 0 -16px;
+        padding: 0 16px;
+    }
+
+    .equation-container::-webkit-scrollbar {
+        height: 4px;
+    }
+
+    .equation-container::-webkit-scrollbar-track {
+        background: rgba(139, 92, 246, 0.1);
+        border-radius: 2px;
+    }
+
+    .equation-container::-webkit-scrollbar-thumb {
+        background: rgba(139, 92, 246, 0.5);
+        border-radius: 2px;
+    }
+}
+
+/* Tablet adjustments */
+@media (min-width: 641px) and (max-width: 1024px) {
+    .math-renderer {
+        font-size: 15px;
+    }
+
+    .math-block {
+        margin: 14px 0;
+        padding: 11px 14px;
+    }
+}
+
+/* RTL specific adjustments */
+[dir="rtl"] .math-renderer {
+    text-align: right;
+}
+
+[dir="rtl"] .math-inline,
+[dir="rtl"] .math-block,
+[dir="rtl"] .katex {
+    direction: ltr;
+    unicode-bidi: embed;
+    text-align: left;
+}
+
+[dir="rtl"] .math-block {
+    border-left: none;
+    border-right: 3px solid #8b5cf6;
+}
+
+/* Dark mode adjustments */
+.dark .math-inline {
+    background-color: rgba(139, 92, 246, 0.15);
+    color: #e5e7eb;
+}
+
+.dark .math-block {
+    background-color: rgba(139, 92, 246, 0.1);
+    border-left-color: #8b5cf6;
+    color: #e5e7eb;
+}
+
+/* Animation for new messages */
+.math-message-enter {
+    opacity: 0;
+    transform: translateY(10px);
+}
+
+.math-message-enter-active {
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 300ms ease-out, transform 300ms ease-out;
+}
+
+/* Hint level indicators */
+.hint-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.75rem;
+    opacity: 0.7;
+    margin-bottom: 8px;
+}
+
+.hint-level-1 { color: #fbbf24; }
+.hint-level-2 { color: #fb923c; }
+.hint-level-3 { color: #f87171; }
+
+/* Loading animation for math rendering */
+.math-loading {
+    display: inline-block;
+    width: 60px;
+    height: 14px;
+    background: linear-gradient(90deg,
+    rgba(139, 92, 246, 0.2) 0%,
+    rgba(139, 92, 246, 0.5) 50%,
+    rgba(139, 92, 246, 0.2) 100%
+    );
+    background-size: 200% 100%;
+    animation: mathLoading 1.5s ease-in-out infinite;
+    border-radius: 7px;
+}
+
+@keyframes mathLoading {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* Ensure equations don't break at operators */
+.no-break {
+    white-space: nowrap;
+}
+
+/* Special handling for complex equations */
+.complex-equation {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 0.2em;
+}
+
+/* Better code blocks for math */
+.math-code {
+    font-family: 'Courier New', Courier, monospace;
+    background-color: rgba(75, 85, 99, 0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.9em;
+    white-space: nowrap;
+}
+
+/* Responsive font sizing for equations */
+.responsive-equation {
+    font-size: clamp(0.875rem, 2vw, 1.125rem);
+}

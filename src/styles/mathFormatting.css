@@ -1,0 +1,323 @@
+/* ==================== NEXON AI MATH TUTOR - FIXED TEXT FORMATTING ==================== */
+/* src/styles/mathFormatting.css */
+
+/* ✨ MAIN QUESTION TEXT CONTAINER - MAXIMUM SPACING ✨ */
+.math-question-text {
+    font-family: 'Assistant', 'Heebo', 'Arial', 'Helvetica', sans-serif !important;
+    font-size: 1.5rem !important;
+    line-height: 2.8 !important;
+    letter-spacing: 0.05em !important;
+    word-spacing: 0.3em !important;
+    direction: rtl !important;
+    text-align: right !important;
+    padding: 2.5rem !important;
+    white-space: pre-wrap !important;
+    word-wrap: break-word !important;
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+    color: #1f2937 !important;
+    max-width: 100% !important;
+}
+
+/* 🔢 MATHEMATICAL EXPRESSIONS INLINE WITH TEXT */
+.math-expression,
+.math-expression-inline {
+    font-family: 'Cambria Math', 'Times New Roman', serif !important;
+    font-size: 1.3em !important;
+    font-weight: 600 !important;
+    padding: 0.6em 1em !important;
+    background: linear-gradient(135deg, rgba(147, 51, 234, 0.1), rgba(236, 72, 153, 0.08)) !important;
+    border-radius: 10px !important;
+    display: inline-block !important;
+    margin: 0.5em 0.6em !important;
+    border: 2px solid rgba(147, 51, 234, 0.25) !important;
+    direction: ltr !important;
+    white-space: nowrap !important;
+    box-shadow: 0 2px 8px rgba(147, 51, 234, 0.1) !important;
+    transition: all 0.2s ease !important;
+}
+
+.math-expression:hover,
+.math-expression-inline:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(147, 51, 234, 0.2);
+}
+
+/* 📐 BLOCK MATH EXPRESSIONS */
+.math-expression-block {
+    font-family: 'Cambria Math', 'Times New Roman', serif !important;
+    font-size: 1.6em !important;
+    font-weight: 600 !important;
+    padding: 1.5rem 2rem !important;
+    background: linear-gradient(135deg, rgba(147, 51, 234, 0.08), rgba(236, 72, 153, 0.06)) !important;
+    border-radius: 14px !important;
+    display: block !important;
+    margin: 1.5rem 0 !important;
+    border: 2px solid rgba(147, 51, 234, 0.2) !important;
+    direction: ltr !important;
+    text-align: center !important;
+    box-shadow: 0 2px 10px rgba(147, 51, 234, 0.08) !important;
+}
+
+/* 📦 QUESTION CONTAINER - ENHANCED VISUAL APPEAL */
+.question-container {
+    background: linear-gradient(135deg, #ffffff 0%, #faf5ff 50%, #fef3c7 100%) !important;
+    border-radius: 28px !important;
+    padding: 3rem !important;
+    margin-bottom: 2rem !important;
+    box-shadow: 0 15px 50px rgba(147, 51, 234, 0.18) !important;
+    border: 4px solid #e9d5ff !important;
+    position: relative !important;
+    overflow: visible !important;
+    min-height: 300px !important;
+}
+
+.question-container::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    background: linear-gradient(135deg, transparent 0%, rgba(147, 51, 234, 0.02) 100%);
+    pointer-events: none;
+    z-index: 0;
+}
+
+.question-container > * {
+    position: relative;
+    z-index: 1;
+}
+
+/* 📊 PARAGRAPHS WITHIN MATH TEXT - EXTRA SPACING */
+.math-question-text p,
+.math-question-text div {
+    margin-bottom: 2rem !important;
+    line-height: 2.8 !important;
+}
+
+.math-question-text br {
+    line-height: 3 !important;
+    display: block !important;
+    content: "" !important;
+    margin: 1rem 0 !important;
+}
+
+/* 🔤 MIXED HEBREW-MATH CONTENT */
+.hebrew-math-mixed {
+    line-height: 2.8 !important;
+    word-spacing: 0.3em !important;
+    letter-spacing: 0.04em !important;
+}
+
+.math-text {
+    font-size: 1.45rem !important;
+    line-height: 2.8 !important;
+    letter-spacing: 0.04em !important;
+    word-spacing: 0.25em !important;
+    white-space: pre-wrap !important;
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+    max-width: 100% !important;
+}
+
+/* 📱 RESPONSIVE DESIGN */
+@media (max-width: 768px) {
+    .math-question-text {
+        font-size: 1.3em !important;
+        line-height: 2.5 !important;
+        padding: 2rem !important;
+        letter-spacing: 0.04em !important;
+    }
+
+    .math-expression,
+    .math-expression-inline {
+        font-size: 1.2em !important;
+        padding: 0.5em 0.9em !important;
+        margin: 0.4em 0.5em !important;
+    }
+
+    .math-expression-block {
+        font-size: 1.4em !important;
+        padding: 1.2rem 1.5rem !important;
+    }
+
+    .question-container {
+        padding: 2rem !important;
+        border-radius: 20px !important;
+    }
+}
+
+@media (max-width: 480px) {
+    .math-question-text {
+        font-size: 1.2em !important;
+        line-height: 2.3 !important;
+        padding: 1.5rem !important;
+    }
+
+    .math-expression,
+    .math-expression-inline {
+        font-size: 1.15em !important;
+        padding: 0.4em 0.7em !important;
+    }
+
+    .math-expression-block {
+        font-size: 1.3em !important;
+        padding: 1rem 1.2rem !important;
+    }
+}
+
+/* 🎯 RTL SUPPORT */
+[dir="rtl"] .math-expression,
+[dir="rtl"] .math-expression-inline,
+[dir="rtl"] .math-expression-block {
+    direction: ltr !important;
+    display: inline-block !important;
+}
+
+/* 🔄 SMOOTH TRANSITIONS */
+.math-question-text,
+.math-expression,
+.math-expression-inline,
+.math-expression-block,
+.question-container {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+/* ✅ ENSURE INHERITANCE */
+.math-text > *,
+.math-question-text > * {
+    line-height: inherit !important;
+    letter-spacing: inherit !important;
+    word-spacing: inherit !important;
+}
+
+/* 🎨 HIGHLIGHT IMPORTANT NOTATION */
+.math-question-text strong {
+    font-weight: 700 !important;
+    color: #7c3aed !important;
+    padding: 0 0.3em !important;
+}
+
+.math-question-text em {
+    font-style: italic !important;
+    color: #be123c !important;
+}
+
+/* 📏 NUMBERED LISTS IN MATH */
+.math-question-text ol,
+.math-question-text ul {
+    margin-right: 2em !important;
+    margin-bottom: 2rem !important;
+}
+
+.math-question-text li {
+    margin-bottom: 1.5em !important;
+    line-height: 2.8 !important;
+    padding-right: 0.5em !important;
+}
+
+/* 💡 HINT TEXT STYLING */
+.math-hint-text {
+    font-size: 1.25em !important;
+    line-height: 2.5 !important;
+    padding: 1.5rem !important;
+    letter-spacing: 0.03em !important;
+    word-spacing: 0.2em !important;
+}
+
+/* 📐 INLINE MATH SYMBOLS */
+.math-inline {
+    font-family: 'Cambria Math', 'Times New Roman', serif !important;
+    font-size: 1.2em !important;
+    font-weight: 600 !important;
+    padding: 0.3em 0.6em !important;
+    background: rgba(147, 51, 234, 0.08) !important;
+    border-radius: 6px !important;
+    display: inline-block !important;
+    margin: 0 0.4em !important;
+    direction: ltr !important;
+}
+
+/* ➕ MATHEMATICAL OPERATORS */
+.math-operator {
+    padding: 0 0.6em !important;
+    font-weight: 700 !important;
+    font-size: 1.2em !important;
+    color: #7c3aed !important;
+}
+
+/* ⚡ PRINT-FRIENDLY */
+@media print {
+    .math-question-text {
+        font-size: 14pt !important;
+        line-height: 2 !important;
+        color: #000 !important;
+    }
+
+    .math-expression,
+    .math-expression-inline {
+        border: 1px solid #000 !important;
+        background: #f5f5f5 !important;
+    }
+
+    .question-container {
+        box-shadow: none !important;
+        border: 2px solid #000 !important;
+    }
+}
+
+/* 🌟 HIGH CONTRAST MODE */
+@media (prefers-contrast: high) {
+    .math-question-text {
+        color: #000 !important;
+        font-weight: 600 !important;
+    }
+
+    .math-expression,
+    .math-expression-inline,
+    .math-expression-block {
+        border-width: 3px !important;
+        background: #fff !important;
+    }
+}
+
+/* 🌙 DARK MODE */
+@media (prefers-color-scheme: dark) {
+    .math-question-text {
+        color: #f3f4f6 !important;
+    }
+
+    .question-container {
+        background: linear-gradient(135deg, #1f2937 0%, #374151 50%, #4b5563 100%) !important;
+        border-color: #6b7280 !important;
+    }
+
+    .math-expression,
+    .math-expression-inline,
+    .math-expression-block {
+        background: rgba(147, 51, 234, 0.2) !important;
+        border-color: rgba(147, 51, 234, 0.4) !important;
+        color: #f3f4f6 !important;
+    }
+}
+
+/* 🎯 CRITICAL: FORCE LINE BREAKS */
+.math-question-text,
+.math-text,
+.hebrew-math-mixed {
+    overflow-wrap: break-word !important;
+    word-wrap: break-word !important;
+    word-break: break-word !important;
+    hyphens: auto !important;
+    -webkit-hyphens: auto !important;
+    -moz-hyphens: auto !important;
+    -ms-hyphens: auto !important;
+}
+
+/* 📝 ENSURE READABILITY */
+.math-question-text > div,
+.math-text > div {
+    margin-bottom: 2rem !important;
+    min-height: 2em !important;
+}

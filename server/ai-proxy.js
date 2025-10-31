@@ -1500,52 +1500,409 @@ app.post('/api/ai/get-hint', async (req, res) => {
 });
 
 // ==================== AI CHAT ====================
+// Replace the existing /api/ai/chat route (around line 1119) with this:
+
+// ==================== AI CHAT WITH PROGRESSIVE HINTS ====================
 app.post('/api/ai/chat', async (req, res) => {
+    console.log('============================================================');
+    console.log('💬 AI CHAT REQUEST');
+    console.log('============================================================');
+
     try {
-        const { message, context } = req.body;
+        const {
+            message,
+            context,
+            actionType = 'general',
+            hintLevel = 0
+        } = req.body;
 
-        const wantsFullSolution = /פתרון|הראה|שלב/i.test(message);
+        console.log('📝 Chat Request:', {
+            message: message?.substring(0, 50),
+            actionType,
+            hintLevel,
+            studentName: context?.studentName
+        });
 
-        let conversationPrompt = wantsFullSolution
-            ? `תן פתרון מפורט ל: ${context?.question}`
-            : `עזור: "${message}"\n\nשאלה: ${context?.question}`;
-
-        if (process.env.ANTHROPIC_API_KEY) {
-            const response = await fetch('https://api.anthropic.com/v1/messages', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-api-key': process.env.ANTHROPIC_API_KEY,
-                    'anthropic-version': '2023-06-01'
-                },
-                body: JSON.stringify({
-                    model: 'claude-sonnet-4-5-20250929',
-                    max_tokens: wantsFullSolution ? 2000 : 800,
-                    temperature: 0.7,
-                    messages: [{ role: 'user', content: conversationPrompt }]
-                })
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.error?.message || 'API error');
-            }
-
-            return res.json({
-                success: true,
-                response: data.content[0].text,
-                model: 'claude-sonnet-4-5-20250929'
+        if (!message || !context) {
+            return res.status(400).json({
+                success: false,
+                error: 'Missing message or context'
             });
         }
 
-        throw new Error('No AI configured');
+        // Build system prompt based on action type
+        let systemPrompt = '';
+
+        // Add personality context
+        if (personalitySystem.loaded) {
+            const personality = personalitySystem.data.corePersonality;
+            systemPrompt += `אתה ${personality.teacher_name}, ${personality.description}.\n`;
+            systemPrompt += `${personality.teaching_approach}\n\n`;
+        } else {
+            systemPrompt += `אתה נקסון, מורה דיגיטלי למתמטיקה.\n\n`;
+        }
+
+        systemPrompt += `התלמיד: ${context.studentName}\n`;
+        systemPrompt += `השאלה: ${context.question}\n`;
+        if (context.answer) {
+            systemPrompt += `התשובה הנכונה: ${context.answer}\n`;
+        }
+
+        // Action-specific prompts
+        let userPrompt = message;
+        let maxTokens = 800;
+
+        switch (actionType) {
+            case 'hint':
+                maxTokens = 500;
+                if (hintLevel === 1) {
+                    systemPrompt += `
+תן רמז כללי מאוד שיכוון את התלמיד לחשוב על הגישה הנכונה.
+אל תגלה את השיטה או הנוסחה.
+דוגמאות: "חשוב על סוג המשוואה", "זכור את הכללים הבסיסיים"
+מקסימום 2 משפטים.`;
+                } else if (hintLevel === 2) {
+                    systemPrompt += `
+תן רמז יותר ספציפי על השיטה או הנוסחה הרלוונטית.
+אל תראה איך להשתמש בה.
+דוגמאות: "נסה להשתמש בנוסחת השורשים", "איזו נוסחה מתאימה למשוואה ריבועית?"
+מקסימום 3 משפטים.`;
+                } else if (hintLevel >= 3) {
+                    systemPrompt += `
+הראה את הצעד הראשון של הפתרון עם הסבר קצר.
+דוגמה: "נתחיל בזיהוי המקדמים: a=2, b=3, c=-5"
+אל תראה יותר מצעד אחד.`;
+                }
+                break;
+
+            case 'nextStep':
+                maxTokens = 600;
+                systemPrompt += `
+התלמיד שואל מה הצעד הבא.
+בדוק מה הוא כתב בהודעה ותן לו את הצעד הבא בלבד.
+אם הוא לא כתב כלום, תן לו את הצעד הראשון.
+אל תראה יותר מצעד אחד קדימה.
+הסבר כל צעד בבירור.`;
+                break;
+
+            case 'checkDirection':
+                maxTokens = 600;
+                systemPrompt += `
+התלמיד רוצה לבדוק אם הוא בכיוון הנכון.
+אם הוא בכיוון הנכון - עודד אותו וציין מה טוב.
+אם יש טעות - הצבע עליה בעדינות והסבר איך לתקן.
+אל תיתן את הפתרון המלא.`;
+                break;
+
+            case 'fullSolution':
+                maxTokens = 2000;
+                systemPrompt += `
+התלמיד מבקש את הפתרון המלא.
+הצג את כל השלבים בצורה מסודרת עם הסברים.
+כל צעד צריך להיות ברור עם חישובים מפורטים.
+השתמש במספור לכל שלב.`;
+                break;
+
+            default:
+                systemPrompt += `
+ענה לתלמיד בצורה מועילה וחינוכית.
+אם השאלה קשורה לבעיה המתמטית, עזור בהתאם.
+אם זו שאלה כללית, ענה בצורה ידידותית.`;
+        }
+
+        // Add formatting instructions
+        systemPrompt += `
+
+חשוב מאוד:
+1. כתוב בעברית ברורה וידידותית
+2. אל תשבור משוואות או ביטויים מתמטיים באמצע
+3. השתמש ב ** לחזקות (לדוגמה: x**2)
+4. השתמש ב / לחלוקה ו - למינוס  
+5. שים רווחים מסביב לאופרטורים מתמטיים
+6. השתמש באימוג'ים כשמתאים 😊`;
+
+        console.log('🤖 Calling Claude API...');
+        console.log('   Action:', actionType);
+        console.log('   Hint Level:', hintLevel);
+
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': process.env.ANTHROPIC_API_KEY,
+                'anthropic-version': '2023-06-01'
+            },
+            body: JSON.stringify({
+                model: 'claude-sonnet-4-5-20250929',
+                max_tokens: maxTokens,
+                temperature: 0.7,
+                system: systemPrompt,
+                messages: [{
+                    role: 'user',
+                    content: userPrompt
+                }]
+            })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(`API error: ${response.status} - ${errorData.error?.message}`);
+        }
+
+        const data = await response.json();
+        const aiResponse = data.content[0].text;
+
+        // Format mathematical content for better display
+        let formattedResponse = formatMathematicalContent(aiResponse);
+
+        console.log('✅ AI Response generated');
+        console.log('   Length:', formattedResponse.length);
+
+        res.json({
+            success: true,
+            response: formattedResponse,
+            actionType: actionType,
+            hintLevel: hintLevel,
+            model: 'claude-sonnet-4-5-20250929'
+        });
 
     } catch (error) {
-        console.error('❌ Error:', error);
+        console.error('❌ AI Chat Error:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: error.message || 'Internal server error'
+        });
+    }
+});
+
+// Helper function to format mathematical content
+// BACKEND UPDATE - Replace the formatMathematicalContent function and update the AI chat route
+
+// ==================== ENHANCED MATH FORMATTER ====================
+function formatMathematicalContent(text) {
+    let formatted = text;
+
+    // Remove LaTeX delimiters that shouldn't be visible
+    formatted = formatted
+        .replace(/\$\$/g, '')
+        .replace(/\\\[/g, '')
+        .replace(/\\\]/g, '')
+        .replace(/\\begin{equation}/g, '')
+        .replace(/\\end{equation}/g, '');
+
+    // Clean up excessive line breaks
+    formatted = formatted.replace(/\n{3,}/g, '\n\n');
+
+    // Ensure spaces around operators
+    formatted = formatted
+        .replace(/([a-zA-Z0-9\u0590-\u05FF])\+([a-zA-Z0-9\u0590-\u05FF])/g, '$1 + $2')
+        .replace(/([a-zA-Z0-9\u0590-\u05FF])\-([a-zA-Z0-9\u0590-\u05FF])/g, '$1 - $2')
+        .replace(/([a-zA-Z0-9\u0590-\u05FF])\*([a-zA-Z0-9\u0590-\u05FF])/g, '$1 * $2')
+        .replace(/([a-zA-Z0-9\u0590-\u05FF])\/([a-zA-Z0-9\u0590-\u05FF])/g, '$1 / $2')
+        .replace(/([a-zA-Z0-9\u0590-\u05FF])\=([a-zA-Z0-9\u0590-\u05FF])/g, '$1 = $2');
+
+    // Fix powers - convert to superscript notation
+    formatted = formatted
+        .replace(/\^{([^}]+)}/g, '^$1')
+        .replace(/\^(\d+)/g, '^$1');
+
+    // Fix subscripts
+    formatted = formatted
+        .replace(/_{([^}]+)}/g, '_$1')
+        .replace(/_(\d+)/g, '_$1');
+
+    // Fix fractions - keep them for frontend to process
+    // But ensure they're properly formatted
+    formatted = formatted.replace(/\\frac{([^}]*)}{([^}]*)}/g, '\\frac{$1}{$2}');
+
+    // Fix common math functions
+    formatted = formatted
+        .replace(/\\sqrt{([^}]*)}/g, '√($1)')
+        .replace(/\\partial/g, '∂')
+        .replace(/\\times/g, '×')
+        .replace(/\\cdot/g, '·')
+        .replace(/\\pm/g, '±')
+        .replace(/\\geq/g, '≥')
+        .replace(/\\leq/g, '≤')
+        .replace(/\\neq/g, '≠')
+        .replace(/\\approx/g, '≈');
+
+    return formatted;
+}
+
+// ==================== UPDATED AI CHAT ROUTE ====================
+app.post('/api/ai/chat', async (req, res) => {
+    console.log('============================================================');
+    console.log('💬 AI CHAT REQUEST');
+    console.log('============================================================');
+
+    try {
+        const {
+            message,
+            context,
+            actionType = 'general',
+            hintLevel = 0
+        } = req.body;
+
+        console.log('📝 Chat Request:', {
+            message: message?.substring(0, 50),
+            actionType,
+            hintLevel,
+            studentName: context?.studentName
+        });
+
+        if (!message || !context) {
+            return res.status(400).json({
+                success: false,
+                error: 'Missing message or context'
+            });
+        }
+
+        // Build system prompt based on action type
+        let systemPrompt = '';
+
+        // Add personality context
+        if (personalitySystem.loaded) {
+            const personality = personalitySystem.data.corePersonality;
+            systemPrompt += `אתה ${personality.teacher_name}, ${personality.description}.\n`;
+            systemPrompt += `${personality.teaching_approach}\n\n`;
+        } else {
+            systemPrompt += `אתה נקסון, מורה דיגיטלי למתמטיקה.\n\n`;
+        }
+
+        systemPrompt += `התלמיד: ${context.studentName}\n`;
+        systemPrompt += `השאלה: ${context.question}\n`;
+        if (context.answer) {
+            systemPrompt += `התשובה הנכונה: ${context.answer}\n`;
+        }
+
+        // Action-specific prompts
+        let userPrompt = message;
+        let maxTokens = 800;
+
+        switch (actionType) {
+            case 'hint':
+                maxTokens = 500;
+                if (hintLevel === 1) {
+                    systemPrompt += `
+תן רמז כללי מאוד שיכוון את התלמיד לחשוב על הגישה הנכונה.
+אל תגלה את השיטה או הנוסחה.
+דוגמאות: "חשוב על סוג המשוואה", "זכור את הכללים הבסיסיים"
+מקסימום 2 משפטים.`;
+                } else if (hintLevel === 2) {
+                    systemPrompt += `
+תן רמז יותר ספציפי על השיטה או הנוסחה הרלוונטית.
+אל תראה איך להשתמש בה.
+דוגמאות: "נסה להשתמש בנוסחת השורשים", "איזו נוסחה מתאימה למשוואה ריבועית?"
+מקסימום 3 משפטים.`;
+                } else if (hintLevel >= 3) {
+                    systemPrompt += `
+הראה את הצעד הראשון של הפתרון עם הסבר קצר.
+דוגמה: "נתחיל בזיהוי המקדמים: a=2, b=3, c=-5"
+אל תראה יותר מצעד אחד.`;
+                }
+                break;
+
+            case 'nextStep':
+                maxTokens = 600;
+                systemPrompt += `
+התלמיד שואל מה הצעד הבא.
+בדוק מה הוא כתב בהודעה ותן לו את הצעד הבא בלבד.
+אם הוא לא כתב כלום, תן לו את הצעד הראשון.
+אל תראה יותר מצעד אחד קדימה.
+הסבר כל צעד בבירור.`;
+                break;
+
+            case 'checkDirection':
+                maxTokens = 600;
+                systemPrompt += `
+התלמיד רוצה לבדוק אם הוא בכיוון הנכון.
+אם הוא בכיוון הנכון - עודד אותו וציין מה טוב.
+אם יש טעות - הצבע עליה בעדינות והסבר איך לתקן.
+אל תיתן את הפתרון המלא.`;
+                break;
+
+            case 'fullSolution':
+                maxTokens = 2000;
+                systemPrompt += `
+התלמיד מבקש את הפתרון המלא.
+הצג את כל השלבים בצורה מסודרת עם הסברים.
+כל צעד צריך להיות ברור עם חישובים מפורטים.
+השתמש במספור לכל שלב.`;
+                break;
+
+            default:
+                systemPrompt += `
+ענה לתלמיד בצורה מועילה וחינוכית.
+אם השאלה קשורה לבעיה המתמטית, עזור בהתאם.
+אם זו שאלה כללית, ענה בצורה ידידותית.`;
+        }
+
+        // Add formatting instructions - UPDATED
+        systemPrompt += `
+
+חשוב מאוד:
+1. כתוב בעברית ברורה וידידותית
+2. אל תשבור משוואות או ביטויים מתמטיים באמצע
+3. השתמש ב ^ לחזקות (לדוגמה: x^2, 3t^2)
+4. השתמש ב / לחלוקה ו - למינוס  
+5. שים רווחים מסביב לאופרטורים מתמטיים
+6. השתמש באימוג'ים כשמתאים 😊
+7. אל תשתמש בסימנים כמו $$ או \[ או \] - הם לא נחוצים
+8. לשברים השתמש ב: (מונה)/(מכנה) לדוגמה: (3x+1)/(2x-5)
+9. לשורשים השתמש ב: √ לדוגמה: √(x^2 + 1)
+10. כתוב נוסחאות בצורה פשוטה וקריאה`;
+
+        console.log('🤖 Calling Claude API...');
+        console.log('   Action:', actionType);
+        console.log('   Hint Level:', hintLevel);
+
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': process.env.ANTHROPIC_API_KEY,
+                'anthropic-version': '2023-06-01'
+            },
+            body: JSON.stringify({
+                model: 'claude-sonnet-4-5-20250929',
+                max_tokens: maxTokens,
+                temperature: 0.7,
+                system: systemPrompt,
+                messages: [{
+                    role: 'user',
+                    content: userPrompt
+                }]
+            })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(`API error: ${response.status} - ${errorData.error?.message}`);
+        }
+
+        const data = await response.json();
+        const aiResponse = data.content[0].text;
+
+        // Format mathematical content for better display
+        let formattedResponse = formatMathematicalContent(aiResponse);
+
+        console.log('✅ AI Response generated');
+        console.log('   Length:', formattedResponse.length);
+
+        res.json({
+            success: true,
+            response: formattedResponse,
+            actionType: actionType,
+            hintLevel: hintLevel,
+            model: 'claude-sonnet-4-5-20250929'
+        });
+
+    } catch (error) {
+        console.error('❌ AI Chat Error:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message || 'Internal server error'
         });
     }
 });

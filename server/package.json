@@ -5,8 +5,8 @@
   "type": "module",
   "main": "server/ai-proxy.js",
   "scripts": {
-    "start": "node start-with-migrations.js",
-    "dev": "nodemon ai-proxy.js"
+    "migrate": "node db/run-sql-migrations.js",
+    "start": "npm run migrate && node index.js"
   },
   "engines": {
     "node": ">=18.0.0",

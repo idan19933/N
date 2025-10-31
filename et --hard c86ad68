@@ -1,0 +1,30 @@
+8856c90 2025-10-28 fixed
+83599c3 2025-10-28 2
+1a7a8cb 2025-10-28 1
+9354328 2025-10-28 fix: Deploy working notebookService and nexonAskService
+1296711 2025-10-28 feat: Add notebookService and fix nexonAskService
+b82f826 2025-10-28 fix: Use correct column names (attempts, display_name)
+22ca613 2025-10-28 fix: Query only existing columns from users table
+86dade0 2025-10-28 fix: Database column types and NexonAsk service
+1fbd8dc 2025-10-28 fix: Remove duplicate notebook routes conflict
+563a7c7 2025-10-28 fix: Use correct table name (users) and database import (pool)
+6d5f679 2025-10-28 fix: Use correct database import (pool from config/database)
+f4e4ecc 2025-10-28 feat: Add intelligent NexonAsk with Claude AI
+c86ad68 2025-10-27 Fix: Cast AVG to numeric before ROUND
+38d0f52 2025-10-27 Add UNIQUE constraint for curriculum_progress UPSERT
+9ea587b 2025-10-27 Fix: Drop defaults before changing column types
+bba4504 2025-10-27 Fix: Change columns to INTEGER and add UPSERT logic
+1522216 2025-10-27 Fix: Add UPSERT logic and fix type casting in stats
+e1286df 2025-10-27 Fix: Cast columns to numeric in stats query
+e9ede29 2025-10-27 Fix topic stats query to calculate from curriculum_progress
+11fa91d 2025-10-27 Fix all remaining NOT NULL constraints
+b854133 2025-10-27 Make topic_name nullable in curriculum_progress
+1232645 2025-10-27 Make firebase_uid nullable in curriculum_progress
+330ce47 2025-10-27 Make question_text nullable
+fbd8fa1 2025-10-27 Make firebase_uid nullable in notebook_entries
+070e1f5 2025-10-27 Add missing columns for notebook and curriculum
+25746a4 2025-10-27 Add summary column to notebook_entries
+095e638 2025-10-27 Add correct_attempts column
+8396334 2025-10-27 Fix: Add migration and update notebookService
+c408a5d 2025-10-27 Fix: Remove credentials from CORS config
+ed1e678 2025-10-27 Add missing columns to curriculum_progress

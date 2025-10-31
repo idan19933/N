@@ -88,7 +88,7 @@ CREATE INDEX idx_chat_sessions_status ON chat_sessions(status);
 CREATE TABLE chat_messages (
                                id SERIAL PRIMARY KEY,
                                session_id INTEGER REFERENCES chat_sessions(id) ON DELETE CASCADE,
-                               firebase_uid VARCHAR(255) NOT NULL,
+                               firebase_uid VARCHAR(255) NOT NULL,Q
                                role VARCHAR(50) NOT NULL,
                                content TEXT NOT NULL,
                                question_data JSONB,
