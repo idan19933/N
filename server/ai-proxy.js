@@ -20,7 +20,7 @@ import learningRoutes from './routes/learningRoutes.js';
 import chatRoutes from './routes/chatRoutes.js';
 import nexonRoutes from './routes/nexonRoutes.js';
 import notebookRoutes from './routes/notebookRoutes.js';
-import notebookRoutes from './routes/aiAnalysisRoutes.js';
+import aiAnalysisRoutes from './routes/aiAnalysisRoutes.js';
 
 import notebookService from './services/notebookService.js';
 import userRoutes from './routes/userRoutes.js';
@@ -2173,6 +2173,8 @@ ${correctAnswer}
         });
     }
 });
+app.use('/api/ai', aiAnalysisRoutes);  // ✅ ADD THIS LINE
+
 
 // ==================== START SERVER ====================
 async function loadPersonalityFromStorage() {
