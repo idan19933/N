@@ -1,12 +1,11 @@
-// server/routes/performanceRoutes.js
+// server/routes/performanceRoutes.js - FIXED SQL QUERIES
 import express from 'express';
 import pool from '../config/database.js';
-import aiPerformanceAnalysis from '../services/aiPerformanceAnalysis.js';
 
 const router = express.Router();
 
 /**
- * GET /api/performance/live-stats - Get real-time performance statistics
+ * GET /api/performance/live-stats - Get live performance statistics
  */
 router.get('/live-stats', async (req, res) => {
     try {
@@ -15,245 +14,131 @@ router.get('/live-stats', async (req, res) => {
         if (!userId) {
             return res.status(400).json({
                 success: false,
-                message: 'Missing userId parameter'
+                error: 'userId is required'
             });
         }
 
-        // Get user ID
-        const userQuery = 'SELECT id FROM users WHERE firebase_uid = $1';
-        const userResult = await pool.query(userQuery, [userId]);
+        console.log('📊 Fetching live stats for userId:', userId);
+
+        // Get internal user ID from Firebase UID
+        const userResult = await pool.query(
+            'SELECT id FROM users WHERE firebase_uid = $1',
+            [userId]
+        );
 
         if (userResult.rows.length === 0) {
+            console.log('⚠️ User not found, returning empty stats');
             return res.json({
                 success: true,
                 stats: {
-                    currentStreak: 0,
+                    totalQuestions: 0,
+                    correctAnswers: 0,
+                    accuracy: 0,
+                    activeDays: 0,
                     todayQuestions: 0,
-                    todayAccuracy: 0,
+                    weeklyActiveDays: 0,
                     realtimeAccuracy: 0,
-                    currentDifficulty: 'medium',
-                    suggestedDifficulty: 'medium',
-                    performanceTrend: 'stable'
+                    lastActivity: null
                 }
             });
         }
 
-        const studentId = userResult.rows[0].id;
+        const internalUserId = userResult.rows[0].id;
 
-        // Get current streak
-        const streakQuery = `
-            WITH daily_activity AS (
-                SELECT 
-                    DATE(created_at) as activity_date,
-                    COUNT(*) as questions_count
-                FROM notebook_entries
-                WHERE student_id = $1
-                GROUP BY DATE(created_at)
-                ORDER BY activity_date DESC
-            ),
-            streak_calc AS (
-                SELECT 
-                    activity_date,
-                    activity_date - (ROW_NUMBER() OVER (ORDER BY activity_date DESC) - 1) * INTERVAL '1 day' as streak_group
-                FROM daily_activity
-            )
+        // ✅ FIXED: Total questions and correct answers
+        const totalStatsResult = await pool.query(`
             SELECT 
-                COUNT(DISTINCT activity_date) as current_streak
-            FROM streak_calc
-            WHERE streak_group = (
-                SELECT streak_group 
-                FROM streak_calc 
-                WHERE activity_date = CURRENT_DATE
-                LIMIT 1
-            )
-        `;
-
-        const streakResult = await pool.query(streakQuery, [studentId]);
-        const currentStreak = streakResult.rows[0]?.current_streak || 0;
-
-        // Get today's statistics
-        const todayQuery = `
-            SELECT 
-                COUNT(*) as total_today,
-                SUM(CASE WHEN is_correct THEN 1 ELSE 0 END) as correct_today,
-                ROUND(AVG(CASE WHEN is_correct THEN 1 ELSE 0 END) * 100) as accuracy_today
+                COUNT(*) as total_questions,
+                SUM(CASE WHEN is_correct = true THEN 1 ELSE 0 END) as correct_answers
             FROM notebook_entries
-            WHERE student_id = $1
-                AND DATE(created_at) = CURRENT_DATE
-        `;
+            WHERE user_id = $1
+        `, [internalUserId]);
 
-        const todayResult = await pool.query(todayQuery, [studentId]);
-        const todayStats = todayResult.rows[0];
-
-        // Get last 10 questions for real-time accuracy
-        const realtimeQuery = `
-            SELECT 
-                is_correct,
-                difficulty,
-                created_at
-            FROM notebook_entries
-            WHERE student_id = $1
-            ORDER BY created_at DESC
-            LIMIT 10
-        `;
-
-        const realtimeResult = await pool.query(realtimeQuery, [studentId]);
-        const recentQuestions = realtimeResult.rows;
-
-        const realtimeAccuracy = recentQuestions.length > 0
-            ? Math.round((recentQuestions.filter(q => q.is_correct).length / recentQuestions.length) * 100)
+        const totalQuestions = parseInt(totalStatsResult.rows[0]?.total_questions) || 0;
+        const correctAnswers = parseInt(totalStatsResult.rows[0]?.correct_answers) || 0;
+        const accuracy = totalQuestions > 0
+            ? Math.round((correctAnswers / totalQuestions) * 100)
             : 0;
 
-        // Get current difficulty and suggested difficulty
-        const currentDifficulty = recentQuestions[0]?.difficulty || 'medium';
-        const suggestedDifficulty = await aiPerformanceAnalysis.getRealtimeDifficulty(userId);
+        // ✅ FIXED: Today's questions
+        const todayResult = await pool.query(`
+            SELECT COUNT(*) as today_count
+            FROM notebook_entries
+            WHERE user_id = $1
+            AND DATE(created_at) = CURRENT_DATE
+        `, [internalUserId]);
 
-        // Calculate performance trend
-        let performanceTrend = 'stable';
-        if (recentQuestions.length >= 5) {
-            const firstHalf = recentQuestions.slice(5, 10);
-            const secondHalf = recentQuestions.slice(0, 5);
+        const todayQuestions = parseInt(todayResult.rows[0]?.today_count) || 0;
 
-            const firstAccuracy = firstHalf.filter(q => q.is_correct).length / firstHalf.length;
-            const secondAccuracy = secondHalf.filter(q => q.is_correct).length / secondHalf.length;
+        // ✅ FIXED: Weekly active days
+        const weeklyDaysResult = await pool.query(`
+            SELECT COUNT(DISTINCT DATE(created_at)) as active_days
+            FROM notebook_entries
+            WHERE user_id = $1
+            AND created_at >= CURRENT_DATE - INTERVAL '7 days'
+        `, [internalUserId]);
 
-            if (secondAccuracy > firstAccuracy + 0.2) {
-                performanceTrend = 'improving';
-            } else if (secondAccuracy < firstAccuracy - 0.2) {
-                performanceTrend = 'declining';
-            }
+        const weeklyActiveDays = parseInt(weeklyDaysResult.rows[0]?.active_days) || 0;
+
+        // ✅ FIXED: Realtime accuracy (last 10 questions)
+        const recentResult = await pool.query(`
+            SELECT is_correct
+            FROM notebook_entries
+            WHERE user_id = $1
+            ORDER BY created_at DESC
+            LIMIT 10
+        `, [internalUserId]);
+
+        let realtimeAccuracy = 0;
+        if (recentResult.rows.length > 0) {
+            const recentCorrect = recentResult.rows.filter(r => r.is_correct === true).length;
+            realtimeAccuracy = Math.round((recentCorrect / recentResult.rows.length) * 100);
         }
 
-        res.json({
-            success: true,
-            stats: {
-                currentStreak: parseInt(currentStreak) || 0,
-                todayQuestions: parseInt(todayStats.total_today) || 0,
-                todayAccuracy: parseInt(todayStats.accuracy_today) || 0,
-                realtimeAccuracy: realtimeAccuracy,
-                currentDifficulty: currentDifficulty,
-                suggestedDifficulty: suggestedDifficulty,
-                performanceTrend: performanceTrend
-            }
-        });
+        // ✅ FIXED: Last activity
+        const lastActivityResult = await pool.query(`
+            SELECT created_at
+            FROM notebook_entries
+            WHERE user_id = $1
+            ORDER BY created_at DESC
+            LIMIT 1
+        `, [internalUserId]);
 
-    } catch (error) {
-        console.error('❌ Error getting live stats:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to get live statistics',
-            error: error.message
-        });
-    }
-});
+        const lastActivity = lastActivityResult.rows[0]?.created_at || null;
 
-/**
- * GET /api/ai/performance-analysis - Get AI performance analysis
- */
-router.get('/', async (req, res) => {
-    try {
-        const { userId } = req.query;
+        // ✅ FIXED: Total active days (all time)
+        const activeDaysResult = await pool.query(`
+            SELECT COUNT(DISTINCT DATE(created_at)) as total_active_days
+            FROM notebook_entries
+            WHERE user_id = $1
+        `, [internalUserId]);
 
-        if (!userId) {
-            return res.status(400).json({
-                success: false,
-                message: 'Missing userId parameter'
-            });
-        }
+        const activeDays = parseInt(activeDaysResult.rows[0]?.total_active_days) || 0;
 
-        const analysis = await aiPerformanceAnalysis.analyzePerformance(userId);
-
-        res.json(analysis);
-
-    } catch (error) {
-        console.error('❌ Error in performance analysis:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to analyze performance',
-            error: error.message
-        });
-    }
-});
-
-/**
- * POST /api/performance/record-session - Record learning session data
- */
-router.post('/record-session', async (req, res) => {
-    try {
-        const {
-            userId,
-            sessionDuration,
-            questionsAttempted,
+        const stats = {
+            totalQuestions,
             correctAnswers,
-            topicsCovered,
-            averageTimePerQuestion
-        } = req.body;
+            accuracy,
+            activeDays,
+            todayQuestions,
+            weeklyActiveDays,
+            realtimeAccuracy,
+            lastActivity
+        };
 
-        if (!userId) {
-            return res.status(400).json({
-                success: false,
-                message: 'Missing required fields'
-            });
-        }
+        console.log('✅ Live stats calculated:', stats);
 
-        // Record session in database
-        await pool.query(
-            `INSERT INTO learning_sessions 
-            (user_id, duration_minutes, questions_attempted, correct_answers, topics_covered, avg_time_per_question, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
-            [
-                userId,
-                sessionDuration,
-                questionsAttempted,
-                correctAnswers,
-                JSON.stringify(topicsCovered),
-                averageTimePerQuestion
-            ]
-        );
-
-        // Trigger performance analysis update
-        const analysis = await aiPerformanceAnalysis.analyzePerformance(userId);
-
-        res.json({
+        return res.json({
             success: true,
-            message: 'Session recorded successfully',
-            analysis: analysis.analysis
+            stats
         });
 
     } catch (error) {
-        console.error('❌ Error recording session:', error);
-        res.status(500).json({
+        console.error('❌ Error fetching live stats:', error);
+        return res.status(500).json({
             success: false,
-            message: 'Failed to record session',
-            error: error.message
-        });
-    }
-});
-
-/**
- * GET /api/performance/insights - Get performance insights
- */
-router.get('/insights', async (req, res) => {
-    try {
-        const { userId } = req.query;
-
-        if (!userId) {
-            return res.status(400).json({
-                success: false,
-                message: 'Missing userId parameter'
-            });
-        }
-
-        const insights = await aiPerformanceAnalysis.getInsights(userId);
-
-        res.json(insights);
-
-    } catch (error) {
-        console.error('❌ Error getting insights:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to get insights',
-            error: error.message
+            error: 'Failed to fetch live stats',
+            details: error.message
         });
     }
 });

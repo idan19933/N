@@ -1,4 +1,4 @@
-// src/pages/NotebookPage.jsx - ENHANCED WITH LIVE STATISTICS & AI
+// src/pages/NotebookPage.jsx - UPDATED WITH ADAPTIVE PRACTICE NAVIGATION
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -38,6 +38,7 @@ import {
     PolarAngleAxis,
     PolarRadiusAxis
 } from 'recharts';
+import { getUserGradeId, getGradeConfig } from '../config/israeliCurriculum';
 
 const API_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 
@@ -71,7 +72,7 @@ const LivePerformanceMonitor = ({ userId, onDifficultyUpdate }) => {
     useEffect(() => {
         if (userId && isLive) {
             fetchLiveStats();
-            intervalRef.current = setInterval(fetchLiveStats, 5000); // Update every 5 seconds
+            intervalRef.current = setInterval(fetchLiveStats, 5000);
         }
 
         return () => {
@@ -87,7 +88,6 @@ const LivePerformanceMonitor = ({ userId, onDifficultyUpdate }) => {
             if (data.success && data.stats) {
                 const newStats = data.stats;
 
-                // Calculate performance trend
                 if (liveStats.realtimeAccuracy > 0) {
                     if (newStats.realtimeAccuracy > liveStats.realtimeAccuracy + 10) {
                         setPerformanceTrend('improving');
@@ -111,7 +111,6 @@ const LivePerformanceMonitor = ({ userId, onDifficultyUpdate }) => {
     };
 
     const getCurrentStreak = () => {
-        // Calculate based on weekly active days
         return liveStats.weeklyActiveDays || 0;
     };
 
@@ -150,7 +149,6 @@ const LivePerformanceMonitor = ({ userId, onDifficultyUpdate }) => {
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {/* Current Streak */}
                 <motion.div
                     whileHover={{ scale: 1.05 }}
                     className="bg-white/20 backdrop-blur-sm rounded-2xl p-4"
@@ -169,7 +167,6 @@ const LivePerformanceMonitor = ({ userId, onDifficultyUpdate }) => {
                     <div className="text-sm opacity-90">ימים פעילים</div>
                 </motion.div>
 
-                {/* Today's Questions */}
                 <motion.div
                     whileHover={{ scale: 1.05 }}
                     className="bg-white/20 backdrop-blur-sm rounded-2xl p-4"
@@ -188,7 +185,6 @@ const LivePerformanceMonitor = ({ userId, onDifficultyUpdate }) => {
                     <div className="text-sm opacity-90">שאלות היום</div>
                 </motion.div>
 
-                {/* Realtime Accuracy */}
                 <motion.div
                     whileHover={{ scale: 1.05 }}
                     className="bg-white/20 backdrop-blur-sm rounded-2xl p-4"
@@ -210,7 +206,6 @@ const LivePerformanceMonitor = ({ userId, onDifficultyUpdate }) => {
                     <div className="text-sm opacity-90">דיוק נוכחי</div>
                 </motion.div>
 
-                {/* Overall Stats */}
                 <motion.div
                     whileHover={{ scale: 1.05 }}
                     className="bg-white/20 backdrop-blur-sm rounded-2xl p-4"
@@ -232,13 +227,19 @@ const LivePerformanceMonitor = ({ userId, onDifficultyUpdate }) => {
 };
 
 // AI Insights Component
-const AIInsightsPanel = ({ userId }) => {
+// COMPLETE FIX FOR AI INSIGHTS PANEL
+// Replace the AIInsightsPanel component in NotebookPage.jsx (lines ~138-274)
+
+const AIInsightsPanel = ({ userId, availableTopics, onNavigateToPractice }) => {
     const [insights, setInsights] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [expanded, setExpanded] = useState(false);
+    const [expanded, setExpanded] = useState(true); // ✅ Default to expanded
 
     useEffect(() => {
-        if (userId) fetchInsights();
+        if (userId) {
+            console.log('🔍 Fetching insights for user:', userId);
+            fetchInsights();
+        }
     }, [userId]);
 
     const fetchInsights = async () => {
@@ -247,11 +248,20 @@ const AIInsightsPanel = ({ userId }) => {
             const response = await fetch(`${API_URL}/api/ai/performance-analysis?userId=${userId}`);
             const data = await response.json();
 
+            console.log('📊 AI Insights response:', data);
+
             if (data.success) {
                 setInsights(data.analysis);
+                console.log('✅ Insights loaded:', {
+                    feedback: data.analysis.personalizedFeedback?.substring(0, 50),
+                    recommendations: data.analysis.recommendations?.length || 0,
+                    weakTopics: data.analysis.weakTopics?.length || 0
+                });
+            } else {
+                console.warn('⚠️ Failed to load insights:', data.error);
             }
         } catch (error) {
-            console.error('Error fetching AI insights:', error);
+            console.error('❌ Error fetching AI insights:', error);
         } finally {
             setLoading(false);
         }
@@ -269,13 +279,24 @@ const AIInsightsPanel = ({ userId }) => {
         );
     }
 
-    if (!insights) return null;
+    if (!insights) {
+        console.warn('⚠️ No insights data available');
+        return (
+            <div className="bg-gradient-to-br from-purple-100 to-pink-100 rounded-3xl p-6">
+                <div className="text-center text-gray-700">
+                    <BrainCircuit className="w-12 h-12 mx-auto mb-3 text-purple-600" />
+                    <p className="font-bold">לא נמצאו תובנות AI</p>
+                    <p className="text-sm mt-2">תתחיל לפתור שאלות כדי לקבל המלצות מותאמות אישית</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-gradient-to-br from-purple-100 to-pink-100 rounded-3xl p-6 shadow-xl"
+            className="bg-gradient-to-br from-purple-100 to-pink-100 rounded-3xl p-6 shadow-xl mb-8"
         >
             <div className="flex items-center justify-between mb-4">
                 <h3 className="text-2xl font-black text-gray-800 flex items-center gap-3">
@@ -285,8 +306,11 @@ const AIInsightsPanel = ({ userId }) => {
                 <motion.button
                     whileHover={{ scale: 1.1 }}
                     whileTap={{ scale: 0.9 }}
-                    onClick={() => setExpanded(!expanded)}
-                    className="p-2 bg-white rounded-xl shadow-md"
+                    onClick={() => {
+                        setExpanded(!expanded);
+                        console.log('🔄 Toggled expansion:', !expanded);
+                    }}
+                    className="p-2 bg-white rounded-xl shadow-md hover:bg-gray-50 transition-colors"
                 >
                     {expanded ? (
                         <ChevronUp className="w-5 h-5 text-gray-600" />
@@ -297,83 +321,159 @@ const AIInsightsPanel = ({ userId }) => {
             </div>
 
             <AnimatePresence>
-                <motion.div
-                    initial={{ height: 'auto' }}
-                    animate={{ height: expanded ? 'auto' : '120px' }}
-                    className="overflow-hidden"
-                >
-                    {/* Personal Feedback */}
-                    <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 mb-4">
-                        <div className="flex items-start gap-3">
-                            <MessageCircle className="w-6 h-6 text-purple-600 mt-1" />
-                            <div>
-                                <div className="font-bold text-purple-900 mb-2">משוב אישי</div>
-                                <p className="text-gray-700">{insights.personalizedFeedback}</p>
+                {expanded && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.3 }}
+                        className="overflow-hidden"
+                    >
+                        {/* Personal Feedback */}
+                        {insights.personalizedFeedback && (
+                            <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 mb-4">
+                                <div className="flex items-start gap-3">
+                                    <MessageCircle className="w-6 h-6 text-purple-600 mt-1 flex-shrink-0" />
+                                    <div className="flex-1">
+                                        <div className="font-bold text-purple-900 mb-2">משוב אישי</div>
+                                        <p className="text-gray-700 leading-relaxed">
+                                            {insights.personalizedFeedback}
+                                        </p>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                    </div>
+                        )}
 
-                    {/* Recommendations Grid */}
-                    {insights.recommendations && insights.recommendations.length > 0 && (
-                        <div className="grid md:grid-cols-2 gap-4">
-                            {insights.recommendations.map((rec, index) => (
-                                <motion.div
-                                    key={index}
-                                    initial={{ opacity: 0, x: -20 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    transition={{ delay: index * 0.1 }}
-                                    className={`bg-white rounded-xl p-4 border-2 ${
+                        {/* Recommendations Grid */}
+                        {insights.recommendations && insights.recommendations.length > 0 && (
+                            <div className="grid md:grid-cols-2 gap-4 mb-4">
+                                {insights.recommendations.map((rec, index) => {
+                                    const IconComponent =
+                                        rec.icon === 'rocket' ? Zap :
+                                            rec.icon === 'foundation' ? BookOpen :
+                                                rec.icon === 'clock' ? Clock :
+                                                    rec.icon === 'target' ? Target :
+                                                        rec.icon === 'fire' ? Flame : Target;
+
+                                    const borderColor =
                                         rec.type === 'difficulty' ? 'border-blue-300' :
                                             rec.type === 'topics' ? 'border-purple-300' :
-                                                rec.type === 'time' ? 'border-orange-300' :
-                                                    'border-green-300'
-                                    }`}
-                                >
-                                    <div className="flex items-start gap-3">
-                                        {rec.icon === 'rocket' && <Zap className="w-6 h-6 text-blue-600" />}
-                                        {rec.icon === 'foundation' && <BookOpen className="w-6 h-6 text-purple-600" />}
-                                        {rec.icon === 'clock' && <Clock className="w-6 h-6 text-orange-600" />}
-                                        {rec.icon === 'target' && <Target className="w-6 h-6 text-purple-600" />}
-                                        {rec.icon === 'fire' && <Flame className="w-6 h-6 text-red-600" />}
-                                        <div>
-                                            <div className="font-bold text-gray-800 mb-1">
-                                                {rec.type === 'difficulty' && 'רמת קושי'}
-                                                {rec.type === 'topics' && 'נושאים לתרגול'}
-                                                {rec.type === 'time' && 'ניהול זמן'}
-                                                {rec.type === 'motivation' && 'מוטיבציה'}
-                                            </div>
-                                            <p className="text-sm text-gray-600">{rec.message}</p>
-                                        </div>
-                                    </div>
-                                </motion.div>
-                            ))}
-                        </div>
-                    )}
+                                                rec.type === 'time' ? 'border-orange-300' : 'border-green-300';
 
-                    {/* Weak Topics */}
-                    {insights.weakTopics && insights.weakTopics.length > 0 && (
-                        <div className="mt-4">
-                            <h4 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
-                                <AlertCircle className="w-5 h-5 text-orange-500" />
-                                נושאים הדורשים תשומת לב
-                            </h4>
-                            <div className="flex flex-wrap gap-2">
-                                {insights.weakTopics.map((topic, index) => (
-                                    <motion.button
-                                        key={index}
-                                        whileHover={{ scale: 1.05 }}
-                                        whileTap={{ scale: 0.95 }}
-                                        onClick={() => navigateToPractice(topic)}
-                                        className="px-4 py-2 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-xl font-bold shadow-md"
-                                    >
-                                        {topic}
-                                        <Play className="inline-block w-4 h-4 mr-2" />
-                                    </motion.button>
-                                ))}
+                                    return (
+                                        <motion.div
+                                            key={index}
+                                            initial={{ opacity: 0, x: -20 }}
+                                            animate={{ opacity: 1, x: 0 }}
+                                            transition={{ delay: index * 0.1 }}
+                                            className={`bg-white rounded-xl p-4 border-2 ${borderColor}`}
+                                        >
+                                            <div className="flex items-start gap-3">
+                                                <IconComponent className="w-6 h-6 flex-shrink-0" style={{
+                                                    color: rec.type === 'difficulty' ? '#3b82f6' :
+                                                        rec.type === 'topics' ? '#8b5cf6' :
+                                                            rec.type === 'time' ? '#f59e0b' : '#10b981'
+                                                }} />
+                                                <div className="flex-1">
+                                                    <div className="font-bold text-gray-800 mb-1">
+                                                        {rec.type === 'difficulty' && 'רמת קושי'}
+                                                        {rec.type === 'topics' && 'נושאים לתרגול'}
+                                                        {rec.type === 'time' && 'ניהול זמן'}
+                                                        {rec.type === 'motivation' && 'מוטיבציה'}
+                                                    </div>
+                                                    <p className="text-sm text-gray-600">{rec.message}</p>
+                                                </div>
+                                            </div>
+                                        </motion.div>
+                                    );
+                                })}
                             </div>
-                        </div>
-                    )}
-                </motion.div>
+                        )}
+
+                        {/* Weak Topics - THE MAIN FIX */}
+                        {insights.weakTopics && insights.weakTopics.length > 0 && (
+                            <div className="bg-gradient-to-br from-orange-50 to-red-50 rounded-2xl p-5 border-2 border-orange-300">
+                                <h4 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+                                    <AlertCircle className="w-6 h-6 text-orange-500" />
+                                    <span className="text-lg">נושאים הדורשים תשומת לב</span>
+                                    <span className="text-sm font-normal text-gray-600">
+                                        ({insights.weakTopics.length} נושאים)
+                                    </span>
+                                </h4>
+
+                                <div className="flex flex-wrap gap-3">
+                                    {insights.weakTopics.map((topicName, index) => {
+                                        console.log(`🔍 Looking for topic: "${topicName}" in`, availableTopics.length, 'topics');
+
+                                        // ✅ CRITICAL FIX: Better topic matching
+                                        const topicObj = availableTopics.find(t => {
+                                            const match =
+                                                t.name === topicName ||
+                                                t.nameEn === topicName ||
+                                                t.id === topicName ||
+                                                t.name.includes(topicName) ||
+                                                topicName.includes(t.name);
+
+                                            if (match) {
+                                                console.log(`✅ Found match: ${t.name} for "${topicName}"`);
+                                            }
+                                            return match;
+                                        });
+
+                                        const finalTopic = topicObj || {
+                                            name: topicName,
+                                            id: topicName,
+                                            icon: '📚',
+                                            difficulty: 'medium'
+                                        };
+
+                                        console.log(`📍 Topic ${index + 1}:`, finalTopic);
+
+                                        return (
+                                            <motion.button
+                                                key={index}
+                                                whileHover={{ scale: 1.05 }}
+                                                whileTap={{ scale: 0.95 }}
+                                                onClick={() => {
+                                                    console.log('🚀 Navigating to practice:', finalTopic);
+                                                    onNavigateToPractice(finalTopic);
+                                                }}
+                                                className="group relative px-5 py-3 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-xl font-bold shadow-lg hover:shadow-2xl transition-all flex items-center gap-2"
+                                            >
+                                                <span className="text-xl">{finalTopic.icon}</span>
+                                                <span>{finalTopic.name}</span>
+                                                <Play className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+
+                                                {/* Tooltip */}
+                                                <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-gray-900 text-white px-3 py-1 rounded-lg text-sm whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                                                    התחל תרגול מותאם אישית
+                                                    <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-900 rotate-45"></div>
+                                                </div>
+                                            </motion.button>
+                                        );
+                                    })}
+                                </div>
+
+                                <p className="text-sm text-orange-700 mt-4 bg-white/50 rounded-lg p-3">
+                                    💡 <strong>טיפ:</strong> לחץ על נושא כדי להתחיל תרגול מותאם אישית ברמת הקושי המתאימה לך
+                                </p>
+                            </div>
+                        )}
+
+                        {/* No weak topics message */}
+                        {(!insights.weakTopics || insights.weakTopics.length === 0) && (
+                            <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-5 border-2 border-green-300 text-center">
+                                <Trophy className="w-12 h-12 text-green-600 mx-auto mb-3" />
+                                <h4 className="font-bold text-green-900 mb-2 text-lg">
+                                    מעולה! אין נושאים חלשים 🎉
+                                </h4>
+                                <p className="text-green-700">
+                                    הביצועים שלך טובים בכל הנושאים. המשך ככה!
+                                </p>
+                            </div>
+                        )}
+                    </motion.div>
+                )}
             </AnimatePresence>
         </motion.div>
     );
@@ -384,7 +484,6 @@ const AdvancedAnalytics = ({ entries, analytics }) => {
     const [selectedMetric, setSelectedMetric] = useState('accuracy');
     const [timeRange, setTimeRange] = useState('week');
 
-    // Prepare data for charts
     const prepareTimeSeriesData = () => {
         const grouped = entries.reduce((acc, entry) => {
             const date = new Date(entry.created_at).toLocaleDateString('he-IL');
@@ -454,7 +553,6 @@ const AdvancedAnalytics = ({ entries, analytics }) => {
             </div>
 
             <div className="grid lg:grid-cols-2 gap-8">
-                {/* Accuracy Over Time */}
                 <motion.div
                     whileHover={{ scale: 1.02 }}
                     className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-2xl p-6"
@@ -493,7 +591,6 @@ const AdvancedAnalytics = ({ entries, analytics }) => {
                     </ResponsiveContainer>
                 </motion.div>
 
-                {/* Difficulty Distribution */}
                 <motion.div
                     whileHover={{ scale: 1.02 }}
                     className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl p-6"
@@ -522,65 +619,6 @@ const AdvancedAnalytics = ({ entries, analytics }) => {
                         </RechartsPieChart>
                     </ResponsiveContainer>
                 </motion.div>
-
-                {/* Topic Performance Radar */}
-                <motion.div
-                    whileHover={{ scale: 1.02 }}
-                    className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-6"
-                >
-                    <h4 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                        <Target className="w-6 h-6 text-green-600" />
-                        ביצועים לפי נושא
-                    </h4>
-                    <ResponsiveContainer width="100%" height={300}>
-                        <RadarChart data={radarData}>
-                            <PolarGrid stroke="#e5e7eb" />
-                            <PolarAngleAxis dataKey="subject" />
-                            <PolarRadiusAxis angle={90} domain={[0, 100]} />
-                            <Radar
-                                name="דיוק"
-                                dataKey="accuracy"
-                                stroke="#10b981"
-                                fill="#10b981"
-                                fillOpacity={0.6}
-                            />
-                            <Tooltip />
-                        </RadarChart>
-                    </ResponsiveContainer>
-                </motion.div>
-
-                {/* Performance Metrics */}
-                <motion.div
-                    whileHover={{ scale: 1.02 }}
-                    className="bg-gradient-to-br from-orange-50 to-red-50 rounded-2xl p-6"
-                >
-                    <h4 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                        <Gauge className="w-6 h-6 text-orange-600" />
-                        מדדי ביצוע
-                    </h4>
-                    <div className="space-y-4">
-                        {[
-                            { label: 'זמן ממוצע לשאלה', value: '2:45', icon: Clock, color: 'blue' },
-                            { label: 'רצף מקסימלי', value: '15', icon: Flame, color: 'orange' },
-                            { label: 'שאלות השבוע', value: '127', icon: Brain, color: 'purple' },
-                            { label: 'שיפור השבוע', value: '+12%', icon: TrendingUp, color: 'green' }
-                        ].map((metric, index) => (
-                            <motion.div
-                                key={index}
-                                initial={{ opacity: 0, x: -20 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                transition={{ delay: index * 0.1 }}
-                                className="flex items-center justify-between bg-white rounded-xl p-4 shadow-md"
-                            >
-                                <div className="flex items-center gap-3">
-                                    <metric.icon className={`w-6 h-6 text-${metric.color}-600`} />
-                                    <span className="font-medium text-gray-700">{metric.label}</span>
-                                </div>
-                                <span className="text-2xl font-black text-gray-900">{metric.value}</span>
-                            </motion.div>
-                        ))}
-                    </div>
-                </motion.div>
             </div>
         </motion.div>
     );
@@ -589,9 +627,8 @@ const AdvancedAnalytics = ({ entries, analytics }) => {
 // Main NotebookPage Component
 const NotebookPage = () => {
     const navigate = useNavigate();
-    const { user } = useAuthStore();
+    const { user, nexonProfile } = useAuthStore();
 
-    // State Management
     const [entries, setEntries] = useState([]);
     const [stats, setStats] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -601,9 +638,8 @@ const NotebookPage = () => {
     const [showOnlyIncorrect, setShowOnlyIncorrect] = useState(false);
     const [expandedEntries, setExpandedEntries] = useState(new Set());
     const [selectedDifficulty, setSelectedDifficulty] = useState('all');
-    const [currentView, setCurrentView] = useState('entries'); // 'entries' | 'analytics' | 'ai'
+    const [currentView, setCurrentView] = useState('entries');
 
-    // Performance Analytics State
     const [analytics, setAnalytics] = useState({
         byTopic: {},
         byDifficulty: {},
@@ -611,9 +647,20 @@ const NotebookPage = () => {
         timeSpent: 0
     });
 
-    // AI State
     const [aiAnalysis, setAiAnalysis] = useState(null);
     const [suggestedDifficulty, setSuggestedDifficulty] = useState('medium');
+    const [liveStats, setLiveStats] = useState({
+        realtimeAccuracy: 0,
+        totalQuestions: 0,
+        todayQuestions: 0
+    });
+
+    // 🎯 Get curriculum topics for AI insights
+    const currentGrade = nexonProfile?.grade || user?.grade || '8';
+    const currentTrack = nexonProfile?.track || user?.track;
+    const gradeId = getUserGradeId(currentGrade, currentTrack);
+    const gradeConfig = getGradeConfig(gradeId);
+    const availableTopics = gradeConfig?.topics || [];
 
     useEffect(() => {
         if (user?.uid) {
@@ -628,11 +675,9 @@ const NotebookPage = () => {
             setLoading(true);
             const userId = user?.uid;
 
-            // Fetch entries
             const entriesRes = await fetch(`${API_URL}/api/notebook/entries?userId=${userId}`);
             const entriesData = await entriesRes.json();
 
-            // Fetch stats
             const statsRes = await fetch(`${API_URL}/api/notebook/stats?userId=${userId}`);
             const statsData = await statsRes.json();
 
@@ -660,7 +705,6 @@ const NotebookPage = () => {
             if (entriesData.success && entriesData.entries) {
                 const entries = entriesData.entries;
 
-                // Analytics by topic
                 const byTopic = {};
                 entries.forEach(entry => {
                     const topic = entry.topic || 'ללא נושא';
@@ -674,7 +718,6 @@ const NotebookPage = () => {
                     byTopic[topic].accuracy = Math.round((byTopic[topic].correct / byTopic[topic].total) * 100);
                 });
 
-                // Analytics by difficulty
                 const byDifficulty = {
                     easy: { total: 0, correct: 0 },
                     medium: { total: 0, correct: 0 },
@@ -707,7 +750,7 @@ const NotebookPage = () => {
 
             if (data.success) {
                 setAiAnalysis(data.analysis);
-                setSuggestedDifficulty(data.analysis.recommendedDifficulty);
+                setSuggestedDifficulty(data.analysis.recommendedDifficulty || 'medium');
             }
         } catch (error) {
             console.error('Error loading AI analysis:', error);
@@ -735,7 +778,6 @@ const NotebookPage = () => {
         return { current: currentStreak, max: maxStreak };
     };
 
-    // Toggle entry expansion
     const toggleEntryExpansion = (entryId) => {
         const newExpanded = new Set(expandedEntries);
         if (newExpanded.has(entryId)) {
@@ -746,15 +788,63 @@ const NotebookPage = () => {
         setExpandedEntries(newExpanded);
     };
 
-    // Navigate to practice
+    // 🚀 ENHANCED: Navigate to practice with ALL required props
     const navigateToPractice = (topic) => {
+        // Ensure we have a valid topic object
+        const topicObj = typeof topic === 'string'
+            ? availableTopics.find(t => t.name === topic || t.id === topic) || { name: topic, id: topic, icon: '📚' }
+            : topic;
+
+        console.log('🎯 Navigating to practice with:', {
+            topic: topicObj,
+            difficulty: suggestedDifficulty,
+            stats: liveStats
+        });
+
         navigate('/dashboard', {
             state: {
-                focusTopic: topic,
-                suggestedDifficulty: suggestedDifficulty
+                // ✅ Critical flags
+                autoStartPractice: true,
+                fromNotebook: true,
+                mode: 'adaptive',
+
+                // ✅ Topic information (FULL OBJECT)
+                selectedTopic: topicObj,
+                selectedSubtopic: null,
+
+                // ✅ Adaptive difficulty
+                suggestedDifficulty: suggestedDifficulty,
+                difficulty: suggestedDifficulty,
+
+                // ✅ User information
+                userId: user?.uid,
+
+                // ✅ Student profile with performance data
+                studentProfile: {
+                    name: user?.displayName || user?.name || nexonProfile?.name || 'תלמיד',
+                    grade: currentGrade,
+                    track: currentTrack,
+                    mathFeeling: nexonProfile?.mathFeeling || 'okay',
+                    learningStyle: nexonProfile?.learningStyle || 'visual',
+                    goalFocus: nexonProfile?.goalFocus || 'understanding',
+                    personality: nexonProfile?.personality || 'nexon',
+
+                    // ✅ Performance metrics
+                    recentAccuracy: liveStats?.realtimeAccuracy || 0,
+                    totalQuestions: liveStats?.totalQuestions || 0,
+                    todayQuestions: liveStats?.todayQuestions || 0,
+                    currentStreak: liveStats?.weeklyActiveDays || 0
+                }
             }
         });
-        toast.success(`עובר לתרגול ${topic} ברמת ${getDifficultyLabel(suggestedDifficulty)}`);
+
+        toast.success(
+            `🚀 מתחיל תרגול מותאם אישית!\n📚 נושא: ${topicObj.name}\n⭐ רמת קושי: ${getDifficultyLabel(suggestedDifficulty)}`,
+            {
+                duration: 3000,
+                icon: '🎯'
+            }
+        );
     };
 
     const getDifficultyLabel = (difficulty) => {
@@ -762,27 +852,43 @@ const NotebookPage = () => {
         return labels[difficulty] || 'בינוני';
     };
 
-    // Retry incorrect answer
     const retryQuestion = (entry) => {
+        const topicObj = availableTopics.find(t => t.name === entry.topic) || {
+            name: entry.topic,
+            id: entry.topic,
+            icon: '📚'
+        };
+
         navigate('/dashboard', {
             state: {
+                autoStartPractice: true,
+                fromNotebook: true,
+                mode: 'retry',
+                selectedTopic: topicObj,
+                selectedSubtopic: entry.subtopic ? { name: entry.subtopic } : null,
+                suggestedDifficulty: entry.difficulty || 'medium',
                 retryQuestion: {
                     topic: entry.topic,
                     subtopic: entry.subtopic,
                     question: entry.question_text,
                     originalAnswer: entry.correct_answer
                 },
-                suggestedDifficulty: suggestedDifficulty
+                userId: user?.uid,
+                studentProfile: {
+                    name: user?.displayName || user?.name || 'תלמיד',
+                    grade: currentGrade,
+                    track: currentTrack,
+                    mathFeeling: nexonProfile?.mathFeeling || 'okay'
+                }
             }
         });
+
         toast.success('בוא נתרגל שוב! 💪');
     };
 
-    // Filter and sort entries
     const getFilteredAndSortedEntries = () => {
         let filtered = [...entries];
 
-        // Apply filters
         if (filter !== 'all') {
             filtered = filtered.filter(e => e.topic === filter);
         }
@@ -803,7 +909,6 @@ const NotebookPage = () => {
             );
         }
 
-        // Apply sorting
         filtered.sort((a, b) => {
             switch (sortBy) {
                 case 'date-desc':
@@ -830,7 +935,6 @@ const NotebookPage = () => {
         ? Math.round((stats.correctCount / stats.totalEntries) * 100)
         : 0;
 
-    // Get difficulty color
     const getDifficultyColor = (difficulty) => {
         switch (difficulty) {
             case 'easy': return 'bg-green-100 text-green-700';
@@ -858,7 +962,6 @@ const NotebookPage = () => {
     return (
         <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 py-8 px-4" dir="rtl">
             <div className="max-w-7xl mx-auto">
-                {/* Header */}
                 <motion.div
                     initial={{ opacity: 0, y: -20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -879,16 +982,17 @@ const NotebookPage = () => {
                     </p>
                 </motion.div>
 
-                {/* Live Performance Monitor */}
                 <LivePerformanceMonitor
                     userId={user?.uid}
                     onDifficultyUpdate={setSuggestedDifficulty}
                 />
 
-                {/* AI Insights Panel */}
-                <AIInsightsPanel userId={user?.uid} />
+                <AIInsightsPanel
+                    userId={user?.uid}
+                    availableTopics={availableTopics}
+                    onNavigateToPractice={navigateToPractice}
+                />
 
-                {/* View Switcher */}
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -916,21 +1020,18 @@ const NotebookPage = () => {
                     ))}
                 </motion.div>
 
-                {/* Content based on current view */}
                 {currentView === 'analytics' && (
                     <AdvancedAnalytics entries={entries} analytics={analytics} />
                 )}
 
                 {currentView === 'entries' && (
                     <>
-                        {/* Filters and Search */}
                         <motion.div
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: 0.3 }}
                             className="bg-white rounded-2xl p-6 shadow-xl mb-6"
                         >
-                            {/* Search Bar */}
                             <div className="mb-4">
                                 <div className="relative">
                                     <Search className="absolute right-3 top-3 w-5 h-5 text-gray-400" />
@@ -944,9 +1045,7 @@ const NotebookPage = () => {
                                 </div>
                             </div>
 
-                            {/* Filters Row */}
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                {/* Topic Filter */}
                                 <div>
                                     <label className="text-sm font-medium text-gray-600 mb-1 block">נושא</label>
                                     <select
@@ -966,7 +1065,6 @@ const NotebookPage = () => {
                                     </select>
                                 </div>
 
-                                {/* Difficulty Filter */}
                                 <div>
                                     <label className="text-sm font-medium text-gray-600 mb-1 block">רמת קושי</label>
                                     <select
@@ -981,7 +1079,6 @@ const NotebookPage = () => {
                                     </select>
                                 </div>
 
-                                {/* Sort Options */}
                                 <div>
                                     <label className="text-sm font-medium text-gray-600 mb-1 block">מיון לפי</label>
                                     <select
@@ -996,7 +1093,6 @@ const NotebookPage = () => {
                                     </select>
                                 </div>
 
-                                {/* Show Incorrect Only */}
                                 <div className="flex items-end">
                                     <motion.button
                                         whileHover={{ scale: 1.05 }}
@@ -1014,13 +1110,11 @@ const NotebookPage = () => {
                                 </div>
                             </div>
 
-                            {/* Results Count */}
                             <div className="mt-4 text-sm text-gray-600">
                                 מציג {filteredEntries.length} תוצאות מתוך {entries.length} רשומות
                             </div>
                         </motion.div>
 
-                        {/* Entries List */}
                         <div className="space-y-4">
                             {filteredEntries.length === 0 ? (
                                 <motion.div
@@ -1070,14 +1164,12 @@ const NotebookPage = () => {
                                                     !entry.is_correct ? 'ring-2 ring-red-200' : ''
                                                 }`}
                                             >
-                                                {/* Entry Header */}
                                                 <div
                                                     className="p-6 cursor-pointer"
                                                     onClick={() => toggleEntryExpansion(entry.id)}
                                                 >
                                                     <div className="flex items-start justify-between">
                                                         <div className="flex-1">
-                                                            {/* Topic and Subtopic */}
                                                             <div className="flex items-center gap-2 mb-3 flex-wrap">
                                                                 {entry.topic && (
                                                                     <motion.span
@@ -1100,7 +1192,6 @@ const NotebookPage = () => {
                                                                 </span>
                                                             </div>
 
-                                                            {/* Question Preview */}
                                                             <h3 className="font-bold text-lg mb-2 text-gray-900">
                                                                 {entry.question_text ?
                                                                     (entry.question_text.length > 100 ?
@@ -1109,7 +1200,6 @@ const NotebookPage = () => {
                                                                     : 'שאלה ללא כותרת'}
                                                             </h3>
 
-                                                            {/* Date and Status */}
                                                             <div className="flex items-center gap-4 text-sm text-gray-600">
                                                                 <div className="flex items-center gap-1">
                                                                     <Calendar className="w-4 h-4" />
@@ -1129,7 +1219,6 @@ const NotebookPage = () => {
                                                             </div>
                                                         </div>
 
-                                                        {/* Status Icon and Expand Button */}
                                                         <div className="flex items-center gap-3">
                                                             <motion.div
                                                                 animate={{ scale: entry.is_correct ? [1, 1.2, 1] : 1 }}
@@ -1151,7 +1240,6 @@ const NotebookPage = () => {
                                                     </div>
                                                 </div>
 
-                                                {/* Expanded Content */}
                                                 <AnimatePresence>
                                                     {isExpanded && (
                                                         <motion.div
@@ -1162,7 +1250,6 @@ const NotebookPage = () => {
                                                             className="border-t border-gray-200"
                                                         >
                                                             <div className="p-6 space-y-4">
-                                                                {/* Full Question */}
                                                                 <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-4">
                                                                     <h4 className="font-bold text-gray-700 mb-2 flex items-center gap-2">
                                                                         <Brain className="w-5 h-5" />
@@ -1173,7 +1260,6 @@ const NotebookPage = () => {
                                                                     </p>
                                                                 </div>
 
-                                                                {/* User Answer */}
                                                                 <div className={`rounded-2xl p-4 ${
                                                                     entry.is_correct
                                                                         ? 'bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-300'
@@ -1195,7 +1281,6 @@ const NotebookPage = () => {
                                                                     </p>
                                                                 </div>
 
-                                                                {/* Correct Answer (if wrong) */}
                                                                 {!entry.is_correct && (
                                                                     <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-4 border-2 border-green-300">
                                                                         <h4 className="font-bold text-green-700 mb-2 flex items-center gap-2">
@@ -1208,7 +1293,6 @@ const NotebookPage = () => {
                                                                     </div>
                                                                 )}
 
-                                                                {/* Explanation */}
                                                                 {entry.explanation && (
                                                                     <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-2xl p-4 border-2 border-blue-300">
                                                                         <h4 className="font-bold text-blue-700 mb-2 flex items-center gap-2">
@@ -1221,7 +1305,6 @@ const NotebookPage = () => {
                                                                     </div>
                                                                 )}
 
-                                                                {/* Action Buttons */}
                                                                 <div className="flex gap-3 pt-4">
                                                                     {!entry.is_correct && (
                                                                         <motion.button
@@ -1238,7 +1321,14 @@ const NotebookPage = () => {
                                                                     <motion.button
                                                                         whileHover={{ scale: 1.05 }}
                                                                         whileTap={{ scale: 0.95 }}
-                                                                        onClick={() => navigateToPractice(entry.topic)}
+                                                                        onClick={() => {
+                                                                            const topicObj = availableTopics.find(t => t.name === entry.topic) || {
+                                                                                name: entry.topic,
+                                                                                id: entry.topic,
+                                                                                icon: '📚'
+                                                                            };
+                                                                            navigateToPractice(topicObj);
+                                                                        }}
                                                                         className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-xl font-medium shadow-lg"
                                                                     >
                                                                         <Target className="w-4 h-4" />
@@ -1256,83 +1346,6 @@ const NotebookPage = () => {
                             )}
                         </div>
                     </>
-                )}
-
-                {/* AI Recommendations View */}
-                {currentView === 'ai' && aiAnalysis && (
-                    <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="space-y-6"
-                    >
-                        <div className="bg-gradient-to-br from-purple-100 via-pink-100 to-blue-100 rounded-3xl p-8 shadow-2xl">
-                            <h3 className="text-3xl font-black text-gray-800 mb-6 flex items-center gap-3">
-                                <BrainCircuit className="w-10 h-10 text-purple-600" />
-                                המלצות מותאמות אישית
-                            </h3>
-
-                            {/* Personalized Learning Path */}
-                            <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 mb-6">
-                                <h4 className="text-xl font-bold text-gray-800 mb-4">
-                                    מסלול למידה מומלץ
-                                </h4>
-                                <div className="space-y-3">
-                                    {aiAnalysis.weakTopics.slice(0, 3).map((topic, index) => (
-                                        <motion.div
-                                            key={index}
-                                            initial={{ opacity: 0, x: -20 }}
-                                            animate={{ opacity: 1, x: 0 }}
-                                            transition={{ delay: index * 0.1 }}
-                                            className="flex items-center justify-between bg-gradient-to-r from-orange-100 to-red-100 rounded-xl p-4"
-                                        >
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-full flex items-center justify-center font-bold">
-                                                    {index + 1}
-                                                </div>
-                                                <div>
-                                                    <div className="font-bold text-gray-800">{topic}</div>
-                                                    <div className="text-sm text-gray-600">
-                                                        רמת קושי מומלצת: {getDifficultyLabel(suggestedDifficulty)}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <motion.button
-                                                whileHover={{ scale: 1.05 }}
-                                                whileTap={{ scale: 0.95 }}
-                                                onClick={() => navigateToPractice(topic)}
-                                                className="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-bold shadow-md"
-                                            >
-                                                התחל
-                                            </motion.button>
-                                        </motion.div>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Learning Tips */}
-                            <div className="grid md:grid-cols-2 gap-6">
-                                <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6">
-                                    <h4 className="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
-                                        <Clock className="w-6 h-6 text-blue-600" />
-                                        זמני למידה אופטימליים
-                                    </h4>
-                                    <p className="text-gray-700">
-                                        על פי הניתוח שלך, אתה מצליח הכי טוב בשעות {analytics.bestPerformanceTime || '16:00-18:00'}
-                                    </p>
-                                </div>
-
-                                <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6">
-                                    <h4 className="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
-                                        <Trophy className="w-6 h-6 text-yellow-600" />
-                                        יעד שבועי
-                                    </h4>
-                                    <p className="text-gray-700">
-                                        נסה להגיע ל-50 שאלות השבוע ברמת דיוק של 80% ומעלה
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    </motion.div>
                 )}
             </div>
         </div>
