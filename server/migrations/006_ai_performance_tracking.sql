@@ -1,5 +1,6 @@
 -- server/migrations/006_ai_performance_tracking.sql
 -- Add AI performance analysis and live statistics tracking
+-- FIXED: Made idempotent (safe to run multiple times)
 
 -- =====================================================
 -- AI PERFORMANCE ANALYSIS TABLE
@@ -152,6 +153,10 @@ ORDER BY date DESC;
 -- TRIGGERS FOR UPDATED_AT
 -- =====================================================
 
+-- 🔥 FIX: Drop existing triggers first to make migration idempotent
+DROP TRIGGER IF EXISTS update_ai_analysis_updated_at ON ai_performance_analysis;
+DROP TRIGGER IF EXISTS update_learning_sessions_updated_at ON learning_sessions;
+
 -- Apply trigger to new tables
 CREATE TRIGGER update_ai_analysis_updated_at
     BEFORE UPDATE ON ai_performance_analysis
@@ -219,14 +224,11 @@ CREATE INDEX IF NOT EXISTS idx_notebook_entries_perf ON notebook_entries(firebas
 CREATE INDEX IF NOT EXISTS idx_curriculum_progress_perf ON curriculum_progress(firebase_uid, last_practiced_at DESC);
 
 -- =====================================================
--- VERIFICATION
+-- SUCCESS MESSAGE
 -- =====================================================
--- Check if tables were created
--- SELECT table_name FROM information_schema.tables
--- WHERE table_name IN ('ai_performance_analysis', 'learning_sessions');
-
--- Check if views were created
--- SELECT viewname FROM pg_views
--- WHERE viewname IN ('user_performance_metrics', 'user_daily_streaks', 'performance_trends');
+DO $$
+BEGIN
+    RAISE NOTICE '✅ AI Performance Tracking migration completed successfully';
+END $$;
 
 COMMIT;
