@@ -54,16 +54,18 @@ const COLORS = {
 // Live Performance Monitor Component
 const LivePerformanceMonitor = ({ userId, onDifficultyUpdate }) => {
     const [liveStats, setLiveStats] = useState({
-        currentStreak: 0,
+        totalQuestions: 0,
+        correctAnswers: 0,
+        accuracy: 0,
+        activeDays: 0,
         todayQuestions: 0,
-        todayAccuracy: 0,
+        weeklyActiveDays: 0,
         realtimeAccuracy: 0,
-        currentDifficulty: 'medium',
-        suggestedDifficulty: 'medium',
-        performanceTrend: 'stable'
+        lastActivity: null
     });
 
     const [isLive, setIsLive] = useState(true);
+    const [performanceTrend, setPerformanceTrend] = useState('stable');
     const intervalRef = useRef(null);
 
     useEffect(() => {
@@ -82,12 +84,21 @@ const LivePerformanceMonitor = ({ userId, onDifficultyUpdate }) => {
             const response = await fetch(`${API_URL}/api/performance/live-stats?userId=${userId}`);
             const data = await response.json();
 
-            if (data.success) {
-                setLiveStats(data.stats);
-                if (data.stats.suggestedDifficulty !== liveStats.suggestedDifficulty) {
-                    onDifficultyUpdate?.(data.stats.suggestedDifficulty);
-                    toast.success(`רמת הקושי עודכנה ל-${getDifficultyLabel(data.stats.suggestedDifficulty)}`);
+            if (data.success && data.stats) {
+                const newStats = data.stats;
+
+                // Calculate performance trend
+                if (liveStats.realtimeAccuracy > 0) {
+                    if (newStats.realtimeAccuracy > liveStats.realtimeAccuracy + 10) {
+                        setPerformanceTrend('improving');
+                    } else if (newStats.realtimeAccuracy < liveStats.realtimeAccuracy - 10) {
+                        setPerformanceTrend('declining');
+                    } else {
+                        setPerformanceTrend('stable');
+                    }
                 }
+
+                setLiveStats(newStats);
             }
         } catch (error) {
             console.error('Error fetching live stats:', error);
@@ -99,8 +110,13 @@ const LivePerformanceMonitor = ({ userId, onDifficultyUpdate }) => {
         return labels[difficulty] || 'בינוני';
     };
 
+    const getCurrentStreak = () => {
+        // Calculate based on weekly active days
+        return liveStats.weeklyActiveDays || 0;
+    };
+
     const getTrendIcon = () => {
-        switch (liveStats.performanceTrend) {
+        switch (performanceTrend) {
             case 'improving': return <TrendingUp className="w-5 h-5 text-green-500" />;
             case 'declining': return <TrendingDown className="w-5 h-5 text-red-500" />;
             default: return <Activity className="w-5 h-5 text-blue-500" />;
@@ -142,15 +158,15 @@ const LivePerformanceMonitor = ({ userId, onDifficultyUpdate }) => {
                     <div className="flex items-center justify-between mb-2">
                         <Flame className="w-8 h-8 text-orange-300" />
                         <motion.div
-                            key={liveStats.currentStreak}
+                            key={getCurrentStreak()}
                             initial={{ scale: 0 }}
                             animate={{ scale: 1 }}
                             className="text-3xl font-black"
                         >
-                            {liveStats.currentStreak}
+                            {getCurrentStreak()}
                         </motion.div>
                     </div>
-                    <div className="text-sm opacity-90">רצף נוכחי</div>
+                    <div className="text-sm opacity-90">ימים פעילים</div>
                 </motion.div>
 
                 {/* Today's Questions */}
@@ -186,7 +202,7 @@ const LivePerformanceMonitor = ({ userId, onDifficultyUpdate }) => {
                                 animate={{ scale: 1 }}
                                 className="text-3xl font-black"
                             >
-                                {liveStats.realtimeAccuracy}%
+                                {Math.round(liveStats.realtimeAccuracy)}%
                             </motion.div>
                             {getTrendIcon()}
                         </div>
@@ -194,27 +210,21 @@ const LivePerformanceMonitor = ({ userId, onDifficultyUpdate }) => {
                     <div className="text-sm opacity-90">דיוק נוכחי</div>
                 </motion.div>
 
-                {/* Current Difficulty */}
+                {/* Overall Stats */}
                 <motion.div
                     whileHover={{ scale: 1.05 }}
                     className="bg-white/20 backdrop-blur-sm rounded-2xl p-4"
                 >
                     <div className="flex items-center justify-between mb-2">
-                        <Gauge className="w-8 h-8 text-purple-300" />
+                        <Trophy className="w-8 h-8 text-yellow-300" />
                         <div className="text-xl font-black">
-                            {getDifficultyLabel(liveStats.currentDifficulty)}
+                            {liveStats.totalQuestions}
                         </div>
                     </div>
-                    <div className="text-sm opacity-90">רמת קושי</div>
-                    {liveStats.suggestedDifficulty !== liveStats.currentDifficulty && (
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            className="text-xs mt-2 bg-yellow-400/30 px-2 py-1 rounded-lg"
-                        >
-                            מומלץ: {getDifficultyLabel(liveStats.suggestedDifficulty)}
-                        </motion.div>
-                    )}
+                    <div className="text-sm opacity-90">סה"כ שאלות</div>
+                    <div className="text-xs mt-1 opacity-75">
+                        דיוק כללי: {Math.round(liveStats.accuracy)}%
+                    </div>
                 </motion.div>
             </div>
         </motion.div>

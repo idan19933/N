@@ -21,7 +21,7 @@ import chatRoutes from './routes/chatRoutes.js';
 import nexonRoutes from './routes/nexonRoutes.js';
 import notebookRoutes from './routes/notebookRoutes.js';
 import aiAnalysisRoutes from './routes/aiAnalysisRoutes.js';
-
+import performanceRoutes from './routes/performanceRoutes.js';  // ✅ הוסף שורה זו
 import notebookService from './services/notebookService.js';
 import userRoutes from './routes/userRoutes.js';
 import pool from './config/database.js';
@@ -69,6 +69,7 @@ app.use('/api/curriculum', curriculumRoutes);
 app.use('/api', nexonRoutes);
 app.use('/api/learning', learningRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/performance', performanceRoutes);  // ✅ הוסף שורה זו
 console.log('✅ All routes registered!');
 app.post('/api/test-progress', (req, res) => {
     console.error('?? TEST PROGRESS ROUTE HIT!');
