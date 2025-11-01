@@ -75,9 +75,8 @@ app.use('/api/learning', learningRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/performance', performanceRoutes);
 app.use('/api/adaptive', adaptiveDifficultyRoutes);//
-// ⚠️ CHANGE 2: Comment out this line
-// app.use('/api/questions', enhancedQuestionsRouter);  // ← חדש!
-// ✅ הוסף שורה זו
+app.use('/api/questions', enhancedQuestionsRouter);  // ← חדש!
+
 console.log('✅ All routes registered!');
 app.post('/api/test-progress', (req, res) => {
     console.error('?? TEST PROGRESS ROUTE HIT!');
@@ -2050,8 +2049,7 @@ pool.query('SELECT NOW()', (err, result) => {
     }
 });
 
-// ⚠️ CHANGE 3: Comment out all cron-related code
-/*
+
 // ==================== INITIALIZE CRON JOBS ====================
 if (process.env.NODE_ENV === 'production') {
     console.log('🕐 Initializing automated tasks...');
@@ -2087,7 +2085,7 @@ app.post('/api/cron/run/:jobName', async (req, res) => {
 });
 
 console.log('✅ Enhanced Question System endpoints registered');
-*/
+
 
 app.listen(PORT, '0.0.0.0', async () => {
     await loadPersonalityFromStorage();
