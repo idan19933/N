@@ -23,8 +23,9 @@ import notebookRoutes from './routes/notebookRoutes.js';
 import aiAnalysisRoutes from './routes/aiAnalysisRoutes.js';
 import performanceRoutes from './routes/performanceRoutes.js';  // ✅ הוסף שורה זו
 import adaptiveDifficultyRoutes from './routes/adaptiveDifficultyRoutes.js';
-import enhancedQuestionsRouter from './routes/enhancedQuestions.js';
-import * as cronManager from './services/cronJobs.js';
+// ⚠️ CHANGE 1: Comment out these two lines
+// import enhancedQuestionsRouter from './routes/enhancedQuestions.js';
+// import * as cronManager from './services/cronJobs.js';
 import notebookService from './services/notebookService.js';
 import userRoutes from './routes/userRoutes.js';
 import pool from './config/database.js';
@@ -74,7 +75,8 @@ app.use('/api/learning', learningRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/performance', performanceRoutes);
 app.use('/api/adaptive', adaptiveDifficultyRoutes);//
-app.use('/api/questions', enhancedQuestionsRouter);  // ← חדש!
+// ⚠️ CHANGE 2: Comment out this line
+// app.use('/api/questions', enhancedQuestionsRouter);  // ← חדש!
 // ✅ הוסף שורה זו
 console.log('✅ All routes registered!');
 app.post('/api/test-progress', (req, res) => {
@@ -1619,16 +1621,20 @@ app.post('/api/ai/chat', async (req, res) => {
 אם זו שאלה כללית, ענה בצורה ידידותית.`;
         }
 
-        // Add formatting instructions
+        // Add formatting instructions - UPDATED
         systemPrompt += `
 
 חשוב מאוד:
 1. כתוב בעברית ברורה וידידותית
 2. אל תשבור משוואות או ביטויים מתמטיים באמצע
-3. השתמש ב ** לחזקות (לדוגמה: x**2)
+3. השתמש ב ^ לחזקות (לדוגמה: x^2, 3t^2)
 4. השתמש ב / לחלוקה ו - למינוס  
 5. שים רווחים מסביב לאופרטורים מתמטיים
-6. השתמש באימוג'ים כשמתאים 😊`;
+6. השתמש באימוג'ים כשמתאים 😊
+7. אל תשתמש בסימנים כמו $$ או \[ או \] - הם לא נחוצים
+8. לשברים השתמש ב: (מונה)/(מכנה) לדוגמה: (3x+1)/(2x-5)
+9. לשורשים השתמש ב: √ לדוגמה: √(x^2 + 1)
+10. כתוב נוסחאות בצורה פשוטה וקריאה`;
 
         console.log('🤖 Calling Claude API...');
         console.log('   Action:', actionType);
@@ -1738,183 +1744,6 @@ function formatMathematicalContent(text) {
 
     return formatted;
 }
-
-// ==================== UPDATED AI CHAT ROUTE ====================
-app.post('/api/ai/chat', async (req, res) => {
-    console.log('============================================================');
-    console.log('💬 AI CHAT REQUEST');
-    console.log('============================================================');
-
-    try {
-        const {
-            message,
-            context,
-            actionType = 'general',
-            hintLevel = 0
-        } = req.body;
-
-        console.log('📝 Chat Request:', {
-            message: message?.substring(0, 50),
-            actionType,
-            hintLevel,
-            studentName: context?.studentName
-        });
-
-        if (!message || !context) {
-            return res.status(400).json({
-                success: false,
-                error: 'Missing message or context'
-            });
-        }
-
-        // Build system prompt based on action type
-        let systemPrompt = '';
-
-        // Add personality context
-        if (personalitySystem.loaded) {
-            const personality = personalitySystem.data.corePersonality;
-            systemPrompt += `אתה ${personality.teacher_name}, ${personality.description}.\n`;
-            systemPrompt += `${personality.teaching_approach}\n\n`;
-        } else {
-            systemPrompt += `אתה נקסון, מורה דיגיטלי למתמטיקה.\n\n`;
-        }
-
-        systemPrompt += `התלמיד: ${context.studentName}\n`;
-        systemPrompt += `השאלה: ${context.question}\n`;
-        if (context.answer) {
-            systemPrompt += `התשובה הנכונה: ${context.answer}\n`;
-        }
-
-        // Action-specific prompts
-        let userPrompt = message;
-        let maxTokens = 800;
-
-        switch (actionType) {
-            case 'hint':
-                maxTokens = 500;
-                if (hintLevel === 1) {
-                    systemPrompt += `
-תן רמז כללי מאוד שיכוון את התלמיד לחשוב על הגישה הנכונה.
-אל תגלה את השיטה או הנוסחה.
-דוגמאות: "חשוב על סוג המשוואה", "זכור את הכללים הבסיסיים"
-מקסימום 2 משפטים.`;
-                } else if (hintLevel === 2) {
-                    systemPrompt += `
-תן רמז יותר ספציפי על השיטה או הנוסחה הרלוונטית.
-אל תראה איך להשתמש בה.
-דוגמאות: "נסה להשתמש בנוסחת השורשים", "איזו נוסחה מתאימה למשוואה ריבועית?"
-מקסימום 3 משפטים.`;
-                } else if (hintLevel >= 3) {
-                    systemPrompt += `
-הראה את הצעד הראשון של הפתרון עם הסבר קצר.
-דוגמה: "נתחיל בזיהוי המקדמים: a=2, b=3, c=-5"
-אל תראה יותר מצעד אחד.`;
-                }
-                break;
-
-            case 'nextStep':
-                maxTokens = 600;
-                systemPrompt += `
-התלמיד שואל מה הצעד הבא.
-בדוק מה הוא כתב בהודעה ותן לו את הצעד הבא בלבד.
-אם הוא לא כתב כלום, תן לו את הצעד הראשון.
-אל תראה יותר מצעד אחד קדימה.
-הסבר כל צעד בבירור.`;
-                break;
-
-            case 'checkDirection':
-                maxTokens = 600;
-                systemPrompt += `
-התלמיד רוצה לבדוק אם הוא בכיוון הנכון.
-אם הוא בכיוון הנכון - עודד אותו וציין מה טוב.
-אם יש טעות - הצבע עליה בעדינות והסבר איך לתקן.
-אל תיתן את הפתרון המלא.`;
-                break;
-
-            case 'fullSolution':
-                maxTokens = 2000;
-                systemPrompt += `
-התלמיד מבקש את הפתרון המלא.
-הצג את כל השלבים בצורה מסודרת עם הסברים.
-כל צעד צריך להיות ברור עם חישובים מפורטים.
-השתמש במספור לכל שלב.`;
-                break;
-
-            default:
-                systemPrompt += `
-ענה לתלמיד בצורה מועילה וחינוכית.
-אם השאלה קשורה לבעיה המתמטית, עזור בהתאם.
-אם זו שאלה כללית, ענה בצורה ידידותית.`;
-        }
-
-        // Add formatting instructions - UPDATED
-        systemPrompt += `
-
-חשוב מאוד:
-1. כתוב בעברית ברורה וידידותית
-2. אל תשבור משוואות או ביטויים מתמטיים באמצע
-3. השתמש ב ^ לחזקות (לדוגמה: x^2, 3t^2)
-4. השתמש ב / לחלוקה ו - למינוס  
-5. שים רווחים מסביב לאופרטורים מתמטיים
-6. השתמש באימוג'ים כשמתאים 😊
-7. אל תשתמש בסימנים כמו $$ או \[ או \] - הם לא נחוצים
-8. לשברים השתמש ב: (מונה)/(מכנה) לדוגמה: (3x+1)/(2x-5)
-9. לשורשים השתמש ב: √ לדוגמה: √(x^2 + 1)
-10. כתוב נוסחאות בצורה פשוטה וקריאה`;
-
-        console.log('🤖 Calling Claude API...');
-        console.log('   Action:', actionType);
-        console.log('   Hint Level:', hintLevel);
-
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-api-key': process.env.ANTHROPIC_API_KEY,
-                'anthropic-version': '2023-06-01'
-            },
-            body: JSON.stringify({
-                model: 'claude-sonnet-4-5-20250929',
-                max_tokens: maxTokens,
-                temperature: 0.7,
-                system: systemPrompt,
-                messages: [{
-                    role: 'user',
-                    content: userPrompt
-                }]
-            })
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(`API error: ${response.status} - ${errorData.error?.message}`);
-        }
-
-        const data = await response.json();
-        const aiResponse = data.content[0].text;
-
-        // Format mathematical content for better display
-        let formattedResponse = formatMathematicalContent(aiResponse);
-
-        console.log('✅ AI Response generated');
-        console.log('   Length:', formattedResponse.length);
-
-        res.json({
-            success: true,
-            response: formattedResponse,
-            actionType: actionType,
-            hintLevel: hintLevel,
-            model: 'claude-sonnet-4-5-20250929'
-        });
-
-    } catch (error) {
-        console.error('❌ AI Chat Error:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message || 'Internal server error'
-        });
-    }
-});
 
 // ==================== 🔥 IMAGE ANALYSIS FOR HANDWRITTEN WORK ====================
 app.post('/api/ai/analyze-handwritten-work', upload.single('image'), async (req, res) => {
@@ -2214,12 +2043,15 @@ async function loadPersonalityFromStorage() {
 // ==================== TEST DATABASE CONNECTION ====================
 pool.query('SELECT NOW()', (err, result) => {
     if (err) {
-        console.error('? Database connection failed:', err.message);
+        console.error('❌ Database connection failed:', err.message);
     } else {
-        console.log('? Database connected successfully!');
+        console.log('✅ Database connected successfully!');
         console.log('   Connection time:', result.rows[0].now);
     }
 });
+
+// ⚠️ CHANGE 3: Comment out all cron-related code
+/*
 // ==================== INITIALIZE CRON JOBS ====================
 if (process.env.NODE_ENV === 'production') {
     console.log('🕐 Initializing automated tasks...');
@@ -2255,6 +2087,8 @@ app.post('/api/cron/run/:jobName', async (req, res) => {
 });
 
 console.log('✅ Enhanced Question System endpoints registered');
+*/
+
 app.listen(PORT, '0.0.0.0', async () => {
     await loadPersonalityFromStorage();
 
