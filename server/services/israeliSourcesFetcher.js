@@ -267,13 +267,18 @@ export async function fetchAndStore(sourceId) {
         // Save source info to database
         const query = `
             INSERT INTO scraping_sources (
-                source_name, source_url, source_type, grade_level,
-                last_scraped, is_active, metadata
-            ) VALUES ($1, $2, $3, $4, NOW(), true, $5)
-            ON CONFLICT (source_url) 
+                url, name, source_type, last_scraped, is_active
+            ) VALUES ($1, $2, $3, NOW(), true)
+                ON CONFLICT (url) 
             DO UPDATE SET last_scraped = NOW()
-            RETURNING id
+                                   RETURNING id
         `;
+
+        const result = await pool.query(query, [
+            source.url,
+            source.name,
+            source.type
+        ]);
 
         const result = await pool.query(query, [
             source.name,
