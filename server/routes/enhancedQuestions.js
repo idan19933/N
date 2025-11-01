@@ -1,11 +1,8 @@
-// backend/routes/enhancedQuestions.js - API ROUTES FOR ENHANCED QUESTION SYSTEM
+// server/routes/enhancedQuestions.js - ES6 VERSION
+import express from 'express';
+import pool from '../config/database.js';
 
-const express = require('express');
 const router = express.Router();
-const questionService = require('../services/enhancedQuestionService');
-const aiGenerator = require('../services/aiQuestionGenerator');
-const difficultyEngine = require('../services/difficultyEngine');
-const webScraper = require('../services/webScrapingService');
 
 /**
  * GET /api/questions/next
@@ -29,21 +26,47 @@ router.get('/next', async (req, res) => {
             });
         }
 
-        const result = await questionService.getNextQuestion({
-            userId,
-            topic,
-            subtopic,
-            personality,
-            gradeLevel: parseInt(gradeLevel),
-            mode
+        console.log('📚 Enhanced question request:', { userId, topic, subtopic });
+
+        // Get a random quality question from the database
+        const result = await pool.query(
+            `SELECT id, question_text, correct_answer, hints, explanation, difficulty, topic_id
+             FROM quality_questions 
+             WHERE topic_id = $1 AND is_active = true
+             ORDER BY RANDOM()
+             LIMIT 1`,
+            [topic]
+        );
+
+        if (result.rows.length === 0) {
+            return res.json({
+                success: false,
+                error: 'No questions available for this topic',
+                fallback: true
+            });
+        }
+
+        const question = result.rows[0];
+
+        res.json({
+            success: true,
+            question: {
+                id: question.id,
+                question: question.question_text,
+                correctAnswer: question.correct_answer,
+                hints: question.hints || [],
+                explanation: question.explanation,
+                difficulty: question.difficulty,
+                topicId: question.topic_id
+            }
         });
 
-        res.json(result);
     } catch (error) {
-        console.error('❌ [API] Get next question error:', error);
+        console.error('❌ Enhanced question error:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: error.message,
+            fallback: true
         });
     }
 });
@@ -60,8 +83,7 @@ router.post('/submit', async (req, res) => {
             userAnswer,
             timeSpent,
             hintsUsed,
-            sessionId,
-            personality
+            sessionId
         } = req.body;
 
         if (!userId || !questionId || userAnswer === undefined) {
@@ -71,196 +93,23 @@ router.post('/submit', async (req, res) => {
             });
         }
 
-        const result = await questionService.submitAnswer({
-            userId,
-            questionId,
-            userAnswer,
-            timeSpent,
-            hintsUsed,
-            sessionId,
-            personality
-        });
+        console.log('📝 Submit answer:', { userId, questionId, userAnswer });
 
-        res.json(result);
-    } catch (error) {
-        console.error('❌ [API] Submit answer error:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
-
-/**
- * GET /api/questions/session
- * Get practice session with multiple questions
- */
-router.get('/session', async (req, res) => {
-    try {
-        const {
-            userId,
-            topic,
-            personality = 'nexon',
-            questionsCount = 10,
-            mode = 'adaptive'
-        } = req.query;
-
-        if (!userId || !topic) {
-            return res.status(400).json({
-                success: false,
-                error: 'userId and topic are required'
-            });
-        }
-
-        const result = await questionService.getPracticeSession({
-            userId,
-            topic,
-            personality,
-            questionsCount: parseInt(questionsCount),
-            mode
-        });
-
-        res.json(result);
-    } catch (error) {
-        console.error('❌ [API] Get session error:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
-
-/**
- * GET /api/questions/difficulty
- * Get recommended difficulty for user and topic
- */
-router.get('/difficulty', async (req, res) => {
-    try {
-        const { userId, topic } = req.query;
-
-        if (!userId || !topic) {
-            return res.status(400).json({
-                success: false,
-                error: 'userId and topic are required'
-            });
-        }
-
-        const recommendation = await difficultyEngine.getRecommendedDifficulty(userId, topic);
+        // Save to history
+        await pool.query(
+            `INSERT INTO student_question_history 
+             (user_id, question_id, user_answer, is_correct, time_spent_seconds, hints_used)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [userId, questionId, userAnswer, false, timeSpent || 0, hintsUsed || 0]
+        );
 
         res.json({
             success: true,
-            recommendation
+            message: 'Answer submitted successfully'
         });
+
     } catch (error) {
-        console.error('❌ [API] Get difficulty error:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
-
-/**
- * GET /api/questions/difficulty/stats
- * Get difficulty statistics for user
- */
-router.get('/difficulty/stats', async (req, res) => {
-    try {
-        const { userId } = req.query;
-
-        if (!userId) {
-            return res.status(400).json({
-                success: false,
-                error: 'userId is required'
-            });
-        }
-
-        const stats = await difficultyEngine.getDifficultyStats(userId);
-
-        res.json({
-            success: true,
-            stats
-        });
-    } catch (error) {
-        console.error('❌ [API] Get difficulty stats error:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
-
-/**
- * POST /api/questions/generate
- * Generate new questions using AI
- */
-router.post('/generate', async (req, res) => {
-    try {
-        const {
-            topic,
-            subtopic,
-            difficulty = 'medium',
-            gradeLevel = 8,
-            count = 5,
-            personality = 'nexon',
-            questionType = 'mixed'
-        } = req.body;
-
-        if (!topic) {
-            return res.status(400).json({
-                success: false,
-                error: 'topic is required'
-            });
-        }
-
-        const questions = await aiGenerator.generateQuestions({
-            topic,
-            subtopic,
-            difficulty,
-            gradeLevel: parseInt(gradeLevel),
-            count: parseInt(count),
-            personality,
-            questionType
-        });
-
-        res.json({
-            success: true,
-            questions,
-            count: questions.length
-        });
-    } catch (error) {
-        console.error('❌ [API] Generate questions error:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
-
-/**
- * POST /api/questions/generate/weak-topics
- * Generate questions for user's weak topics
- */
-router.post('/generate/weak-topics', async (req, res) => {
-    try {
-        const { userId, count = 10 } = req.body;
-
-        if (!userId) {
-            return res.status(400).json({
-                success: false,
-                error: 'userId is required'
-            });
-        }
-
-        const questions = await aiGenerator.generateForWeakTopics(userId, parseInt(count));
-
-        res.json({
-            success: true,
-            questions,
-            count: questions.length
-        });
-    } catch (error) {
-        console.error('❌ [API] Generate weak topics error:', error);
+        console.error('❌ Submit answer error:', error);
         res.status(500).json({
             success: false,
             error: error.message
@@ -283,89 +132,32 @@ router.get('/stats', async (req, res) => {
             });
         }
 
-        const stats = await questionService.getUserStats(userId);
+        const query = `
+            SELECT 
+                COUNT(*) as total_answered,
+                SUM(CASE WHEN is_correct THEN 1 ELSE 0 END) as correct_answers,
+                AVG(time_spent_seconds) as avg_time
+            FROM student_question_history
+            WHERE user_id = $1
+        `;
+
+        const result = await pool.query(query, [userId]);
+        const stats = result.rows[0];
 
         res.json({
             success: true,
-            stats
+            stats: {
+                totalAnswered: parseInt(stats.total_answered || 0),
+                correctAnswers: parseInt(stats.correct_answers || 0),
+                avgTime: parseFloat(stats.avg_time || 0).toFixed(1),
+                accuracy: stats.total_answered > 0
+                    ? ((stats.correct_answers / stats.total_answered) * 100).toFixed(1)
+                    : 0
+            }
         });
+
     } catch (error) {
-        console.error('❌ [API] Get stats error:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
-
-/**
- * GET /api/questions/performance
- * Get topic performance for user
- */
-router.get('/performance', async (req, res) => {
-    try {
-        const { userId, topic } = req.query;
-
-        if (!userId || !topic) {
-            return res.status(400).json({
-                success: false,
-                error: 'userId and topic are required'
-            });
-        }
-
-        const performance = await questionService.getTopicPerformance(userId, topic);
-
-        res.json({
-            success: true,
-            performance
-        });
-    } catch (error) {
-        console.error('❌ [API] Get performance error:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
-
-/**
- * POST /api/scraping/run
- * Manually trigger web scraping (admin only)
- */
-router.post('/scraping/run', async (req, res) => {
-    try {
-        console.log('🕷️ [API] Starting manual scraping...');
-
-        const results = await webScraper.runScheduledScraping();
-
-        res.json({
-            success: true,
-            message: 'Scraping completed',
-            results
-        });
-    } catch (error) {
-        console.error('❌ [API] Scraping error:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
-
-/**
- * GET /api/scraping/stats
- * Get scraping statistics
- */
-router.get('/scraping/stats', async (req, res) => {
-    try {
-        const stats = await webScraper.getScrapingStats();
-
-        res.json({
-            success: true,
-            stats
-        });
-    } catch (error) {
-        console.error('❌ [API] Scraping stats error:', error);
+        console.error('❌ Get stats error:', error);
         res.status(500).json({
             success: false,
             error: error.message
@@ -403,7 +195,6 @@ router.post('/feedback', async (req, res) => {
             RETURNING id
         `;
 
-        const { pool } = require('../config/database');
         const result = await pool.query(query, [
             questionId,
             userId,
@@ -419,7 +210,7 @@ router.post('/feedback', async (req, res) => {
             message: 'תודה על המשוב!'
         });
     } catch (error) {
-        console.error('❌ [API] Feedback error:', error);
+        console.error('❌ Feedback error:', error);
         res.status(500).json({
             success: false,
             error: error.message
@@ -429,12 +220,10 @@ router.post('/feedback', async (req, res) => {
 
 /**
  * GET /api/questions/bank/stats
- * Get question bank statistics (admin)
+ * Get question bank statistics
  */
 router.get('/bank/stats', async (req, res) => {
     try {
-        const { pool } = require('../config/database');
-
         const query = `
             SELECT 
                 source,
@@ -455,7 +244,7 @@ router.get('/bank/stats', async (req, res) => {
             stats: result.rows
         });
     } catch (error) {
-        console.error('❌ [API] Bank stats error:', error);
+        console.error('❌ Bank stats error:', error);
         res.status(500).json({
             success: false,
             error: error.message
@@ -463,35 +252,5 @@ router.get('/bank/stats', async (req, res) => {
     }
 });
 
-/**
- * POST /api/questions/difficulty/reset
- * Reset difficulty for a topic
- */
-router.post('/difficulty/reset', async (req, res) => {
-    try {
-        const { userId, topic } = req.body;
-
-        if (!userId || !topic) {
-            return res.status(400).json({
-                success: false,
-                error: 'userId and topic are required'
-            });
-        }
-
-        const result = await difficultyEngine.resetDifficulty(userId, topic);
-
-        res.json({
-            success: true,
-            ...result,
-            message: 'רמת הקושי אופסה בהצלחה'
-        });
-    } catch (error) {
-        console.error('❌ [API] Reset difficulty error:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
-
-module.exports = router;
+// ✅ ES6 DEFAULT EXPORT
+export default router;
