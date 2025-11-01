@@ -1,4 +1,4 @@
-// src/components/ai/MathTutor.jsx - COMPLETE MODERN ENHANCED UI 🎨✨
+// src/components/ai/MathTutor.jsx - COMPLETE MODERN ENHANCED UI WITH ADAPTIVE DIFFICULTY 🎨✨
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -14,6 +14,7 @@ import toast from 'react-hot-toast';
 import { aiVerification } from '../../services/aiAnswerVerification';
 import axios from 'axios';
 import notebookAPI from '../../services/notebookService';
+import AdaptiveDifficultyDisplay from '../adaptive/AdaptiveDifficultyDisplay';
 import {
     LineChart as RechartsLineChart,
     Line,
@@ -1208,6 +1209,35 @@ const MathTutor = ({
         questionTimes: []
     });
 
+    // ✅ ADAPTIVE DIFFICULTY STATE
+    const [currentDifficulty, setCurrentDifficulty] = useState('medium');
+    const [adaptiveQuestionsCount, setAdaptiveQuestionsCount] = useState(0);
+    const [recentAnswers, setRecentAnswers] = useState([]);
+    const [recommendation, setRecommendation] = useState(null);
+    const [performance, setPerformance] = useState(null);
+    const [adjustmentHistory, setAdjustmentHistory] = useState([]);
+    const [isCheckingAdaptive, setIsCheckingAdaptive] = useState(false);
+
+    // Difficulty display helpers
+    const difficultyEmoji = useMemo(() => {
+        const emojis = { easy: '🌱', medium: '⚡', hard: '🔥' };
+        return emojis[currentDifficulty] || '⚡';
+    }, [currentDifficulty]);
+
+    const difficultyLabel = useMemo(() => {
+        const labels = { easy: 'קל', medium: 'בינוני', hard: 'מאתגר' };
+        return labels[currentDifficulty] || 'בינוני';
+    }, [currentDifficulty]);
+
+    const difficultyColor = useMemo(() => {
+        const colors = {
+            easy: 'from-green-400 to-emerald-500',
+            medium: 'from-blue-400 to-cyan-500',
+            hard: 'from-orange-400 to-red-500'
+        };
+        return colors[currentDifficulty] || 'from-blue-400 to-cyan-500';
+    }, [currentDifficulty]);
+
     const [timer, setTimer] = useState(0);
     const [isTimerRunning, setIsTimerRunning] = useState(false);
     const timerRef = useRef(null);
@@ -1228,6 +1258,65 @@ const MathTutor = ({
             availableTopics: topics
         };
     }, [propGradeId, nexonProfile?.grade, nexonProfile?.track, user?.grade, user?.track]);
+
+    // ✅ TRACK ANSWER FOR ADAPTIVE DIFFICULTY
+    const trackAnswer = useCallback(async (isCorrect, timeTaken) => {
+        const userId = getUserId();
+        if (!userId) return;
+
+        const answerData = {
+            userId,
+            topicId: selectedTopic?.id || 'general',
+            subtopicId: selectedSubtopic?.id || null,
+            difficulty: currentDifficulty,
+            isCorrect,
+            timeTaken,
+            hintsUsed: hintCount,
+            attempts: attemptCount + 1
+        };
+
+        // Update local state
+        setRecentAnswers(prev => [...prev.slice(-9), answerData]);
+        setAdaptiveQuestionsCount(prev => prev + 1);
+
+        // Check for difficulty adjustment
+        if (adaptiveQuestionsCount >= 2) { // Start adapting after 3 questions
+            setIsCheckingAdaptive(true);
+            try {
+                const response = await axios.post(`${API_URL}/api/adaptive/check-adjustment`, answerData);
+
+                if (response.data.success && response.data.shouldAdjust) {
+                    const { recommendation: rec } = response.data;
+                    setRecommendation(rec);
+
+                    if (rec.newDifficulty !== currentDifficulty) {
+                        setCurrentDifficulty(rec.newDifficulty);
+                        setAdjustmentHistory(prev => [...prev, {
+                            timestamp: Date.now(),
+                            from: currentDifficulty,
+                            to: rec.newDifficulty,
+                            reason: rec.reason
+                        }]);
+
+                        toast.success(
+                            `רמת קושי שונתה ל-${rec.newDifficulty === 'easy' ? 'קל' : rec.newDifficulty === 'hard' ? 'מאתגר' : 'בינוני'}! ${difficultyEmoji}`,
+                            { duration: 3000, icon: '🎯' }
+                        );
+                    }
+                }
+
+                // Get performance summary
+                const perfResponse = await axios.get(`${API_URL}/api/adaptive/performance/${userId}`);
+                if (perfResponse.data.success) {
+                    setPerformance(perfResponse.data.performance);
+                }
+            } catch (error) {
+                console.error('❌ Adaptive difficulty check error:', error);
+            } finally {
+                setIsCheckingAdaptive(false);
+            }
+        }
+    }, [getUserId, selectedTopic, selectedSubtopic, currentDifficulty, hintCount, attemptCount, adaptiveQuestionsCount, difficultyEmoji]);
 
     useEffect(() => {
         if (propTopicId && availableTopics.length > 0 && !selectedTopic && !initStartedRef.current) {
@@ -1453,6 +1542,9 @@ const MathTutor = ({
                     hintsUsed: hintCount,
                     attempts: attemptCount + 1
                 });
+
+                // ✅ Track answer for adaptive difficulty
+                await trackAnswer(data.analysis.isCorrect, timer);
             }
 
             if (data.analysis.isCorrect) {
@@ -1576,7 +1668,7 @@ const MathTutor = ({
                     name: String(finalSubtopic.name || ''),
                     nameEn: String(finalSubtopic.nameEn || '')
                 } : null,
-                difficulty: String(topic.difficulty || 'intermediate'),
+                difficulty: currentDifficulty, // ✅ Use adaptive difficulty
                 studentProfile: {
                     name: String(nexonProfile?.name || user?.name || 'תלמיד'),
                     grade: String(currentGrade),
@@ -1748,6 +1840,9 @@ const MathTutor = ({
                 hintsUsed: hintCount,
                 attempts: attemptCount + 1
             });
+
+            // ✅ Track answer for adaptive difficulty
+            await trackAnswer(isCorrect, timer);
         }
 
         if (onAnswerSubmitted && typeof onAnswerSubmitted === 'function') {
@@ -2177,6 +2272,16 @@ const MathTutor = ({
                         </button>
 
                         <div className="flex items-center gap-4">
+                            {/* ✅ Adaptive Difficulty Badge */}
+                            <motion.div
+                                initial={{ scale: 0.8, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                className={`flex items-center gap-2 bg-gradient-to-r ${difficultyColor} px-4 py-2 rounded-xl shadow-lg`}
+                            >
+                                <span className="text-2xl">{difficultyEmoji}</span>
+                                <span className="font-bold text-white">{difficultyLabel}</span>
+                            </motion.div>
+
                             {/* Timer */}
                             <div className="flex items-center gap-2 bg-blue-50 px-4 py-2 rounded-xl">
                                 <Clock className="w-5 h-5 text-blue-600" />
@@ -2211,6 +2316,18 @@ const MathTutor = ({
                             )}
                         </div>
                     </div>
+
+                    {/* ✅ Adaptive Difficulty Display Component */}
+                    {adaptiveQuestionsCount > 0 && (
+                        <AdaptiveDifficultyDisplay
+                            currentDifficulty={currentDifficulty}
+                            recentAnswers={recentAnswers}
+                            recommendation={recommendation}
+                            performance={performance}
+                            adjustmentHistory={adjustmentHistory}
+                            isChecking={isCheckingAdaptive}
+                        />
+                    )}
 
                     {/* Question Card */}
                     <motion.div
