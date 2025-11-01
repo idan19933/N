@@ -240,6 +240,7 @@ export async function downloadPdf(url, filename) {
 }
 
 // ==================== FETCH AND STORE ====================
+// ==================== FETCH AND STORE ====================
 export async function fetchAndStore(sourceId) {
     try {
         console.log(`\n🔄 Fetching source: ${sourceId}`);
@@ -264,32 +265,20 @@ export async function fetchAndStore(sourceId) {
             throw new Error(`Source not accessible: ${verification.error || verification.status}`);
         }
 
-        // Save source info to database
+        // Save source info to database - FIXED VERSION
         const query = `
             INSERT INTO scraping_sources (
                 url, name, source_type, last_scraped, is_active
             ) VALUES ($1, $2, $3, NOW(), true)
-                ON CONFLICT (url) 
+            ON CONFLICT (url) 
             DO UPDATE SET last_scraped = NOW()
-                                   RETURNING id
+            RETURNING id
         `;
 
         const result = await pool.query(query, [
             source.url,
             source.name,
             source.type
-        ]);
-
-        const result = await pool.query(query, [
-            source.name,
-            source.url,
-            source.type,
-            source.grade || source.grades?.[0],
-            JSON.stringify({
-                source: source.source,
-                year: source.year,
-                pdfUrl: source.pdfUrl
-            })
         ]);
 
         console.log(`   ✅ Source saved to database (ID: ${result.rows[0].id})`);
@@ -334,7 +323,6 @@ export async function fetchAndStore(sourceId) {
         };
     }
 }
-
 // ==================== GET ALL SOURCES ====================
 export function getAllSources() {
     return ISRAELI_SOURCES;
