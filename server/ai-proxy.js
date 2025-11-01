@@ -23,9 +23,8 @@ import notebookRoutes from './routes/notebookRoutes.js';
 import aiAnalysisRoutes from './routes/aiAnalysisRoutes.js';
 import performanceRoutes from './routes/performanceRoutes.js';  // ✅ הוסף שורה זו
 import adaptiveDifficultyRoutes from './routes/adaptiveDifficultyRoutes.js';
-// ⚠️ CHANGE 1: Comment out these two lines
-// import enhancedQuestionsRouter from './routes/enhancedQuestions.js';
-// import * as cronManager from './services/cronJobs.js';
+import enhancedQuestionsRouter from './routes/enhancedQuestions.js';
+import * as cronManager from './services/cronJobs.js';
 import notebookService from './services/notebookService.js';
 import userRoutes from './routes/userRoutes.js';
 import pool from './config/database.js';
